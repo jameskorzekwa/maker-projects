@@ -42,8 +42,10 @@ Set and verify the converter output with a multimeter before connecting it to th
 | --- | --- | --- |
 | `VCC` | `3.3V` | Sensor power |
 | `GND` | `GND` | Ground |
-| `SCL` | `D8` | I2C clock |
-| `SDA` | `D9` | I2C data |
+| `SCL` | `D5` / GPIO 7 | I2C clock |
+| `SDA` | `D4` / GPIO 6 | I2C data |
+
+These assignments are verified against Seeed Studio's XIAO ESP32C3 pin map. `D8` is GPIO 8/SPI SCK and `D9` is GPIO 9/SPI MISO; they are not the board's labeled I2C pins.
 
 ## Assembly
 
@@ -65,9 +67,24 @@ To configure another sensor:
 2. Change the `display_name` substitution to a unique device name such as `lux-sensor-5`.
 3. Add the values shown in [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml) to the private ESPHome `secrets.yaml` file.
 4. Generate unique API encryption and OTA credentials rather than committing real values to this public repository.
-5. Validate the pin assignments for the exact ESP32-C3 board before flashing.
+5. If using a different board model or revision, validate its pin assignments before flashing.
 
-The live ESPHome configuration addresses the I2C bus as GPIO 6 for SDA and GPIO 7 for SCL. The wiring table above records the physical board labels as D9 for SDA and D8 for SCL; confirm this label-to-GPIO mapping when using a different board revision.
+The live ESPHome configuration correctly addresses the I2C bus as GPIO 6 for SDA and GPIO 7 for SCL, corresponding to the XIAO ESP32C3's `D4` and `D5` labels.
+
+## Schematics and Manufacturer Documentation
+
+The [`schematics`](schematics/) directory contains Seeed Studio's official XIAO ESP32C3 v1.3 schematic, editable KiCad design files, and front/back pinout diagrams. Seeed's current source documents are also available directly:
+
+- [XIAO ESP32C3 v1.3 schematic](https://files.seeedstudio.com/wiki/XIAO_WiFi/Resources/XIAO_ESP32C3_v1.3_SCH_260116.pdf)
+- [XIAO ESP32C3 v1.3 KiCad project](https://files.seeedstudio.com/wiki/XIAO_WiFi/Resources/XIAO_ESP32C3_v1.3_KiCad_260116.zip)
+- [XIAO ESP32C3 pin map](https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/#pin-map)
+
+No official board-level schematic is published for the other two modules:
+
+- HiLetgo has not published a schematic or PCB design for its GY-30/GY-302 BH1750 module. Generic diagrams found elsewhere are third-party designs and may not match this board.
+- DROK publishes the [200548_5x converter specifications](https://www.droking.com/5pcs-mini-voltage-buck-regulator-board-dc-4-5-20v-12v-9v-step-down-to-5v-reducer-transformer-board-3a-10w-adjustable-fixed-volt-output-step-down-power-supply-stabilizer-module), but no board schematic, controller part number, or PCB design.
+
+The BH1750FVI sensor IC datasheet is not a schematic for the HiLetgo module. ROHM has removed its original hosted copy, so no third-party datasheet copy is stored here as if it were current manufacturer documentation.
 
 ## Photos
 
@@ -116,6 +133,7 @@ After completing these checks, apply 18 V and verify that the ESP32-C3 starts no
 
 | Date | Change |
 | --- | --- |
+| 2026-07-18 | Corrected I2C wiring and added official schematic resources |
 | 2026-07-18 | Added the sanitized ESPHome configuration from Home Assistant |
 | 2026-07-18 | Added completed assembly photos and the BH1750 purchase link |
 | 2026-07-18 | Initial build documentation |
