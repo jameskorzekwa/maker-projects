@@ -55,6 +55,20 @@ Set and verify the converter output with a multimeter before connecting it to th
 6. Solder all power and signal connections listed in the wiring tables.
 7. Inspect the assembly for solder bridges, loose wire strands, reversed polarity, and mechanical strain.
 
+## ESPHome Configuration
+
+The sanitized configuration copied from Home Assistant is stored in [`esphome/lux-sensor.yaml`](esphome/lux-sensor.yaml). The deployed `lux-sensor-1` through `lux-sensor-4` files use the same sensor configuration and differ only in their device names and credentials.
+
+To configure another sensor:
+
+1. Copy `esphome/lux-sensor.yaml` into the private ESPHome configuration directory.
+2. Change the `display_name` substitution to a unique device name such as `lux-sensor-5`.
+3. Add the values shown in [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml) to the private ESPHome `secrets.yaml` file.
+4. Generate unique API encryption and OTA credentials rather than committing real values to this public repository.
+5. Validate the pin assignments for the exact ESP32-C3 board before flashing.
+
+The live ESPHome configuration addresses the I2C bus as GPIO 6 for SDA and GPIO 7 for SCL. The wiring table above records the physical board labels as D9 for SDA and D8 for SCL; confirm this label-to-GPIO mapping when using a different board revision.
+
 ## Photos
 
 ### BH1750 Top Mount
@@ -102,5 +116,6 @@ After completing these checks, apply 18 V and verify that the ESP32-C3 starts no
 
 | Date | Change |
 | --- | --- |
+| 2026-07-18 | Added the sanitized ESPHome configuration from Home Assistant |
 | 2026-07-18 | Added completed assembly photos and the BH1750 purchase link |
 | 2026-07-18 | Initial build documentation |
