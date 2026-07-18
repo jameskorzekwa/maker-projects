@@ -7,12 +7,10 @@ This compact lux sensor uses a BH1750 ambient-light sensor and an ESP32-C3 devel
 | Component | Quantity | Notes | Purchase link |
 | --- | ---: | --- | --- |
 | ESP32-C3 development board | 1 | Powered with 5 V through `VUSB` | [Amazon](https://a.co/d/08KFqkEg) |
-| BH1750 ambient-light sensor module | 1 | Powered from the ESP32-C3's 3.3 V output | Purchase link needed |
+| BH1750 ambient-light sensor module | 1 | Powered from the ESP32-C3's 3.3 V output | [Amazon](https://a.co/d/03Q0Uxf5) |
 | DROK adjustable DC step-down converter | 1 | Converts the 18 V input to 5 V | [Amazon](https://a.co/d/06YKp1IT) |
 | Hookup wire | As needed | Suitable for short power and I2C connections | |
 | Solder | As needed | | |
-
-The original parts list included `https://a.co/d/08KFqkEg` twice. The BH1750 purchase link should be added when the correct third link is available.
 
 ## Tools and Supplies
 
@@ -67,6 +65,18 @@ Set and verify the converter output with a multimeter before connecting it to th
 
 ![DROK step-down converter mounted underneath the ESP32-C3](photos/drok-converter-bottom.jpg)
 
+### Completed Assembly
+
+The completed assembly includes the stacked boards, soldered power and I2C wiring, power lead, and ESP32-C3 antenna.
+
+| | |
+| --- | --- |
+| <img src="photos/completed-assembly.jpg" alt="Completed lux sensor assembly with power lead and antenna" width="420"><br>Completed assembly | <img src="photos/converter-wiring-close-up.jpg" alt="Close-up of the DROK converter wiring and solder joints" width="420"><br>Converter wiring close-up |
+| <img src="photos/converter-side-wiring.jpg" alt="Side view of power wiring between the converter and ESP32-C3" width="420"><br>Converter-side power wiring | <img src="photos/board-stack-side-view.jpg" alt="Side profile of the three-board lux sensor stack" width="420"><br>Board stack side profile |
+| <img src="photos/bh1750-wiring-close-up.jpg" alt="Close-up of the BH1750 soldered connections" width="420"><br>BH1750 wiring close-up | <img src="photos/i2c-wiring-side-view.jpg" alt="Side view of the BH1750 I2C wiring" width="420"><br>I2C wiring side view |
+| <img src="photos/usb-end-side-view.jpg" alt="Side view of the assembly from the ESP32-C3 USB end" width="420"><br>USB-end side view | <img src="photos/cable-entry-side-view.jpg" alt="Side view showing the power cable entering the board stack" width="420"><br>Power cable entry |
+| <img src="photos/cable-entry-wiring.jpg" alt="Close-up of wiring where the power cable enters the assembly" width="420"><br>Cable-entry wiring | <img src="photos/usb-end-wiring.jpg" alt="Close-up of wiring viewed from the ESP32-C3 USB connector" width="420"><br>USB-end wiring |
+
 ## Final Checks
 
 Before applying power:
@@ -92,4 +102,5 @@ After completing these checks, apply 18 V and verify that the ESP32-C3 starts no
 
 | Date | Change |
 | --- | --- |
+| 2026-07-18 | Added completed assembly photos and the BH1750 purchase link |
 | 2026-07-18 | Initial build documentation |
