@@ -7,6 +7,20 @@ This compact, mains-powered ESPHome Bluetooth proxy extends Home Assistant's Blu
 > [!CAUTION]
 > This project places utility mains voltage inside a 3D-printed enclosure. Mains voltage can cause fatal electric shock or fire. Use only a suitably rated, isolated, enclosed AC-DC supply; provide insulation, strain relief, overcurrent protection, flame-resistant materials, and required creepage/clearance. Have the completed assembly reviewed by a qualified electrician before plugging it in. A listed USB wall adapter is the safer alternative.
 
+## Finished Build
+
+![Assembled Bluetooth proxy with folding plug](images/photo-assembled.jpg)
+
+The completed unit: the lid closes flush and only the folding plug prongs are exposed.
+
+![Enclosure interior with AC-DC module and XIAO ESP32-C6](images/photo-interior.jpg)
+
+Inside the shell, the isolated AC-DC module occupies the mains end and the XIAO ESP32-C6 sits at the low-voltage end with the antenna area kept clear.
+
+![Plug side showing the recessed folding two-prong plug](images/photo-plug-side.jpg)
+
+The folding Type A plug is recessed into the printed base. The delivered part is molded `JIN HONG DA JHD-2201 10A 250V`, which resolves the conflicting ratings in the product listing; treat 10 A / 250 V as the confirmed rating.
+
 ## Parts
 
 | Component | Quantity | Notes | Purchase link |
@@ -171,5 +185,6 @@ After qualified mains-safety review:
 
 | Date | Change |
 | --- | --- |
+| 2026-07-20 | Added finished-build photos and confirmed plug markings |
 | 2026-07-20 | Added C3/C6 profiles and board-swap instructions |
 | 2026-07-20 | Initial build documentation, sanitized ESPHome configuration, and diagrams |
