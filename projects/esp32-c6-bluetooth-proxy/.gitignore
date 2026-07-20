@@ -1,0 +1,3 @@
+esphome/.esphome/
+esphome/build/
+esphome/secrets.yaml

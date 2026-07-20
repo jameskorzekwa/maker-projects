@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="500" viewBox="0 0 1000 500" role="img" aria-labelledby="title desc">
+  <title id="title">ESP32-C6 Bluetooth proxy wiring schematic</title>
+  <desc id="desc">Two mains plug leads connect to an isolated AC-DC module. Its five volt output connects to the XIAO ESP32-C6 VBUS and ground pins.</desc>
+  <defs><style>.box{fill:#f5f7fa;stroke:#243b53;stroke-width:3}.haz{fill:#fff3c4;stroke:#b44d12;stroke-width:3}.safe{fill:#e3f8ff;stroke:#186faf;stroke-width:3}.t{font:600 20px system-ui,sans-serif;fill:#102a43}.s{font:16px system-ui,sans-serif;fill:#334e68}.wire{fill:none;stroke-width:5}.ac{stroke:#b44d12}.pos{stroke:#c53030}.gnd{stroke:#334e68}.barrier{stroke:#829ab1;stroke-width:3;stroke-dasharray:10 8}</style></defs>
+  <rect width="1000" height="500" rx="24" fill="#fff"/>
+  <rect class="haz" x="40" y="135" width="190" height="230" rx="18"/>
+  <rect x="73" y="180" width="35" height="110" rx="8" fill="#cbd5e1" stroke="#243b53" stroke-width="3"/>
+  <rect x="162" y="180" width="35" height="110" rx="8" fill="#cbd5e1" stroke="#243b53" stroke-width="3"/>
+  <text class="t" x="135" y="330" text-anchor="middle">Foldable plug</text>
+  <path class="wire ac" d="M108 205 H330 V190 H390"/><path class="wire ac" d="M197 265 H330 V310 H390"/>
+  <text class="s" x="300" y="174" text-anchor="middle">AC lead A</text><text class="s" x="300" y="340" text-anchor="middle">AC lead B</text>
+  <rect class="haz" x="390" y="110" width="260" height="280" rx="18"/>
+  <text class="t" x="520" y="160" text-anchor="middle">Isolated AC-DC supply</text>
+  <text class="s" x="416" y="198">AC1</text><text class="s" x="416" y="318">AC2</text>
+  <rect x="460" y="215" width="120" height="70" rx="10" fill="#fff" stroke="#b44d12" stroke-width="3"/>
+  <text class="t" x="520" y="258" text-anchor="middle">5 V DC</text>
+  <text class="s" x="594" y="224">+5V</text><text class="s" x="594" y="304">0V</text>
+  <line class="barrier" x1="680" y1="60" x2="680" y2="440"/>
+  <text class="s" x="680" y="475" text-anchor="middle">reinforced physical separation</text>
+  <path class="wire pos" d="M650 215 H760 V190 H810"/><path class="wire gnd" d="M650 295 H760 V310 H810"/>
+  <rect class="safe" x="810" y="125" width="150" height="250" rx="18"/>
+  <text class="t" x="885" y="174" text-anchor="middle">XIAO</text><text class="t" x="885" y="200" text-anchor="middle">ESP32-C6</text>
+  <circle cx="832" cy="190" r="8" fill="#c53030"/><circle cx="832" cy="310" r="8" fill="#334e68"/>
+  <text class="s" x="850" y="196">5V/VBUS</text><text class="s" x="850" y="316">GND</text>
+  <text class="s" x="500" y="43" text-anchor="middle">MAINS: hazardous, non-polarized input</text>
+  <text class="s" x="824" y="43" text-anchor="middle">SELV side: regulated 5 V</text>
+</svg>
