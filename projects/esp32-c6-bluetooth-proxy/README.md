@@ -52,7 +52,14 @@ The diagram is an assembly reference, not a dimensioned fabrication model. Befor
 
 ## ESPHome Configuration
 
-[`esphome/ble-proxy.yaml`](esphome/ble-proxy.yaml) is a sanitized, ESP32-C6 configuration derived from the three live HA ESPHome Builder files (`ble-proxy-1.yaml`, `ble-proxy-2.yaml`, and `ble-proxy-3.yaml`) on 2026-07-20. Copy [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml) to the ESPHome secrets file and replace every placeholder locally.
+The current build uses an ESP32-C6, but earlier units used an ESP32-C3. Two complete, sanitized profiles are included so changing boards does not require remembering every chip-specific setting:
+
+| Hardware | Configuration | Intended use |
+| --- | --- | --- |
+| Seeed Studio XIAO ESP32-C6 | [`esphome/ble-proxy.yaml`](esphome/ble-proxy.yaml) | Current build and default profile |
+| Legacy ESP32-C3 | [`esphome/ble-proxy-c3.yaml`](esphome/ble-proxy-c3.yaml) | Replacement or reflash of the original C3-based units |
+
+Both profiles were derived from the three live HA ESPHome Builder files (`ble-proxy-1.yaml`, `ble-proxy-2.yaml`, and `ble-proxy-3.yaml`) on 2026-07-20. Copy [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml) to the ESPHome secrets file and replace every placeholder locally.
 
 The live files all share these runtime settings:
 
@@ -66,9 +73,51 @@ The live files all share these runtime settings:
 
 ESPHome 2026.7.0 also requires `esp32_ble.max_connections: 5` when five proxy connection slots are requested, so the sanitized configuration includes that matching stack limit.
 
-### Hardware Mismatch Found in HA
+### C3 and C6 Board Settings
 
-Although this project uses the linked XIAO ESP32-C6, every current live `ble-proxy-*.yaml` file declares an `ESP32C3` with board `esp32-c3-devkitm-1` and C3 PlatformIO overrides. Those settings were not copied because they do not describe this hardware. The repository example instead uses ESPHome's `seeed_xiao_esp32c6` board definition, available in ESPHome 2025.12.0 and later.
+These are the hardware-specific values. Do not combine the C3 board/variant values with C6 hardware or vice versa.
+
+| Setting | Current XIAO ESP32-C6 | Legacy ESP32-C3 |
+| --- | --- | --- |
+| Recommended `substitutions.name` | `ble-proxy-c6` | `ble-proxy-c3` |
+| Recommended `substitutions.friendly_name` | `Bluetooth Proxy C6` | `Bluetooth Proxy C3` |
+| `esp32.board` | `seeed_xiao_esp32c6` | `esp32-c3-devkitm-1` |
+| `esp32.variant` | `ESP32C6` | `ESP32C3` |
+| `esphome.platformio_options.board_build.mcu` | Not set | `esp32c3` |
+| `esphome.platformio_options.board_build.variant` | Not set | `esp32c3` |
+| `esphome.platformio_options.board_build.flash_mode` | Not set | `dio` |
+| `esp32.framework.sdkconfig_options` | Not set | BLE 5.0, BLE 4.2, and 10-second task-watchdog options retained from HA |
+| Framework | `esp-idf` | `esp-idf` |
+
+The C3 profile intentionally preserves the generic `esp32-c3-devkitm-1` board declaration and PlatformIO overrides used by the known-working live files. The C6 profile uses ESPHome's dedicated `seeed_xiao_esp32c6` board definition, available in ESPHome 2025.12.0 and later.
+
+The `esp32.board`, `esp32.variant`, PlatformIO block, and C3 SDK options are the values that change the compiled hardware target. The node and friendly names identify the device but do not select its chip.
+
+The `dio` flash-mode override belongs only to the legacy C3 profile; it was added there to prevent serial-flash boot loops. The dedicated C6 board definition supplies its own correct build settings and must not inherit the C3 PlatformIO or SDK-options blocks.
+
+These settings stay the same for both boards:
+
+- ESP-IDF framework
+- Logger, encrypted Home Assistant API, OTA, Wi-Fi, and fallback hotspot
+- `esp32_ble.max_connections: 5`
+- 300 ms active BLE scan interval and window
+- Active Bluetooth proxy with five connection slots
+
+No application GPIO values need changing because this project connects only `5V/VBUS` and `GND`; Bluetooth and Wi-Fi use each chip's internal radio.
+
+### Switching Between Boards
+
+1. Disconnect the proxy from mains and remove it from the enclosure before handling or connecting USB.
+2. Select `ble-proxy.yaml` for the XIAO ESP32-C6 or `ble-proxy-c3.yaml` for the original C3 hardware.
+3. If this board replaces an existing proxy, set `substitutions.name` and `substitutions.friendly_name` to the identity you want it to use. Preserve the old node name only when the new board is replacing that node; use a unique name if both boards will remain online.
+4. Supply the common Wi-Fi, API, OTA, and fallback-hotspot values through `secrets.yaml`. If both boards will operate independently and should have separate API or OTA credentials, give each YAML profile distinct secret names and values rather than sharing the example references.
+5. Validate the selected profile in ESPHome Builder.
+6. Connect the unpowered board directly by USB-C and perform the first install over USB. Do not OTA-flash C3 firmware onto a C6 or C6 firmware onto a C3.
+7. Disconnect USB and test the board from a current-limited 5 V bench supply before reconnecting the AC-DC module.
+8. Confirm the correct node appears online in ESPHome Builder and Home Assistant, then verify passive discovery and an active Bluetooth connection.
+9. Recheck physical fit, insulation, antenna clearance, and the `5V/VBUS` and `GND` connections before closing the enclosure.
+
+If ESPHome Builder still contains an old C3 node and the physical board has been replaced by a C6, update that node with the C6 board block shown above and perform a USB install. Changing only the display name does not change the compiled chip target.
 
 The live secret values were intentionally omitted. The three source files currently reuse the same API encryption key, OTA password, and fallback hotspot password; this repository uses `!secret` references instead.
 
@@ -122,4 +171,5 @@ After qualified mains-safety review:
 
 | Date | Change |
 | --- | --- |
+| 2026-07-20 | Added C3/C6 profiles and board-swap instructions |
 | 2026-07-20 | Initial build documentation, sanitized ESPHome configuration, and diagrams |
