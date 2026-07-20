@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="title desc">
+  <title id="title">Conceptual exploded enclosure layout</title>
+  <desc id="desc">A removable lid sits above a printed shell containing separated mains, power supply, and ESP32-C6 zones.</desc>
+  <defs><style>.shell{fill:#edf2f7;stroke:#243b53;stroke-width:4}.part{stroke:#334e68;stroke-width:3}.t{font:600 20px system-ui,sans-serif;fill:#102a43}.s{font:16px system-ui,sans-serif;fill:#334e68}.guide{stroke:#829ab1;stroke-width:3;stroke-dasharray:9 8}</style></defs>
+  <rect width="1000" height="560" rx="24" fill="#fff"/>
+  <path class="shell" d="M176 210 L728 210 L864 305 L310 305 Z"/>
+  <path class="shell" d="M310 305 L864 305 L864 486 L310 486 Z"/>
+  <path class="shell" d="M176 210 L310 305 L310 486 L176 385 Z"/>
+  <path d="M90 285 l86-75 v175 l-86 74z" fill="#d9e2ec" stroke="#243b53" stroke-width="4"/>
+  <rect x="36" y="310" width="88" height="22" rx="6" fill="#a0aec0" stroke="#243b53" stroke-width="3"/>
+  <rect x="36" y="370" width="88" height="22" rx="6" fill="#a0aec0" stroke="#243b53" stroke-width="3"/>
+  <text class="s" x="83" y="270" text-anchor="middle">plug</text>
+  <path d="M322 255 l180 0 72 45-180 0z" fill="#fff3c4" class="part"/>
+  <text class="s" x="448" y="283" text-anchor="middle">AC-DC module</text>
+  <path d="M604 258 l130 0 58 36-130 0z" fill="#e3f8ff" class="part"/>
+  <text class="s" x="697" y="283" text-anchor="middle">XIAO C6</text>
+  <path class="guide" d="M580 228 v160"/>
+  <text class="s" x="580" y="414" text-anchor="middle">insulating barrier</text>
+  <path class="shell" d="M255 70 L805 70 L913 145 L362 145 Z"/>
+  <text class="t" x="582" y="120" text-anchor="middle">Removable printed lid</text>
+  <path class="guide" d="M330 156 v70 M800 156 v70"/>
+  <text class="t" x="530" y="530" text-anchor="middle">Concept only: dimension and safety-check the final CAD model</text>
+</svg>
