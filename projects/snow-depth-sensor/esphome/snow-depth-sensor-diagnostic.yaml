@@ -1,45 +1,32 @@
-# Low-power production configuration (deployed 2026-07-20).
-# Wake 60 s -> sample burst -> deep sleep 15 min.
 esphome:
   name: snow-depth-sensor
   friendly_name: snow-depth-sensor
   on_boot:
     priority: -100
     then:
-      - if:
-          condition:
-            switch.is_on: ota_mode_switch
-          then:
-            - deep_sleep.prevent: deep_sleep_control
-      # Give Wi-Fi/API time to connect, then collect a short burst of samples.
+      # Temporary diagnostic mode keeps the node awake for UART observation.
+      - deep_sleep.prevent: deep_sleep_control
       - wait_until:
           condition:
             api.connected:
           timeout: 15s
-      - repeat:
-          count: 12
-          then:
-            - button.press: a02yyuw_trigger
-            - delay: 3s
 
 esp32:
   board: esp32dev
   framework:
     type: esp-idf
 
-# Production logging: warnings/errors remain available over the API, while
-# serial formatting/transmission is disabled to reduce awake-time overhead.
 logger:
-  level: WARN
-  baud_rate: 0
+  level: DEBUG
+  baud_rate: 115200
 
 api:
   encryption:
-    key: !secret api_encryption_key
+    key: !secret snow_depth_sensor_api_encryption_key
 
 ota:
   - platform: esphome
-    password: !secret ota_password
+    password: !secret snow_depth_sensor_ota_password
     on_begin:
       then:
         - deep_sleep.prevent: deep_sleep_control
@@ -48,14 +35,19 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   fast_connect: true
-  power_save_mode: HIGH
+  power_save_mode: NONE
 
 uart:
   rx_pin: GPIO32
   baud_rate: 9600
   id: uart_a
+  debug:
+    direction: RX
+    dummy_receiver: false
+    debug_prefix: "[A02 UART] "
+    after:
+      bytes: 4
 
-# Shared 3.3 V I2C bus for the battery and solar monitors.
 i2c:
   id: power_bus
   sda: GPIO21
@@ -66,20 +58,22 @@ i2c:
 output:
   - platform: gpio
     pin: GPIO26
-    id: a02yyuw_trigger_output
+    id: a02_trigger_output
 
-# This particular A02YYUW sensor/clone only emits a UART frame after a pulse
-# on its control lead; the boot burst above requests the measurements.
 button:
   - platform: output
     name: "Trigger Sensor"
-    output: a02yyuw_trigger_output
+    output: a02_trigger_output
     duration: 100ms
-    id: a02yyuw_trigger
+    id: a02_trigger
+
+interval:
+  - interval: 1s
+    startup_delay: 1s
+    then:
+      - button.press: a02_trigger
 
 switch:
-  # Persistent device-owned maintenance mode. Turn this on during any 60-second
-  # wake window; it prevents sleep immediately and remains on across reboots.
   - platform: template
     name: "Snow Sensor OTA Mode"
     id: ota_mode_switch
@@ -97,15 +91,17 @@ deep_sleep:
   sleep_duration: 15min
 
 sensor:
-  - platform: "a02yyuw"
+  - platform: a02yyuw
     name: "A02YYUW Distance"
-    id: a02yyuw_distance
+    id: a02_distance
     uart_id: uart_a
-    filters:
-      - median:
-          window_size: 5
-          send_every: 5
-          send_first_at: 5
+    force_update: true
+    on_raw_value:
+      then:
+        - logger.log:
+            level: DEBUG
+            format: "A02 distance: %.2f in (%.0f mm raw)"
+            args: ["x / 25.4f", "x"]
 
   - platform: max17043
     i2c_id: power_bus
