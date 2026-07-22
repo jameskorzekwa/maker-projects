@@ -9,7 +9,7 @@ The project is still being commissioned. This document separates confirmed curre
 | Area | Status |
 | --- | --- |
 | Controller | M5Stack ATOM Echo with ESP32-PICO-D4; internal speaker removed to reduce deep-sleep current |
-| Distance sensor | Gugxiom/A02-style controlled-UART sensor installed and working with a GPIO trigger pulse |
+| Distance sensor | MaxBotix MB7389-100 installed and verified 2026-07-22 (true-TTL serial confirmed by meter; powered through a Pololu #2810 load switch on GPIO26; 10k + 2×10k-series divider to GPIO32) |
 | Solar manager | Waveshare Solar Power Manager (D) installed |
 | Battery pack | Two matching low-temperature-rated 3.7 V cells in parallel; exact model not recorded |
 | Battery protection | Cells currently have no individual positive-lead fuses; add suitable fusing before permanent outdoor use |
@@ -17,9 +17,9 @@ The project is still being commissioned. This document separates confirmed curre
 | Solar telemetry | INA219 installed in the panel-positive input path |
 | Solar panel | NEWCONNY YXC-001, two 5 V/8 W panels advertised as 5 V/16 W combined |
 | Panel compatibility | User reports that the panel charges through `SOLAR IN`, but its 5 V rating is below Waveshare's specified 6-24 V input range; replacement is planned |
-| Firmware | Production low-power configuration deployed over OTA 2026-07-20; the full 60-second-awake / 15-minute-sleep cycle is verified live |
+| Firmware | MB7389 production configuration deployed over OTA 2026-07-22; 60-second-awake / 15-minute-sleep cycle verified; sensor power switched off during sleep |
 | Calibration | The 37-inch bare-ground baseline is provisional; the final mount must be recalibrated away from nearby false-echo surfaces |
-| Future sensor | MaxBotix MB7389-100 conversion is planned but not installed |
+| Future sensor | MB7389-100 conversion COMPLETE (2026-07-22); A02-style sensor retired |
 
 The two source documents are the [solar power and wiring guide](https://docs.google.com/document/d/1VBBSSxniEqbiaizXf9Yi6eJauWuF1qXN0pcVBxjVYyE/edit) and the [MB7389 conversion guide](https://docs.google.com/document/d/150faQQos0u_JAVHEJ2jF1tBTAhe6uCM2jp9b6NgIEto/edit).
 
@@ -169,7 +169,7 @@ The test mount below is useful for diagnosing the false return but is not the fi
 
 ## MB7389 Upgrade Plan
 
-The MaxBotix conversion is not installed. It retains GPIO32 for 9600-8-N-1 UART and repurposes GPIO26 to control the Pololu high-side switch.
+The MaxBotix conversion was completed on 2026-07-22 (see [`esphome/snow-depth-sensor-mb7389-production.yaml`](esphome/snow-depth-sensor-mb7389-production.yaml) for the deployed configuration). It retains GPIO32 for 9600-8-N-1 UART and repurposes GPIO26 to control the Pololu high-side switch.
 
 | Connection | Destination |
 | --- | --- |
@@ -222,3 +222,4 @@ The MB7389 reports a minimum distance of 300 mm, but MaxBotix recommends at leas
 | 2026-07-19 | Overnight deep discharge in diagnostic mode; MAX17043 state-of-charge reset observed, voltage remained trustworthy |
 | 2026-07-20 | Production low-power firmware deployed over OTA; wake/sleep cycle verified; weak-light charging hiccup characterized |
 | 2026-07-21 | Documentation reconciled and merged to main; printable sensor hood model added |
+| 2026-07-22 | MB7389 conversion completed and verified: TTL serial confirmed (no RX inversion), serial divider corrected to series resistors, Pololu #2810 switched power, production deep-sleep firmware deployed |
