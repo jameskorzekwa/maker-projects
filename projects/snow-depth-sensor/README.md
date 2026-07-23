@@ -11,7 +11,7 @@ The project is still being commissioned. This document separates confirmed curre
 | Controller | M5Stack ATOM Echo with ESP32-PICO-D4; internal speaker removed to reduce deep-sleep current |
 | Distance sensor | MaxBotix MB7389-100 installed and verified 2026-07-22 (true-TTL serial confirmed by meter; powered through a Pololu #2810 load switch on GPIO26; 10k + 2×10k-series divider to GPIO32) |
 | Solar manager | Waveshare Solar Power Manager (D) installed |
-| Battery pack | Two matching low-temperature-rated 3.7 V cells in parallel; exact model not recorded |
+| Battery pack | Single 3.7 V 2,000 mAh low-temperature-rated cell (confirmed 2026-07-22); a second matched parallel cell is planned but not installed |
 | Battery protection | Cells currently have no individual positive-lead fuses; add suitable fusing before permanent outdoor use |
 | Battery telemetry | DFRobot DFR0563/MAX17043 installed; voltage works. State of charge resets to nonsense after a deep discharge (observed 2026-07-19: ~1% at 3.5 V) and re-converges only slowly — trust voltage |
 | Solar telemetry | INA219 installed in the panel-positive input path |
@@ -111,7 +111,7 @@ Live telemetry on 2026-07-20 showed the practical consequence of the mismatch: u
 | MAX17043 `P1` positive/negative | Waveshare `BAT+` / `BAT-` |
 | MAX17043 I2C header | ATOM Echo shared 3.3 V I2C bus |
 
-The installed pack uses two matching low-temperature-rated cells in parallel. Its exact cell model and charge-temperature limit have not been recorded. Before permanent use:
+The installed battery is currently a single 2,000 mAh low-temperature-rated cell (its exact model and charge-temperature limit are still unrecorded); the 1S2P parallel upgrade below is planned but not yet built. Before permanent use:
 
 1. Verify both cells are identical in model, capacity, age, condition, and protection type.
 2. Verify their voltages are within a few hundredths of a volt before joining them.
