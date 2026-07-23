@@ -21,7 +21,7 @@ The project is still being commissioned. This document separates confirmed curre
 | Calibration | The 37-inch bare-ground baseline is provisional; the final mount must be recalibrated away from nearby false-echo surfaces |
 | Future sensor | MB7389-100 conversion COMPLETE (2026-07-22); A02-style sensor retired |
 
-The two source documents are the [solar power and wiring guide](https://docs.google.com/document/d/1VBBSSxniEqbiaizXf9Yi6eJauWuF1qXN0pcVBxjVYyE/edit) and the [MB7389 conversion guide](https://docs.google.com/document/d/150faQQos0u_JAVHEJ2jF1tBTAhe6uCM2jp9b6NgIEto/edit).
+The build documentation lives in this repository: the [MB7389 conversion & power guide](docs/mb7389-conversion-guide.md) (canonical, includes the 2026-07-23 power rewire) and the [original July 2026 solar wiring plan](docs/original-solar-wiring-plan.md) (historical). These were originally drafted as Google Docs; as of 2026-07-23 the repository copies are canonical and the Google Docs carry deprecation notes.
 
 ## System Overview
 
