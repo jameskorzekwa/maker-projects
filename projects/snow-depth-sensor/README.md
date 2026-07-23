@@ -10,7 +10,7 @@ The project is still being commissioned. This document separates confirmed curre
 | --- | --- |
 | Controller | M5Stack ATOM Echo with ESP32-PICO-D4; internal speaker removed to reduce deep-sleep current |
 | Distance sensor | MaxBotix MB7389-100 installed and verified 2026-07-22 (true-TTL serial confirmed by meter; powered through a Pololu #2810 load switch on GPIO26; 10k + 2×10k-series divider to GPIO32) |
-| Solar manager | Waveshare Solar Power Manager (D) installed |
+| Solar manager | CN3791/CN5305 MPPT solar manager board (rewire documented 2026-07-23); Waveshare (D) retired — its SW6106 power-bank output stage shut down under light load and on charge events |
 | Battery pack | Single 3.7 V 2,000 mAh low-temperature-rated cell (confirmed 2026-07-22); a second matched parallel cell is planned but not installed |
 | Battery protection | Cells currently have no individual positive-lead fuses; add suitable fusing before permanent outdoor use |
 | Battery telemetry | DFRobot DFR0563/MAX17043 installed; voltage works. State of charge resets to nonsense after a deep discharge (observed 2026-07-19: ~1% at 3.5 V) and re-converges only slowly — trust voltage |
@@ -28,18 +28,21 @@ The two source documents are the [solar power and wiring guide](https://docs.goo
 ```mermaid
 flowchart LR
     PANEL[5 V solar panel assembly] -->|positive| INA[INA219]
-    INA -->|VIN- to SOLAR IN+| PM[Waveshare Solar Power Manager D]
-    PANEL -->|negative to SOLAR IN-| PM
-    BATT[Two-cell 1S2P battery pack] --> GAUGE[DFRobot MAX17043]
-    GAUGE -->|battery output| PM
-    PM -->|regulated 5 V| ATOM[M5Stack ATOM Echo]
-    ATOM -->|5 V, GND, GPIO26, GPIO32| A02[Controlled A02-style sensor]
+    INA -->|VIN- to solar terminal +| PM[CN3791/CN5305 MPPT solar manager]
+    PANEL -->|negative to solar terminal -| PM
+    BATT[Single 3.7 V 2000 mAh cell] --> GAUGE[DFRobot MAX17043]
+    GAUGE -->|PH-2P battery socket| PM
+    PM -->|always-on 3.3 V header| ATOM[M5Stack ATOM Echo 3.3 V pin]
+    PM -->|5 V header| SW[Pololu 2810 load switch]
+    ATOM -->|GPIO26 enable| SW
+    SW -->|switched 5 V| MB[MaxBotix MB7389]
+    MB -->|TTL serial via 10k/20k divider to GPIO32| ATOM
     INA -->|I2C GPIO21/GPIO25| ATOM
     GAUGE -->|I2C GPIO21/GPIO25| ATOM
     ATOM -->|Wi-Fi / ESPHome API| HA[Home Assistant]
 ```
 
-This diagram records the current reported connection. The panel-to-`SOLAR IN` voltage mismatch remains an open corrective item even though the user has observed charging.
+This diagram reflects the power rewire documented 2026-07-23 around the CN3791/CN5305 MPPT solar manager (5–24 V solar input — the 5 V panel is finally inside the input window). The Waveshare (D) is retired: its SW6106 power-bank output stage shut the ESP32 down three ways in 48 hours (light-load auto-off, low-current-mode dropout, charge-event kill).
 
 ## Parts
 
@@ -47,7 +50,8 @@ This diagram records the current reported connection. The panel-to-`SOLAR IN` vo
 | --- | ---: | --- | --- |
 | M5Stack ATOM Echo / Atom Voice | 1 | ESP32-PICO-D4 controller | [M5Stack](https://docs.m5stack.com/en/atom/atomecho), [Amazon](https://www.amazon.com/dp/B0C7QSVPB2) |
 | Gugxiom controlled-UART ultrasonic sensor | 1 | Current distance sensor; Amazon ASIN `B0CFFQNXDT` | [Amazon](https://www.amazon.com/dp/B0CFFQNXDT) |
-| Waveshare Solar Power Manager (D) | 1 | Solar charger, battery manager, and regulated 5 V output | [Waveshare](https://www.waveshare.com/solar-power-manager-d.htm) |
+| CN3791/CN5305 MPPT solar manager board | 1 | Solar/USB-C charging plus always-on 5 V/2A and 3.3 V/1A outputs | [Amazon](https://a.co/d/08eKKVoD) |
+| Waveshare Solar Power Manager (D) | 1 | RETIRED 2026-07-23 — power-bank output stage unsuitable for deep-sleep loads | [Waveshare](https://www.waveshare.com/solar-power-manager-d.htm) |
 | Low-temperature-rated 3.7 V cells | 2 | Parallel 1S2P battery pack; exact model not recorded | Not recorded |
 | DFRobot Gravity MAX17043, DFR0563 | 1 | Battery voltage and modeled state of charge | [DFRobot](https://www.dfrobot.com/product-1734.html) |
 | Generic INA219 breakout | 1 | Panel input voltage/current/power | [Amazon](https://www.amazon.com/dp/B0CTYB69B5) |
@@ -92,8 +96,8 @@ The expected I2C addresses are `0x36` for the MAX17043 and `0x40` for the INA219
 | From | To |
 | --- | --- |
 | Panel positive | INA219 `VIN+` |
-| INA219 `VIN-` | Waveshare `SOLAR IN+` |
-| Panel negative | Waveshare `SOLAR IN-` |
+| INA219 `VIN-` | MPPT board solar terminal `+` |
+| Panel negative | MPPT board solar terminal `-` |
 | INA219 `VCC`, `GND`, `SDA`, `SCL` | ATOM Echo shared 3.3 V I2C bus |
 
 This placement measures panel-side input voltage, current, and power. It does not measure exact battery charge current because the manager also supplies the load and incurs conversion losses.
@@ -108,7 +112,7 @@ Live telemetry on 2026-07-20 showed the practical consequence of the mismatch: u
 | --- | --- |
 | Parallel pack positive | MAX17043 `BT1/PH2` positive |
 | Parallel pack negative | MAX17043 `BT1/PH2` negative |
-| MAX17043 `P1` positive/negative | Waveshare `BAT+` / `BAT-` |
+| MAX17043 `P1` positive/negative | MPPT board PH-2P battery socket (verify polarity with a meter; leave the 18650 holder empty) |
 | MAX17043 I2C header | ATOM Echo shared 3.3 V I2C bus |
 
 The installed battery is currently a single 2,000 mAh low-temperature-rated cell (its exact model and charge-temperature limit are still unrecorded); the 1S2P parallel upgrade below is planned but not yet built. Before permanent use:
@@ -120,14 +124,15 @@ The installed battery is currently a single 2,000 mAh low-temperature-rated cell
 
 The MAX17043 measures pack voltage and estimates state of charge; it does not measure current. A live reading of about 4.191 V accompanied by 84% showed that voltage is currently more trustworthy than the uncalibrated percentage.
 
-### 5 V Output
+### Power Outputs (CN3791/CN5305 MPPT board)
 
-| Waveshare | ATOM Echo |
+| MPPT board | Destination |
 | --- | --- |
-| `5V OUT+` | `5V` header |
-| `5V OUT-` | `GND` header |
+| 3.3 V header `+` | ATOM Echo `3.3V` pin — always-on ESP32 supply; the ATOM `5V` pin is now unused |
+| 5 V header `+` | Pololu #2810 `VIN` — switched MB7389 supply, enabled by GPIO26 |
+| `GND` | Common ground |
 
-Double-press the Waveshare function button to enter its low-current mode so the regulated output remains enabled while the ESP32 sleeps. Disconnect the external 5 V positive feed before attaching a normal USB cable to the ATOM Echo, or use a verified data-only cable, so independent 5 V sources are not tied together.
+The 3.3 V rail has no load detection or power-bank logic and cannot shut itself off; the button on the board is only needed once after connecting a battery or after a 2.9 V deep-discharge cutoff. Set the MPPT DIP switch to its lowest position for the 5 V panel, and never feed the solar input and USB-C charge input simultaneously. Disconnect the 3.3 V feed before attaching USB to the ATOM Echo for flashing, and reconnect afterward.
 
 ## ESPHome Configuration
 
@@ -196,7 +201,7 @@ The MB7389 reports a minimum distance of 300 mm, but MaxBotix recommends at leas
 5. Move the sensor clear of the false-echo surface.
 6. Record a stable bare-ground baseline and test several known target heights.
 7. Restore production firmware and verify the complete 60-second wake and 15-minute sleep cycle. **Done 2026-07-20:** deployed over OTA; two sleep transitions and a scheduled wake observed live.
-8. Confirm Waveshare low-current mode keeps 5 V enabled through sleep and wake.
+8. Superseded 2026-07-23: run the MPPT-board burn-in instead — 24 h of unattended wake/sleep cycles on battery only, plus a charger plug/unplug during a sleep window, with the output surviving both.
 9. Weatherproof rear electronics, cable entries, solder joints, and the battery compartment while allowing condensation control.
 10. Verify OTA maintenance mode keeps the node awake through a complete update.
 
@@ -223,3 +228,4 @@ The MB7389 reports a minimum distance of 300 mm, but MaxBotix recommends at leas
 | 2026-07-20 | Production low-power firmware deployed over OTA; wake/sleep cycle verified; weak-light charging hiccup characterized |
 | 2026-07-21 | Documentation reconciled and merged to main; printable sensor hood model added |
 | 2026-07-22 | MB7389 conversion completed and verified: TTL serial confirmed (no RX inversion), serial divider corrected to series resistors, Pololu #2810 switched power, production deep-sleep firmware deployed |
+| 2026-07-23 | Power system rewired (documented): Waveshare (D) retired after light-load auto-off, mode dropout, and charge-event shutdowns; CN3791/CN5305 MPPT board provides always-on 3.3 V ESP32 feed and switched 5 V sensor rail |
