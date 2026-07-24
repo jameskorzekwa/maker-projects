@@ -48,7 +48,7 @@ flowchart LR
 | MaxBotix MB7389-100 (HRXL-MaxSonar-WRMT) | 1 | Distance sensor: 300–5000 mm, 1 mm resolution, temperature-compensated, 3/4-in NPS housing | [MaxBotix](https://maxbotix.com/products/mb7389) |
 | Pololu Mini MOSFET Slide Switch LV (#2810) | 1 | GPIO26-controlled sensor power switch (slide switch stays OFF) | [Pololu](https://www.pololu.com/product/2810) |
 | WatangTech MPPT solar manager board (CN3791/CN5305) | 1 | Solar/USB-C charging plus always-on 5 V/2A and 3.3 V/1A outputs | [Amazon](https://a.co/d/08eKKVoD) |
-| 18650 Li-ion cell | 1 | Battery, in the MPPT board's onboard holder. Labeled 4,000 mAh — treat skeptically (real 18650s top out ~3,500 mAh); true capacity to be measured by the 2026-07 discharge run | Not recorded |
+| UltraFire BRC 18650 (labeled 4,000 mAh) | 1 | Bench/test battery in the onboard holder. Community testing of this label consistently measures 500–1,500 mAh with high internal resistance (~1 Ω observed: 150 mV sag at 150 mA); discharge run measuring true capacity. Replace with a genuine Samsung 35E / LG MJ1 / Panasonic NCR18650B class cell for deployment | |
 | NEWCONNY YXC-001 panel assembly | 1 set | Two 5 V/8 W panels | [Amazon](https://www.amazon.com/dp/B0DZC69ZHL) |
 | 10 kΩ resistors ×3 (one series + two in series as the 20 kΩ shunt) | 3 | 5 V→3.3 V serial divider | |
 | 100 µF electrolytic + 0.1 µF ceramic | 1 each | Sensor supply decoupling at the sensor pins | |
