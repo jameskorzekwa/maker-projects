@@ -19,7 +19,7 @@ The system is bench-verified and awaiting final outdoor mounting and bare-ground
 | Power manager | CN3791/CN5305 MPPT solar manager board: always-on 3.3 V to the ATOM, 5 V rail for the sensor (rewire documented 2026-07-23) |
 | Battery | 18650 cell in the MPPT board's onboard holder; labeled 4,000 mAh (unverified — discharge run will measure true capacity); pouch cell and MAX17043 pass-through retired 2026-07-24 |
 | Battery telemetry | Board VBAT header → 100k/100k divider → GPIO33 ADC: voltage plus discharge-curve percentage (calibration run pending) |
-| Charge telemetry | CHRG → GPIO19 and DONE → GPIO22 through 10k series resistors: hardware charging / charge-complete binary sensors |
+| Charge telemetry | CHRG → GPIO19 (charging binary sensor); DONE → GPIO22 feeding a per-wake **latch** ("Charge Complete" = DONE asserted at any point in the wake window — defeats the load-sag sampling problem) |
 | Solar panel | NEWCONNY YXC-001, two 5 V/8 W panels; wired directly to the solar terminals (MPPT DIP at the 5 V setting) |
 | Firmware | Production low-power configuration: 60 s awake / 15 min deep sleep, verified live |
 | Calibration | Bare-ground baseline pending final outdoor mount |
