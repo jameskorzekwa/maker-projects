@@ -1,5 +1,4 @@
-# Deployed 2026-07-24: MB7389 + WatangTech MPPT power + VBAT/CHRG monitoring
-# + latched charge-complete detection.
+# Deployed 2026-07-24: native-inch distance, VBAT/CHRG monitoring, DONE latch.
 esphome:
   name: snow-depth-sensor
   friendly_name: snow-depth-sensor
@@ -167,13 +166,15 @@ sensor:
   - platform: template
     name: "A02YYUW Distance"
     id: a02yyuw_distance
-    unit_of_measurement: "mm"
+    unit_of_measurement: "in"
     device_class: distance
     state_class: measurement
-    accuracy_decimals: 0
+    accuracy_decimals: 1
     update_interval: never
     force_update: true
     filters:
+      # Parser publishes millimeters; convert to inches natively.
+      - multiply: 0.0393700787
       - median:
           window_size: 5
           send_every: 5
