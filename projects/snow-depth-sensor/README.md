@@ -50,7 +50,7 @@ flowchart LR
 | M5Stack ATOM Echo | 1 | ESP32-PICO-D4 controller (speaker removed) | [M5Stack](https://docs.m5stack.com/en/atom/atomecho), [Amazon](https://www.amazon.com/dp/B0C7QSVPB2) |
 | MaxBotix MB7389-100 (HRXL-MaxSonar-WRMT) | 1 | Distance sensor: 300–5000 mm, 1 mm resolution, temperature-compensated, 3/4-in NPS housing | [MaxBotix](https://maxbotix.com/products/mb7389) |
 | Pololu Mini MOSFET Slide Switch LV (#2810) | 1 | GPIO26-controlled sensor power switch (slide switch stays OFF) | [Pololu](https://www.pololu.com/product/2810) |
-| CN3791/CN5305 MPPT solar manager board | 1 | Solar/USB-C charging plus always-on 5 V/2A and 3.3 V/1A outputs | [Amazon](https://a.co/d/08eKKVoD) |
+| WatangTech MPPT solar manager board (CN3791/CN5305) | 1 | Solar/USB-C charging plus always-on 5 V/2A and 3.3 V/1A outputs | [Amazon](https://a.co/d/08eKKVoD) |
 | Low-temperature-rated 3.7 V 2,000 mAh cell | 1 | Battery (second matched parallel cell planned; fuse each positive lead when paralleling) | Not recorded |
 | DFRobot Gravity MAX17043 (DFR0563) | 1 | Battery voltage and state of charge | [DFRobot](https://www.dfrobot.com/product-1734.html) |
 | Generic INA219 breakout (R100 shunt) | 1 | Panel input voltage/current/power | [Amazon](https://www.amazon.com/dp/B0CTYB69B5) |

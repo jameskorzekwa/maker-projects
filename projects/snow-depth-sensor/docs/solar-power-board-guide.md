@@ -1,9 +1,11 @@
 # Solar Power Board Guide — CN3791/CN5305 MPPT Manager
 
-Setup, wiring, and acceptance testing for the MPPT solar manager board
-(["MPPT Solar Charge Controller for 18650"](https://a.co/d/08eKKVoD)) that
-powers the snow depth sensor. This board replaced the Waveshare Solar Power
-Manager (D) on 2026-07-23.
+Setup, wiring, and acceptance testing for the **WatangTech** MPPT solar
+manager board (["MPPT Solar Charge Controller for 18650"](https://a.co/d/08eKKVoD),
+CN3791 charger + CN5305 boost) that powers the snow depth sensor. This board
+replaced the Waveshare Solar Power Manager (D) on 2026-07-23 — and is, in a
+full-circle twist, the board the project's original July 2026 plan was
+designed around.
 
 ## Complete power wiring
 
@@ -28,7 +30,7 @@ Solar panel − ──> MPPT board solar terminal −   (or panel USB-C ──> 
 
 ### Board setup before wiring
 
-1. MPPT SET DIP switch: lowest voltage position (must be ≤ panel voltage; lowest for the 5 V panel).
+1. MPPT SET DIP switch: **5 V position ON, all other switches OFF** (set and confirmed 2026-07-24). One switch only, never two at once. The 5 V set-point matches the panel, so the raw solar-terminal route is used — no USB-C input, no cable splice.
 2. Battery switch: OFF until wiring is complete.
 3. 18650 holder: leave empty — the PH-2P socket is the battery input.
 4. Never feed the solar input and the USB Type-C charge input at the same time.
