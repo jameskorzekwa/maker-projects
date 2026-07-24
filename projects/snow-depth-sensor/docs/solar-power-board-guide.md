@@ -59,5 +59,5 @@ The Waveshare is fully retired (usable as a spare USB-C charger board). The MPPT
 
 ## Related documents
 
-- Sensor-side wiring, ESPHome configuration, mounting, and calibration: [MB7389 conversion guide](mb7389-conversion-guide.md)
+- Sensor-side wiring, ESPHome configuration, mounting, and calibration: [MB7389 sensor guide](mb7389-sensor-guide.md)
 - The retired Waveshare configuration this replaces: [Waveshare-era wiring guide](waveshare-wiring-guide.md)

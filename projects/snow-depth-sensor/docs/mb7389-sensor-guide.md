@@ -1,39 +1,18 @@
-# Snow Depth Sensor — MB7389 Conversion & Power Guide
+# MB7389 Snow Depth Sensor Guide
 
-Converting the ATOM Echo / A02YYUW build to the MaxBotix MB7389-100, plus the
-power-system rewire.
+Wiring, ESPHome configuration, mounting, and calibration for the MaxBotix
+MB7389-100 ultrasonic sensor on the ATOM Echo. Power for the system comes from
+the MPPT solar manager — see the [Solar Power Board Guide](solar-power-board-guide.md).
 
-> **Status:** Prepared 2026-07-16 against the live ESPHome configuration.
-> Updated 2026-07-21 for the deployed low-power firmware and the Pololu #2810
-> load switch. **Conversion complete 2026-07-22**: MB7389 wired and verified
-> (pin 5 confirmed true TTL, idle high — no RX inversion; the serial divider
-> must be 10k series + 20k shunt — two 10k in *parallel* crushes logic highs to
-> 1.67 V and reads as silence). Production deep-sleep firmware (60 s / 15 min)
-> restored and verified the same day. **Power system rewire documented
-> 2026-07-23**: the Waveshare Solar Power Manager (D) is retired after its
-> power-bank output stage shut the ESP32 down three different ways in 48 hours;
-> power now comes from a CN3791/CN5305 MPPT solar manager board — see
-> [Power System Rewire](#power-system-rewire--cn3791cn5305-mppt-board).
-> Bare-ground baseline recalibration is still pending the final outdoor mount.
+Key facts:
 
-## Bottom line
+- Range 300–5000 mm, 1 mm resolution, internal temperature compensation, 3/4-in NPS threaded housing.
+- Pin 5 serial output is true TTL, idle high (verified by meter 2026-07-22) — standard non-inverted UART at 9600 8-N-1 into GPIO32 through a 10k/20k divider. **The divider's 20k must be a series pair if built from two 10k resistors — wired in parallel they crush logic highs to 1.67 V and the ESP32 hears nothing.**
+- GPIO26 switches sensor power through a Pololu #2810 load switch; the sensor is fully off during deep sleep.
+- The distance entity keeps the legacy name/ID `a02yyuw_distance` so Home Assistant history and helpers survived the sensor swap.
+- Bare-ground baseline recalibration is pending the final outdoor mount.
 
-- The MB7389 is not a plug-in replacement for the A02YYUW, but the existing ATOM Echo can still be used.
-- Keep GPIO32 as the UART receive pin and keep the UART at 9600 baud, 8-N-1.
-- Repurpose GPIO26 from "trigger the A02YYUW" to "turn sensor power on while the ESP32 is awake."
-- Remove the A02YYUW frame decoder, trigger button, and 12-pulse boot trigger burst.
-- Add the Pololu #2810 load switch and a 5 V-to-3.3 V divider on the MaxBotix serial output.
-- Recalibrate the bare-deck distance after the MB7389 is permanently mounted.
-
-## What stays unchanged
-
-- ATOM Echo / ESP32-PICO controller.
-- 3.7 V battery, MAX17043, and INA219 monitoring wiring. (The Waveshare Solar Power Manager (D) itself was retired on 2026-07-23 — see the Power System Rewire section.)
-- GPIO21 SDA and GPIO25 SCL for the shared I2C bus.
-- Home Assistant API, OTA password/encryption, and the existing OTA maintenance switch.
-- The Home Assistant snow-depth calculation can keep using the distance entity, but its bare-deck baseline must be updated.
-
-## Additional hardware required
+## Sensor-subsystem hardware
 
 - **Load switch** (selected 2026-07-21): Pololu Mini MOSFET Slide Switch with Reverse Voltage Protection, LV — [Pololu item #2810](https://www.pololu.com/product/2810), also sold by RobotShop. Verified against the requirements: high-side P-MOSFET switch, 1.8–16 V operating range, 3 A continuous (MB7389 peaks at ~98 mA), ON pin turns on above ~1 V so 3.3 V GPIO logic drives it directly, and it stays off when the ON pin is low or disconnected. **Keep the board's physical slide switch OFF permanently**: the ON pin only controls the MOSFET while the slide is off. A 100 kΩ ON-to-GND pulldown is still recommended so the GPIO26 line cannot float into the ~1 V turn-on threshold during deep sleep.
 - One 10 kΩ resistor and one 20 kΩ resistor for the serial voltage divider.
@@ -45,18 +24,10 @@ power-system rewire.
 
 ## Complete wiring diagram
 
-```text
-POWER (all grounds are one common net; MPPT board = CN3791/CN5305 solar manager)
-Battery pigtail (from MAX17043 P1) ──> MPPT board PH-2P battery socket
-MPPT board 3.3 V header ──> ATOM Echo 3.3 V pin  (ALWAYS ON — the ATOM 5 V pin
-                                                  is no longer used)
-MPPT board 5 V header ──> Pololu #2810 VIN
-MPPT board GND ──┬──> ATOM Echo GND
-                 ├──> Pololu #2810 GND
-                 └──> MB7389 pin 7 (GND)
-Solar panel + ──> INA219 VIN+   INA219 VIN− ──> MPPT board solar terminal +
-Solar panel − ──> MPPT board solar terminal −   (or panel USB-C ──> board Type-C)
+Power arrives from the MPPT board (always-on 3.3 V to the ATOM, 5 V to the
+Pololu) — full power wiring in the [Solar Power Board Guide](solar-power-board-guide.md).
 
+```text
 SWITCHED SENSOR POWER
 Pololu #2810 VOUT ──> MB7389 pin 6 (V+)        (only live while GPIO26 is high)
 Pololu #2810 slide switch: set OFF and leave OFF
@@ -124,16 +95,16 @@ To measure up to 24 in of snow the sensor must sit at least ~35.8 in above bare 
 
 Nominal 11° beam: at 40 in the beam radius is ~3.8 in — keep the sensor center at least 5 in from any vertical face, post, enclosure wall, or roof edge (more is better). Horn faces straight down and protrudes through the enclosure; never recessed in a tube or behind a lip. The MB7389 locks onto the strongest acoustic return, and 90° corners reflect strongly — keep rail-and-deck corners out of the beam.
 
-## ESPHome changes
+## ESPHome configuration
 
-These changes were applied to the live node on 2026-07-22 and are the deployed configuration (see [`../esphome/snow-depth-sensor-mb7389-production.yaml`](../esphome/snow-depth-sensor-mb7389-production.yaml)). Implementation note from commissioning: the parser lives in the UART debug hook, which fires regardless of logger level, so it keeps working with production WARN logging.
+The deployed configuration is
+[`../esphome/snow-depth-sensor-mb7389-production.yaml`](../esphome/snow-depth-sensor-mb7389-production.yaml)
+(copy `secrets.example.yaml` values into the private ESPHome `secrets.yaml`).
+Implementation note: the frame parser lives in the UART debug hook, which
+fires regardless of logger level, so it works with production WARN logging.
+The key blocks:
 
-### 1. Remove the A02YYUW-only pieces
-
-- Delete the `platform: a02yyuw` sensor block, the Trigger Sensor output button, and the 12-pulse boot burst (`repeat` block in `on_boot`).
-- Replace the GPIO26 output ID `a02yyuw_trigger_output` with `maxbotix_power_enable`.
-
-### 2. Replace the UART block with an MB7389 ASCII parser
+### UART frame parser
 
 ```yaml
 uart:
@@ -176,7 +147,7 @@ uart:
 
 The MB7389 sends `Rdddd` followed by carriage return (`dddd` = millimeters; `5000` = no target detected).
 
-### 3. Replace the distance sensor with a template sensor
+### Distance template sensor
 
 ```yaml
 sensor:
@@ -198,9 +169,9 @@ sensor:
   # Keep the existing MAX17043 and INA219 entries below this block.
 ```
 
-The old name and ID are intentionally preserved so the existing Home Assistant entity, history, and helpers survive. Rename in HA later if desired.
+The legacy name and ID are intentionally preserved so the existing Home Assistant entity, history, and helpers survive.
 
-### 4. Repurpose GPIO26 as sensor-power enable
+### GPIO26 sensor-power enable
 
 ```yaml
 output:
@@ -209,7 +180,7 @@ output:
     id: maxbotix_power_enable
 ```
 
-At the start of `on_boot`, power the sensor and let it settle (commissioning version shown; production replaces the unconditional `deep_sleep.prevent` with the OTA-mode-switch conditional):
+At the start of `on_boot`, power the sensor and let it settle (the deployed production config guards `deep_sleep.prevent` behind the OTA-mode switch; see the config file for the exact sequence):
 
 ```yaml
 esphome:
@@ -254,12 +225,6 @@ Keep the OTA `on_begin` safeguard and the persistent "Snow Sensor OTA Mode" swit
 - [ ] Max expected snow level stays ≥11.8 in below the sensor.
 - [ ] Rear pins, joints, and cable entry protected from precipitation and condensation.
 - [ ] OTA mode keeps the device awake through a complete update.
-
-## Power System Rewire — CN3791/CN5305 MPPT board
-
-The power system was redesigned on 2026-07-23 (Waveshare retired). Board
-setup, the full rewire procedure, and the burn-in acceptance test now live in
-their own document: **[Solar Power Board Guide](solar-power-board-guide.md)**.
 
 ## Sources
 
