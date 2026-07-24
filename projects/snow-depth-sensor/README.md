@@ -17,7 +17,7 @@ The system is bench-verified and awaiting final outdoor mounting and bare-ground
 | Distance sensor | MaxBotix MB7389-100 installed and verified 2026-07-22 (true-TTL serial confirmed; 10k + 2×10k-series divider to GPIO32) |
 | Sensor power | Pololu #2810 load switch on GPIO26; sensor fully off during deep sleep |
 | Power manager | CN3791/CN5305 MPPT solar manager board: always-on 3.3 V to the ATOM, 5 V rail for the sensor (rewire documented 2026-07-23) |
-| Battery | 18650 cell in the MPPT board's onboard holder (record the labeled capacity); pouch cell and MAX17043 pass-through retired 2026-07-24 |
+| Battery | 18650 cell in the MPPT board's onboard holder; labeled 4,000 mAh (unverified — discharge run will measure true capacity); pouch cell and MAX17043 pass-through retired 2026-07-24 |
 | Battery telemetry | Board VBAT header → 100k/100k divider → GPIO33 ADC: voltage plus discharge-curve percentage (calibration run pending) |
 | Charge telemetry | CHRG → GPIO19 and DONE → GPIO22 through 10k series resistors: hardware charging / charge-complete binary sensors |
 | Solar panel | NEWCONNY YXC-001, two 5 V/8 W panels; wired directly to the solar terminals (MPPT DIP at the 5 V setting) |
@@ -48,7 +48,7 @@ flowchart LR
 | MaxBotix MB7389-100 (HRXL-MaxSonar-WRMT) | 1 | Distance sensor: 300–5000 mm, 1 mm resolution, temperature-compensated, 3/4-in NPS housing | [MaxBotix](https://maxbotix.com/products/mb7389) |
 | Pololu Mini MOSFET Slide Switch LV (#2810) | 1 | GPIO26-controlled sensor power switch (slide switch stays OFF) | [Pololu](https://www.pololu.com/product/2810) |
 | WatangTech MPPT solar manager board (CN3791/CN5305) | 1 | Solar/USB-C charging plus always-on 5 V/2A and 3.3 V/1A outputs | [Amazon](https://a.co/d/08eKKVoD) |
-| 18650 Li-ion cell | 1 | Battery, in the MPPT board's onboard holder (capacity to record) | Not recorded |
+| 18650 Li-ion cell | 1 | Battery, in the MPPT board's onboard holder. Labeled 4,000 mAh — treat skeptically (real 18650s top out ~3,500 mAh); true capacity to be measured by the 2026-07 discharge run | Not recorded |
 | NEWCONNY YXC-001 panel assembly | 1 set | Two 5 V/8 W panels | [Amazon](https://www.amazon.com/dp/B0DZC69ZHL) |
 | 10 kΩ resistors ×3 (one series + two in series as the 20 kΩ shunt) | 3 | 5 V→3.3 V serial divider | |
 | 100 µF electrolytic + 0.1 µF ceramic | 1 each | Sensor supply decoupling at the sensor pins | |
