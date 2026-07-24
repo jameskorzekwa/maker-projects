@@ -1,6 +1,6 @@
 # Solar Snow Depth Sensor
 
-This project measures the distance from a fixed outdoor mount to the snow surface and reports the calculated snow depth to Home Assistant through ESPHome. The build uses an M5Stack ATOM Echo, a MaxBotix MB7389 ultrasonic sensor behind a GPIO-switched load switch, a CN3791/CN5305 MPPT solar manager with an always-on 3.3 V output, a single 3.7 V cell, and battery/solar telemetry.
+This project measures the distance from a fixed outdoor mount to the snow surface and reports the calculated snow depth to Home Assistant through ESPHome. The build uses an M5Stack ATOM Echo, a MaxBotix MB7389 ultrasonic sensor behind a GPIO-switched load switch, a CN3791/CN5305 MPPT solar manager with an always-on 3.3 V output, an 18650 cell in the board's onboard holder, and battery/charge telemetry read from the board's VBAT/CHRG/DONE monitoring header via reclaimed ATOM audio pins.
 
 The system is bench-verified and awaiting final outdoor mounting and bare-ground baseline calibration.
 
@@ -17,10 +17,10 @@ The system is bench-verified and awaiting final outdoor mounting and bare-ground
 | Distance sensor | MaxBotix MB7389-100 installed and verified 2026-07-22 (true-TTL serial confirmed; 10k + 2×10k-series divider to GPIO32) |
 | Sensor power | Pololu #2810 load switch on GPIO26; sensor fully off during deep sleep |
 | Power manager | CN3791/CN5305 MPPT solar manager board: always-on 3.3 V to the ATOM, 5 V rail for the sensor (rewire documented 2026-07-23) |
-| Battery | Single 3.7 V 2,000 mAh low-temperature-rated cell via MAX17043 pass-through; a second matched parallel cell is planned |
-| Battery telemetry | DFRobot MAX17043 (I2C `0x36`); voltage reliable; percentage needs continuous power to stay calibrated (now on the always-on rail) |
-| Solar telemetry | INA219 (I2C `0x40`) in the panel-positive input path |
-| Solar panel | NEWCONNY YXC-001, two 5 V/8 W panels; within the MPPT board's 5–24 V input window |
+| Battery | 18650 cell in the MPPT board's onboard holder (record the labeled capacity); pouch cell and MAX17043 pass-through retired 2026-07-24 |
+| Battery telemetry | Board VBAT header → 100k/100k divider → GPIO33 ADC: voltage plus discharge-curve percentage (calibration run pending) |
+| Charge telemetry | CHRG → GPIO19 and DONE → GPIO22 through 10k series resistors: hardware charging / charge-complete binary sensors |
+| Solar panel | NEWCONNY YXC-001, two 5 V/8 W panels; wired directly to the solar terminals (MPPT DIP at the 5 V setting) |
 | Firmware | Production low-power configuration: 60 s awake / 15 min deep sleep, verified live |
 | Calibration | Bare-ground baseline pending final outdoor mount |
 
@@ -28,18 +28,15 @@ The system is bench-verified and awaiting final outdoor mounting and bare-ground
 
 ```mermaid
 flowchart LR
-    PANEL[5 V solar panel assembly] -->|positive| INA[INA219]
-    INA -->|VIN- to solar terminal +| PM[CN3791/CN5305 MPPT solar manager]
-    PANEL -->|negative to solar terminal -| PM
-    BATT[Single 3.7 V 2000 mAh cell] --> GAUGE[DFRobot MAX17043]
-    GAUGE -->|PH-2P battery socket| PM
+    PANEL[5 V solar panel assembly] -->|solar terminals, MPPT DIP 5 V| PM[WatangTech MPPT solar manager]
+    BATT[18650 cell in onboard holder] --- PM
     PM -->|always-on 3.3 V header| ATOM[M5Stack ATOM Echo 3.3 V pin]
     PM -->|5 V header| SW[Pololu 2810 load switch]
+    PM -->|VBAT via 100k/100k divider| ATOM
+    PM -->|CHRG via 10k to G19, DONE via 10k to G22| ATOM
     ATOM -->|GPIO26 enable| SW
     SW -->|switched 5 V| MB[MaxBotix MB7389]
     MB -->|TTL serial via 10k/20k divider to GPIO32| ATOM
-    INA -->|I2C GPIO21/GPIO25| ATOM
-    GAUGE -->|I2C GPIO21/GPIO25| ATOM
     ATOM -->|Wi-Fi / ESPHome API| HA[Home Assistant]
 ```
 
@@ -51,12 +48,12 @@ flowchart LR
 | MaxBotix MB7389-100 (HRXL-MaxSonar-WRMT) | 1 | Distance sensor: 300–5000 mm, 1 mm resolution, temperature-compensated, 3/4-in NPS housing | [MaxBotix](https://maxbotix.com/products/mb7389) |
 | Pololu Mini MOSFET Slide Switch LV (#2810) | 1 | GPIO26-controlled sensor power switch (slide switch stays OFF) | [Pololu](https://www.pololu.com/product/2810) |
 | WatangTech MPPT solar manager board (CN3791/CN5305) | 1 | Solar/USB-C charging plus always-on 5 V/2A and 3.3 V/1A outputs | [Amazon](https://a.co/d/08eKKVoD) |
-| Low-temperature-rated 3.7 V 2,000 mAh cell | 1 | Battery (second matched parallel cell planned; fuse each positive lead when paralleling) | Not recorded |
-| DFRobot Gravity MAX17043 (DFR0563) | 1 | Battery voltage and state of charge | [DFRobot](https://www.dfrobot.com/product-1734.html) |
-| Generic INA219 breakout (R100 shunt) | 1 | Panel input voltage/current/power | [Amazon](https://www.amazon.com/dp/B0CTYB69B5) |
+| 18650 Li-ion cell | 1 | Battery, in the MPPT board's onboard holder (capacity to record) | Not recorded |
 | NEWCONNY YXC-001 panel assembly | 1 set | Two 5 V/8 W panels | [Amazon](https://www.amazon.com/dp/B0DZC69ZHL) |
 | 10 kΩ resistors ×3 (one series + two in series as the 20 kΩ shunt) | 3 | 5 V→3.3 V serial divider | |
 | 100 µF electrolytic + 0.1 µF ceramic | 1 each | Sensor supply decoupling at the sensor pins | |
+| 100 kΩ resistors | 2 | VBAT voltage divider into GPIO33 | |
+| 10 kΩ resistors | 2 | Series protection on the CHRG/DONE monitoring lines | |
 
 ## Wiring Summary
 
@@ -69,11 +66,13 @@ Full step-by-step wiring lives in the two guides above. The short version:
 | ATOM GPIO26 | Pololu #2810 `ON` pin | 100 kΩ pulldown to GND; sensor off during sleep |
 | Pololu `VOUT` | MB7389 pin 6 (V+) | 100 µF + 0.1 µF across pins 6/7 at the sensor |
 | MB7389 pin 5 | 10 kΩ → GPIO32, 20 kΩ → GND | TTL serial, idle high, 9600 8-N-1 |
-| MAX17043 + INA219 | `3.3V`, GND, SDA GPIO21, SCL GPIO25 | Shared I2C bus |
-| Battery pigtail (MAX17043 P1) | MPPT board PH-2P socket | 18650 holder stays empty |
-| Panel + → INA219 VIN+ / VIN− → | MPPT board solar terminal + | Panel − to terminal −; MPPT DIP at lowest setting |
+| 18650 cell | MPPT board onboard holder | Negative first, observe polarity; PH-2P socket unused |
+| Panel + / − | MPPT board solar terminals | Direct connection; MPPT DIP at the 5 V setting |
+| MPPT `VBAT` | 100k → junction → GPIO33; junction → 100k → GND | Battery voltage ADC (×2 in firmware) |
+| MPPT `CHRG` | 10 kΩ → GPIO19 | Charging status, active low, internal pull-up |
+| MPPT `DONE` | 10 kΩ → GPIO22 | Charge complete, active low, internal pull-up |
 
-Do not use GPIO19/22/23/33 (reserved for ATOM Echo audio). Disconnect the 3.3 V feed before flashing the ATOM over USB.
+GPIO19/22/33 are reclaimed ATOM Echo audio pins — safe in this build because the speaker was removed and the microphone is unused (they attach only to unused audio-chip inputs). GPIO23 stays unused (entangled with the mic); GPIO21/25 are free since the I2C monitors were retired. Disconnect the 3.3 V feed before flashing the ATOM over USB.
 
 ## ESPHome Configuration
 
@@ -102,7 +101,7 @@ Photos of the MB7389 build and final outdoor mount still to be added.
 
 1. Run the MPPT-board burn-in: 24 h of unattended wake/sleep cycles on battery only, plus a charger plug/unplug during a sleep window, with the output surviving both.
 2. Add and verify a battery fuse before permanent installation; record the exact cell model and charge-temperature range.
-3. Reconnect the panel and confirm INA219 current is positive in sunlight.
+3. Confirm the Charging binary sensor turns on in sunlight and Charge Complete at 4.2 V.
 4. Mount outdoors per the beam-clearance rules, record the bare-ground baseline, and update the Home Assistant snow-depth calculation.
 5. Add a hardware low-temperature charge cutoff before winter (the cell must not charge below 0 °C).
 6. Weatherproof rear electronics, cable entries, and the battery compartment; verify OTA mode still works through a complete update.
@@ -130,3 +129,4 @@ Photos of the MB7389 build and final outdoor mount still to be added.
 | 2026-07-22 | MB7389 conversion completed and verified: TTL serial confirmed (no RX inversion), serial divider corrected to series resistors, Pololu #2810 switched power, production deep-sleep firmware deployed |
 | 2026-07-23 | Power system rewired: Waveshare (D) retired after light-load auto-off, mode dropout, and charge-event shutdowns; CN3791/CN5305 MPPT board provides always-on 3.3 V ESP32 feed and switched 5 V sensor rail |
 | 2026-07-24 | Documentation restructured to current components only; historical guides and retired configs removed (preserved in git history) |
+| 2026-07-24 | WatangTech board installed and flashed: battery moved to the onboard 18650 holder; MAX17043 and INA219 retired; VBAT/CHRG/DONE monitoring added on reclaimed audio pins G33/G19/G22; I2C bus removed |

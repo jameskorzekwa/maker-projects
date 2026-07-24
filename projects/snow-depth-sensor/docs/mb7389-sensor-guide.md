@@ -166,7 +166,7 @@ sensor:
           send_every: 5
           send_first_at: 5
 
-  # Keep the existing MAX17043 and INA219 entries below this block.
+  # Battery/charge monitoring (VBAT ADC, CHRG/DONE) follows in the full config.
 ```
 
 The legacy name and ID are intentionally preserved so the existing Home Assistant entity, history, and helpers survive.

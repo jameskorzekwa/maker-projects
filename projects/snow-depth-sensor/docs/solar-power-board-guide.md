@@ -11,15 +11,21 @@ designed around.
 
 ```text
 POWER (all grounds are one common net)
-Battery pigtail (from MAX17043 P1) ──> MPPT board PH-2P battery socket
+18650 cell ──> MPPT board onboard holder (PH-2P socket unused)
 MPPT board 3.3 V header ──> ATOM Echo 3.3 V pin  (ALWAYS ON — the ATOM 5 V pin
                                                   is no longer used)
 MPPT board 5 V header ──> Pololu #2810 VIN       (switched MB7389 supply)
 MPPT board GND ──┬──> ATOM Echo GND
                  ├──> Pololu #2810 GND
                  └──> MB7389 pin 7 (GND)
-Solar panel + ──> INA219 VIN+   INA219 VIN− ──> MPPT board solar terminal +
-Solar panel − ──> MPPT board solar terminal −   (or panel USB-C ──> board Type-C)
+Solar panel + ──> MPPT board solar terminal +   (direct; MPPT DIP at 5 V)
+Solar panel − ──> MPPT board solar terminal −
+
+MONITORING HEADER (reclaimed ATOM audio pins; 21 µA divider drain)
+MPPT VBAT ── 100 kΩ ──┬── 100 kΩ ── GND
+                     └──> ATOM G33 (battery voltage ADC, ×2 in firmware)
+MPPT CHRG ── 10 kΩ ──> ATOM G19   (charging, active low)
+MPPT DONE ── 10 kΩ ──> ATOM G22   (charge complete, active low)
 ```
 
 ## Background and procedure
@@ -32,7 +38,7 @@ Solar panel − ──> MPPT board solar terminal −   (or panel USB-C ──> 
 
 1. MPPT SET DIP switch: **5 V position ON, all other switches OFF** (set and confirmed 2026-07-24). One switch only, never two at once. The 5 V set-point matches the panel, so the raw solar-terminal route is used — no USB-C input, no cable splice.
 2. Battery switch: OFF until wiring is complete.
-3. 18650 holder: leave empty — the PH-2P socket is the battery input.
+3. Battery: 18650 in the onboard holder (negative end first, observe polarity); the PH-2P socket is unused.
 4. Never feed the solar input and the USB Type-C charge input at the same time.
 
 ### Rewire procedure
@@ -57,7 +63,7 @@ Solar panel − ──> MPPT board solar terminal −   (or panel USB-C ──> 
 
 ### Notes
 
-The Waveshare is fully retired (usable as a spare USB-C charger board). The MPPT board's CHRG/DONE/VBAT monitoring pins are broken out but unused — the ATOM has no spare GPIOs. The INA219's ~1 mA quiescent now sits on the always-on rail (accepted cost). The hardware low-temperature charge cutoff for winter remains an open item.
+The Waveshare is fully retired (usable as a spare USB-C charger board). The CHRG/DONE/VBAT monitoring header is in service on reclaimed ATOM audio pins (see the monitoring section of the wiring diagram). The hardware low-temperature charge cutoff for winter remains an open item.
 
 ## Related documents
 
