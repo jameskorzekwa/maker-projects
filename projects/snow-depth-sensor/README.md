@@ -21,7 +21,12 @@ The project is still being commissioned. This document separates confirmed curre
 | Calibration | The 37-inch bare-ground baseline is provisional; the final mount must be recalibrated away from nearby false-echo surfaces |
 | Future sensor | MB7389-100 conversion COMPLETE (2026-07-22); A02-style sensor retired |
 
-The build documentation lives in this repository: the [MB7389 conversion & power guide](docs/mb7389-conversion-guide.md) (canonical, includes the 2026-07-23 power rewire) the [Waveshare-era wiring guide](docs/waveshare-wiring-guide.md) (historical, 2026-07-16 through 2026-07-23), and the [original July 2026 solar wiring plan](docs/original-solar-wiring-plan.md) (historical). These were originally drafted as Google Docs; as of 2026-07-23 the repository copies are canonical and the Google Docs carry deprecation notes.
+The build documentation lives in this repository (originally drafted as Google Docs; the repository copies are canonical as of 2026-07-23 and the Google Docs carry deprecation notes):
+
+- **[Solar Power Board Guide](docs/solar-power-board-guide.md)** — CN3791/CN5305 MPPT board setup, complete power wiring, rewire procedure, and burn-in acceptance test
+- **[MB7389 Conversion Guide](docs/mb7389-conversion-guide.md)** — sensor wiring, serial divider, capacitors, ESPHome configuration, mounting constraints, and calibration
+- [Waveshare-era wiring guide](docs/waveshare-wiring-guide.md) — historical (2026-07-16 through 2026-07-23)
+- [Original July 2026 solar wiring plan](docs/original-solar-wiring-plan.md) — historical
 
 ## System Overview
 
