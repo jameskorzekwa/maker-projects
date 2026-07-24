@@ -1,4 +1,5 @@
-# Deployed 2026-07-24: MB7389 + WatangTech MPPT power + VBAT/CHRG/DONE monitoring.
+# Deployed 2026-07-24: MB7389 + WatangTech MPPT power + VBAT/CHRG monitoring
+# + latched charge-complete detection.
 esphome:
   name: snow-depth-sensor
   friendly_name: snow-depth-sensor
@@ -13,6 +14,8 @@ esphome:
       # Power the MB7389 through the Pololu #2810 and let it settle; it
       # free-runs (~6 Hz) for the rest of the wake window.
       - output.turn_on: maxbotix_power_enable
+      # Initialize the charge-complete latch from the instantaneous DONE state.
+      - lambda: id(charge_complete_latch).publish_state(id(done_raw).state);
       - delay: 3s
       - wait_until:
           condition:
@@ -113,15 +116,30 @@ binary_sensor:
         pullup: true
       inverted: true
 
+  # Raw DONE signal (blips briefly during top-off cycles; not exposed).
   - platform: gpio
-    name: "Snow Sensor Charge Complete"
-    icon: "mdi:battery-check"
+    id: done_raw
+    internal: true
     pin:
       number: GPIO22
       mode:
         input: true
         pullup: true
       inverted: true
+    on_press:
+      then:
+        - binary_sensor.template.publish:
+            id: charge_complete_latch
+            state: ON
+
+  # Latched per wake window: ON if DONE asserted at any point since boot.
+  # A full battery's charge-termination dance guarantees at least one DONE
+  # blip per window; a genuinely charging battery produces none. The latch
+  # state is held by HA through deep sleep = per-wake full-charge verdict.
+  - platform: template
+    id: charge_complete_latch
+    name: "Snow Sensor Charge Complete"
+    icon: "mdi:battery-check"
 
 switch:
   # Persistent device-owned maintenance mode. Turn this on during any 60-second
