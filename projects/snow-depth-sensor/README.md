@@ -17,7 +17,7 @@ The system is bench-verified and awaiting final outdoor mounting and bare-ground
 | Distance sensor | MaxBotix MB7389-100 installed and verified 2026-07-22 (true-TTL serial confirmed; 10k + 2×10k-series divider to GPIO32) |
 | Sensor power | Pololu #2810 load switch on GPIO26; sensor fully off during deep sleep |
 | Power manager | CN3791/CN5305 MPPT solar manager board: always-on 3.3 V to the ATOM, 5 V rail for the sensor (rewire documented 2026-07-23) |
-| Battery | 18650 cell in the MPPT board's onboard holder; labeled 4,000 mAh (unverified — discharge run will measure true capacity); pouch cell and MAX17043 pass-through retired 2026-07-24 |
+| Battery | 18650 cell in the MPPT board's onboard holder. **Labeled 4,000 mAh; measured ~350–450 mAh** in the 2026-07-24/26 discharge run (30.0 h at ~12 mA average) — counterfeit-grade; replacement with a genuine cell recommended before winter |
 | Battery telemetry | Board VBAT header → 100k/100k divider → GPIO33 ADC: voltage plus discharge-curve percentage (calibration run pending) |
 | Charge telemetry | CHRG → GPIO19 (charging binary sensor); DONE → GPIO22 feeding a per-wake **latch** ("Charge Complete" = DONE asserted at any point in the wake window — defeats the load-sag sampling problem) |
 | Solar panel | NEWCONNY YXC-001, two 5 V/8 W panels; wired directly to the solar terminals (MPPT DIP at the 5 V setting) |
@@ -130,3 +130,4 @@ Photos of the MB7389 build and final outdoor mount still to be added.
 | 2026-07-23 | Power system rewired: Waveshare (D) retired after light-load auto-off, mode dropout, and charge-event shutdowns; CN3791/CN5305 MPPT board provides always-on 3.3 V ESP32 feed and switched 5 V sensor rail |
 | 2026-07-24 | Documentation restructured to current components only; historical guides and retired configs removed (preserved in git history) |
 | 2026-07-24 | WatangTech board installed and flashed: battery moved to the onboard 18650 holder; MAX17043 and INA219 retired; VBAT/CHRG/DONE monitoring added on reclaimed audio pins G33/G19/G22; I2C bus removed |
+| 2026-07-26 | Drain calibration complete: 30.0 h full-to-cutoff, continuous cycling (WatangTech burn-in PASS — ~113 sleep/wake cycles, no dropouts); measured discharge curve flashed; 18650 measured ~10% of its 4,000 mAh label |
