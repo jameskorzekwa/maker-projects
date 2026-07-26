@@ -8,6 +8,7 @@ Build notes, wiring references, parts lists, and photos for maker projects.
 | --- | --- |
 | [ESP32-C6 Bluetooth Proxy](projects/esp32-c6-bluetooth-proxy/) | A plug-in ESPHome Bluetooth proxy built around a Seeed Studio XIAO ESP32-C6. |
 | [ESP32-C3 Lux Sensor](projects/esp32-c3-lux-sensor/) | An 18 V-powered lux sensor built with an ESP32-C3 and BH1750. |
+| [Rotary Phone Audio Guestbook](projects/rotary-phone/) | An ESP32-C5 wedding guestbook that plays instructions through a telephone handset and records messages to microSD. |
 | [Solar Snow Depth Sensor](projects/snow-depth-sensor/) | An ATOM Echo and controlled-UART ultrasonic sensor measuring snow depth on solar/battery power, with deep-sleep management and full power telemetry. |
 
 ## Adding a Project
