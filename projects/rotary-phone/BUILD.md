@@ -134,12 +134,12 @@ Record `OL` for an open circuit or the measured resistance for a closed circuit:
 
 | Pair | Handset down | Handset lifted |
 | --- | --- | --- |
-| `S1-S2` | `TBD` | `TBD` |
-| `S1-S3` | `TBD` | `TBD` |
-| `S1-S4` | `TBD` | `TBD` |
-| `S2-S3` | `TBD` | `TBD` |
-| `S2-S4` | `TBD` | `TBD` |
-| `S3-S4` | `TBD` | `TBD` |
+| `S1-S2` | `OL` | 0.8 ohm |
+| `S1-S3` | `OL` | `OL` |
+| `S1-S4` | `OL` | `OL` |
+| `S2-S3` | `OL` | `OL` |
+| `S2-S4` | 0.8 ohm | `OL` |
+| `S3-S4` | `OL` | 0.5 ohm |
 
 Select one pair that measures below 2 ohms in one cradle position and `OL` in
 the other. Move the cradle repeatedly while watching the meter to confirm that
@@ -150,13 +150,19 @@ the pair changes reliably. Either electrical orientation is usable:
 - A pair closed with the handset lifted makes the GPIO low when lifted; invert
   the state in firmware.
 
+Use `S2-S4` for this build. It is closed with the handset down and open with the
+handset lifted, producing the preferred low-idle/high-off-hook signal with the
+pull-up circuit below. The switch is a changeover network: when lifted, `S1-S2`
+and `S3-S4` close. This is harmless when unused `S1` and `S3` are individually
+insulated and left electrically floating.
+
 After selecting the pair:
 
 1. Keep the four-pin harness permanently disconnected from the original main
    board.
-2. Connect one selected switch conductor to the ESP32 hook GPIO node.
-3. Connect the other selected conductor to ESP32 ground.
-4. Individually insulate the two unused switch conductors.
+2. Connect `S2` to the ESP32 hook GPIO node.
+3. Connect `S4` to ESP32 ground.
+4. Individually insulate unused `S1` and `S3`.
 5. Verify that none of the four switch conductors has continuity to the line
    jack, handset conductors, original PCB, or metal enclosure.
 
@@ -170,7 +176,7 @@ The eventual GPIO circuit is:
                      |
                      +--- 100 nF --- GND
                      |
-                     +--- hook switch --- GND
+                     +--- S2 switch S4 --- GND
 ```
 
 Choose the final GPIO only after the ESP32 pinout is verified. Avoid ESP32-C5
@@ -399,8 +405,8 @@ only with a measured or documented value.
 | Microphone positive contact | Yellow `M+` |
 | Microphone negative contact | Green `M-` |
 | Hook-switch assembly | Four-wire mechanical assembly confirmed; harness disconnects from main PCB |
-| Hook-switch contacts | `TBD after S1-S4 continuity matrix` |
-| Switch closed when | `TBD: lifted/replaced` |
+| Hook-switch contacts | `S2` to GPIO node, `S4` to ground; insulate `S1` and `S3` |
+| Switch closed when | Handset down: 0.8 ohm; lifted: `OL` |
 | ESP32 SDA GPIO | `TBD` |
 | ESP32 SCL GPIO | `TBD` |
 | ESP32 I2S CLK GPIO | `TBD` |

@@ -108,9 +108,10 @@ still require physical measurements.
 Photos also confirm a mechanically actuated hook-switch assembly on a small
 PCB. A dedicated four-wire harness connects it to the original main board. The
 harness will be unplugged from the telephone electronics, continuity-mapped in
-both cradle positions, and one isolated switching pair will drive an ESP32 GPIO.
-The exact pair remains unassigned until its six possible combinations are
-measured.
+both cradle positions, and one switching pair will drive an ESP32 GPIO. The
+measured matrix selects `S2-S4`: it closes at approximately 0.8 ohm with the
+handset down and opens when the handset is lifted. With a pull-up, the GPIO is
+therefore low while idle and high when recording should begin.
 
 ### Handset and Codec Research
 
