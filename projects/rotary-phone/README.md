@@ -99,9 +99,12 @@ these checks before designing the final wiring:
 7. Test both transducers through the audio codec at low gain and volume.
 8. Replace incompatible transducers inside the handset while retaining the original four-wire coiled cord.
 
-The likely handset arrangement is two microphone wires and two earpiece wires.
-If the cradle mechanism does not offer usable isolated contacts, install a
-small microswitch under the cradle.
+Photos of the received phone confirm four separately terminated handset wires.
+The original PCB silkscreen identifies red as receiver positive (`R+`), black
+as receiver negative (`R-`), yellow as microphone positive (`M+`), and green as
+microphone negative (`M-`). Earpiece resistance and microphone construction
+still require physical measurements. If the cradle mechanism does not offer
+usable isolated contacts, install a small microswitch under the cradle.
 
 ### Handset and Codec Research
 
@@ -109,8 +112,18 @@ No manufacturer service schematic or model-specific handset pinout was found
 for Dyna-Living model `Dyna-JJ0TOP12254-FBA` (Amazon ASIN `B08GR4KCPF`). The
 listing confirms that it is a modern, line-powered telephone with a detachable
 handset cord. A conventional 4P4C handset cord normally assigns the center two
-contacts to the receiver and the outer two contacts to the transmitter, but
-the actual pairs and polarity must be confirmed with continuity measurements.
+contacts to the receiver and the outer two contacts to the transmitter. The
+received phone's PCB labels confirm the following wire functions and polarity:
+
+| Wire | Original PCB label | Function |
+| --- | --- | --- |
+| Red | `R+` | Earpiece positive |
+| Black | `R-` | Earpiece negative |
+| Yellow | `M+` | Microphone positive |
+| Green | `M-` | Microphone negative |
+
+Continuity to the handset capsules must still be checked before disconnecting
+the original PCB.
 
 The purchased BFab board has two onboard analog MEMS microphones and no
 external microphone connector; its 3.5 mm jack is output-only. In the matching

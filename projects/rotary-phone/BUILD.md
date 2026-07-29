@@ -88,7 +88,15 @@ orientation with a photograph; reversing the viewing direction reverses the
 numbers.
 
 A conventional 4P4C handset normally uses the center pair for the earpiece and
-the outer pair for the microphone. Treat this only as a clue.
+the outer pair for the microphone. Photos of the received phone resolve the
+wire functions at the original PCB:
+
+| Wire | Original PCB label | Function |
+| --- | --- | --- |
+| Red | `R+` | Earpiece positive |
+| Black | `R-` | Earpiece negative |
+| Yellow | `M+` | Microphone positive |
+| Green | `M-` | Microphone negative |
 
 1. Open both ends of the handset.
 2. Use continuity mode to map each capsule terminal to `H1` through `H4`.
@@ -97,6 +105,8 @@ the outer pair for the microphone. Treat this only as a clue.
 5. Identify the microphone part number and construction.
 6. If it is a two-wire electret capsule, identify its positive and negative
    terminals from markings or the original PCB, not wire color alone.
+7. Confirm continuity from red/black to the earpiece and yellow/green to the
+   microphone before disconnecting any wire from the original PCB.
 
 Expected result: two isolated earpiece wires and two isolated microphone wires.
 Stop if the handset has fewer than four active conductors, shared grounds,
@@ -175,6 +185,12 @@ Do not alter the board unless both stock recording and playback work.
 Proceed only if the handset microphone is confirmed to be a two-wire electret
 capsule and the delivered BFab input matches the reference schematic.
 
+For this phone, yellow is microphone positive (`M+`) and green is microphone
+negative (`M-`). Desolder these wires from the original telephone PCB or cut
+them with enough labeled length to reverse the modification. Verify that both
+wires are isolated from the original PCB before attaching them to the BFab
+board.
+
 The reference path is:
 
 ```text
@@ -198,10 +214,9 @@ BFab GND ------------------------- microphone negative
    driving the external microphone node.
 4. Confirm that the selected input pad still connects through `L3` and `C14`
    to WM8960 `RINPUT1`.
-5. Solder a 2.2 kohm resistor from `MICBIAS` to the handset microphone positive
-   wire.
-6. Connect that positive wire to the isolated `MIC1 DAT` input path.
-7. Connect the handset microphone negative wire to BFab ground.
+5. Solder a 2.2 kohm resistor from `MICBIAS` to the yellow `M+` wire.
+6. Connect yellow `M+` to the isolated `MIC1 DAT` input path.
+7. Connect green `M-` to BFab ground.
 8. Add strain relief so handset movement cannot pull an SMD pad from the board.
 9. Inspect under magnification and clean flux residue.
 
@@ -232,6 +247,12 @@ Choose the output only after measuring earpiece resistance:
   and inspect the handset before connecting it.
 
 Never connect `LN` or `RN` to ground. They are driven BTL outputs.
+
+For this phone, red is earpiece positive (`R+`) and black is earpiece negative
+(`R-`). Isolate both wires from the original telephone PCB before connecting
+them. For headphone output, connect red to tip/left and black to sleeve/ground.
+For a BTL speaker channel, connect red to `LP` and black to `LN`; neither wire
+may connect to ground in that configuration.
 
 1. Set firmware output volume to its minimum.
 2. Play a quiet test tone or spoken prompt.
@@ -331,13 +352,13 @@ only with a measured or documented value.
 | ESP32 board revision | `TBD` |
 | BFab board revision | `TBD` |
 | BFab matches Waveshare schematic | `TBD: yes/no/differences` |
-| Handset connector orientation photo | `TBD` |
-| Earpiece contacts | `TBD` |
+| Handset connector orientation photo | Received; `H1` through `H4` not yet assigned |
+| Earpiece contacts | Red `R+`, black `R-` |
 | Earpiece resistance | `TBD ohms` |
-| Microphone contacts | `TBD` |
+| Microphone contacts | Yellow `M+`, green `M-` |
 | Microphone type and marking | `TBD` |
-| Microphone positive contact | `TBD` |
-| Microphone negative contact | `TBD` |
+| Microphone positive contact | Yellow `M+` |
+| Microphone negative contact | Green `M-` |
 | Hook-switch contacts | `TBD` |
 | Switch closed when | `TBD: lifted/replaced` |
 | ESP32 SDA GPIO | `TBD` |
