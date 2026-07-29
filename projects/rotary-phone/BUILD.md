@@ -114,18 +114,54 @@ active electronics, or an unidentified capsule.
 
 ## 4. Map the Hook Switch
 
-Perform these tests with the original phone unpowered and disconnected:
+Photos of the received phone confirm a mechanically actuated, multi-contact
+hook switch mounted on a small PCB. Four white wires run from this assembly to
+a dedicated four-pin plug on the original main board. Reuse the mechanical
+assembly, but disconnect its plug from the telephone electronics before testing
+or attaching it to the ESP32.
 
-1. Identify the switch terminals actuated by the handset cradle.
-2. Measure every terminal pair with the handset lifted and replaced.
-3. Select a pair that is open in one state and below 2 ohms in the other.
-4. Disconnect that pair from the original telephone PCB.
-5. Verify that both selected terminals are isolated from every line-jack and
-   handset contact.
-6. Record whether the pair closes when the handset is lifted or replaced.
+Perform these tests with the telephone line and all power disconnected:
 
-If no isolated pair is available, install a small microswitch under the cradle
-instead of sharing the original telephone circuit.
+1. Unplug the four-wire hook-switch connector from the original main board.
+2. Mark one edge of the cable plug with tape or a permanent marker.
+3. Photograph the marked plug in a fixed orientation and label its contacts
+   `S1` through `S4` from left to right.
+4. Set the multimeter to continuity or its lowest resistance range.
+5. Measure all six contact pairs with the handset resting on the cradle.
+6. Repeat all six measurements with the handset lifted.
+
+Record `OL` for an open circuit or the measured resistance for a closed circuit:
+
+| Pair | Handset down | Handset lifted |
+| --- | --- | --- |
+| `S1-S2` | `TBD` | `TBD` |
+| `S1-S3` | `TBD` | `TBD` |
+| `S1-S4` | `TBD` | `TBD` |
+| `S2-S3` | `TBD` | `TBD` |
+| `S2-S4` | `TBD` | `TBD` |
+| `S3-S4` | `TBD` | `TBD` |
+
+Select one pair that measures below 2 ohms in one cradle position and `OL` in
+the other. Move the cradle repeatedly while watching the meter to confirm that
+the pair changes reliably. Either electrical orientation is usable:
+
+- A pair closed with the handset down makes the GPIO low when idle and high
+  when lifted.
+- A pair closed with the handset lifted makes the GPIO low when lifted; invert
+  the state in firmware.
+
+After selecting the pair:
+
+1. Keep the four-pin harness permanently disconnected from the original main
+   board.
+2. Connect one selected switch conductor to the ESP32 hook GPIO node.
+3. Connect the other selected conductor to ESP32 ground.
+4. Individually insulate the two unused switch conductors.
+5. Verify that none of the four switch conductors has continuity to the line
+   jack, handset conductors, original PCB, or metal enclosure.
+
+If no pair switches cleanly and repeatably, install a separate microswitch under
+the cradle instead of sharing or probing the original powered circuitry.
 
 The eventual GPIO circuit is:
 
@@ -138,7 +174,10 @@ The eventual GPIO circuit is:
 ```
 
 Choose the final GPIO only after the ESP32 pinout is verified. Avoid ESP32-C5
-boot-strapping GPIO2 and GPIO7.
+boot-strapping GPIO2 and GPIO7. Debounce the selected signal in firmware for
+100 to 200 ms. A stable transition to the lifted state starts prompt playback;
+a stable transition to the replaced state stops recording and finalizes the WAV
+file.
 
 ## 5. Verify the Audio Board Before Modifying It
 
@@ -359,7 +398,8 @@ only with a measured or documented value.
 | Microphone type and marking | `TBD` |
 | Microphone positive contact | Yellow `M+` |
 | Microphone negative contact | Green `M-` |
-| Hook-switch contacts | `TBD` |
+| Hook-switch assembly | Four-wire mechanical assembly confirmed; harness disconnects from main PCB |
+| Hook-switch contacts | `TBD after S1-S4 continuity matrix` |
 | Switch closed when | `TBD: lifted/replaced` |
 | ESP32 SDA GPIO | `TBD` |
 | ESP32 SCL GPIO | `TBD` |

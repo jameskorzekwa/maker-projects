@@ -103,8 +103,14 @@ Photos of the received phone confirm four separately terminated handset wires.
 The original PCB silkscreen identifies red as receiver positive (`R+`), black
 as receiver negative (`R-`), yellow as microphone positive (`M+`), and green as
 microphone negative (`M-`). Earpiece resistance and microphone construction
-still require physical measurements. If the cradle mechanism does not offer
-usable isolated contacts, install a small microswitch under the cradle.
+still require physical measurements.
+
+Photos also confirm a mechanically actuated hook-switch assembly on a small
+PCB. A dedicated four-wire harness connects it to the original main board. The
+harness will be unplugged from the telephone electronics, continuity-mapped in
+both cradle positions, and one isolated switching pair will drive an ESP32 GPIO.
+The exact pair remains unassigned until its six possible combinations are
+measured.
 
 ### Handset and Codec Research
 
@@ -178,7 +184,7 @@ pulse support can be added later without affecting the core guestbook workflow.
 
 ## Phase 2: Build a Bench Prototype
 
-Assemble the ESP32-C5, codec, microSD breakout, hook-switch substitute, and a
+Assemble the ESP32-C5, codec, microSD breakout, mapped hook switch, and a
 test microphone and speaker outside the phone.
 
 Prove the following in order:
