@@ -5,22 +5,26 @@ guest lifts the handset, the phone plays prerecorded instructions and a beep.
 It then records the guest's message until the handset is replaced. Every
 message is saved to microSD, with optional background upload to cloud storage.
 
-Follow [BUILD.md](BUILD.md) when the components arrive. It provides the
-measurement worksheet, safe assembly order, wiring checkpoints, bring-up tests,
-and final installation procedure. Do not skip its stop points: the phone and
-ESP32 board do not have reliable published schematics, so their physical wiring
-must be verified before final GPIO assignments or irreversible modifications.
+Follow the plain-language [step-by-step build guide](BUILD.md) one checkpoint at
+a time. Component-level explanations, measurements, and the complete test plan
+are kept separately in [TECHNICAL.md](TECHNICAL.md). Do not skip a stop point:
+the ESP32 board pin labels and original handset parts must be verified before
+final wiring or irreversible modifications.
 
 ## Project Status
 
-Planning. The phone's handset transducers and hook-switch wiring must be
-characterized before the final schematic and GPIO assignment are created.
+Hardware characterization and bench bring-up. The hook switch and handset wire
+colors are known. The handset earpiece resistance, microphone type, and exposed
+ESP32 pins still need to be recorded before the final GPIO table is created.
 
 ## Selected Hardware
 
 - [Dyna-Living vintage rotary-style telephone](https://a.co/d/09yagHqx)
 - [ESP32-C5 Mini development board](https://www.aliexpress.us/item/3256812460666139.html)
-- [BFab WM8960 Audio HAT](https://www.amazon.com/dp/B098R7TTM4)
+- [Waveshare WM8960 Audio HAT](https://www.amazon.com/dp/B098R7TTM4),
+  sold through the BFab listing
+- [Adafruit MicroSD Card Breakout Board+ product 254](https://www.adafruit.com/product/254),
+  Amazon ASIN `B00NAY2NAI`
 
 The phone is a modern, line-powered novelty telephone rather than a passive
 vintage telephone. Its listing says the handset and telephone cords plug into
@@ -67,11 +71,13 @@ sequence. It also supports microSD through the SD SPI host driver.
 
 ## Bill of Materials
 
+<!-- markdownlint-disable MD013 -->
+
 | Item | Purpose | Notes |
 | --- | --- | --- |
 | ESP32-C5 Mini board | Main controller | Buy one spare |
-| BFab WM8960 Audio HAT | Microphone ADC and earpiece DAC/amplifier | Purchased; appears to follow the documented Waveshare Audio HAT reference design |
-| 3.3 V microSD SPI breakout | Local storage interface | Avoid undocumented 5 V level-shifter modules |
+| Waveshare WM8960 Audio HAT | Microphone ADC and earpiece DAC/amplifier | Delivered Waveshare-branded board sold through the BFab listing |
+| Adafruit MicroSD Card Breakout Board+ product 254 | Local storage interface | Use its `5V`, `GND`, `CLK`, `DO`, `DI`, and `CS` connections |
 | 16 GB or 32 GB high-endurance microSD card | Message storage | Buy and test one spare |
 | 4P4C/RJ9 breakout or handset cable | Handset connection | Final connector depends on the phone |
 | Certified 5 V, 2 A USB supply | Power | Keep mains voltage outside the phone |
@@ -80,10 +86,12 @@ sequence. It also supports microSD through the SD SPI host driver.
 | Optional electret microphone and 8/32 ohm earpiece | Replacement transducers | Only needed if the originals are unsuitable |
 | Optional concealed RGB LED | Status indication | Ready, recording, upload, and error states |
 
-The BFab listing, layout, components, and specifications match the
+<!-- markdownlint-enable MD013 -->
+
+The delivered board is Waveshare-branded and visually matches the
 [Waveshare WM8960 Audio HAT](https://www.waveshare.com/wiki/WM8960_Audio_HAT)
-reference design. The delivered PCB must still be compared with the published
-schematic before modifying it because clone revisions can differ.
+reference design. Complete its stock record and playback test before modifying
+it.
 
 ## Phase 1: Characterize the Phone
 
@@ -95,9 +103,11 @@ these checks before designing the final wiring:
 3. Disconnect the hook switch completely from the telephone-line circuitry.
 4. Identify the handset microphone pair and earpiece pair.
 5. Measure the earpiece resistance.
-6. Determine whether the microphone is an electret capsule and establish its polarity.
+6. Determine whether the microphone is an electret capsule and establish its
+   polarity.
 7. Test both transducers through the audio codec at low gain and volume.
-8. Replace incompatible transducers inside the handset while retaining the original four-wire coiled cord.
+8. Replace incompatible transducers inside the handset while retaining the
+   original four-wire coiled cord.
 
 Photos of the received phone confirm four separately terminated handset wires.
 The original PCB silkscreen identifies red as receiver positive (`R+`), black
@@ -132,7 +142,7 @@ received phone's PCB labels confirm the following wire functions and polarity:
 Continuity to the handset capsules must still be checked before disconnecting
 the original PCB.
 
-The purchased BFab board has two onboard analog MEMS microphones and no
+The purchased Waveshare board has two onboard analog MEMS microphones and no
 external microphone connector; its 3.5 mm jack is output-only. In the matching
 Waveshare reference schematic:
 
@@ -160,8 +170,8 @@ Board GND ----------------------- handset microphone -
 Remove the `MIC1` package or isolate its `DAT` output before attaching the
 handset microphone. Reuse the board's existing `L3`/`C14` signal path into the
 codec. Enable `MICBIAS` and tune the WM8960 input gain in firmware. The exact
-solder point must be selected after comparing both sides of the delivered BFab
-PCB with the reference schematic.
+solder point must be selected after comparing both sides of the delivered
+Waveshare PCB with the reference schematic.
 
 If inspection shows a carbon transmitter rather than an electret capsule, do
 not connect it using this circuit. A carbon transmitter requires a different
@@ -177,8 +187,8 @@ Before applying power:
 4. Establish electret microphone polarity.
 5. Isolate the handset jack from the original telephone PCB before connecting
    it to the WM8960 board.
-6. Photograph both sides of the delivered BFab board and confirm that its input
-   circuit matches the Waveshare schematic.
+6. Photograph both sides of the delivered Waveshare board and confirm that its
+   input circuit matches the Waveshare schematic.
 
 Leave the rotary dial disconnected and decorative in the first version. Dial
 pulse support can be added later without affecting the core guestbook workflow.
@@ -217,6 +227,8 @@ or networking frameworks that obscure file handling.
 
 ### State Machine
 
+<!-- markdownlint-disable MD013 -->
+
 | State | Behavior |
 | --- | --- |
 | `BOOT` | Initialize hardware, mount microSD, recover interrupted files, and run self-tests |
@@ -227,6 +239,8 @@ or networking frameworks that obscure file handling.
 | `FINALIZE` | Update the WAV header, flush, close, and rename the file |
 | `UPLOAD` | Upload completed files while idle and Wi-Fi is available |
 | `ERROR` | Play an unavailable message and indicate a fatal recording error |
+
+<!-- markdownlint-enable MD013 -->
 
 ### Runtime Behavior
 
@@ -351,7 +365,8 @@ Acceptance criteria:
 - Previously completed messages survive an arbitrary power interruption.
 - The phone accepts messages indefinitely without Wi-Fi.
 - Recording always takes priority over cloud upload.
-- The device returns to ready state without manual intervention after recoverable errors.
+- The device returns to ready state without manual intervention after
+  recoverable errors.
 
 ## Event-Day Procedure
 
@@ -368,7 +383,8 @@ Acceptance criteria:
 
 - Whether internal handset transducers may be replaced if necessary.
 - Whether cloud backup is required and, if so, whether to use R2 or S3.
-- Whether the device will use venue Wi-Fi, a dedicated hotspot, or local storage only.
+- Whether the device will use venue Wi-Fi, a dedicated hotspot, or local
+  storage only.
 - Whether to add a small external status panel or keep indicators concealed.
 - The final GPIO allocation after verifying the exact ESP32-C5 Mini board.
 

@@ -1,421 +1,250 @@
-# Build Instructions
+# Step-by-Step Build Guide
 
-These instructions take the project from unopened components through a tested
-bench prototype and permanent installation. Complete the stages in order. Do
-not make permanent modifications until the stock audio board has passed its
-record and playback tests.
+This is the guide to follow while building the phone. Complete one checkpoint,
+verify the result, and stop before starting the next checkpoint. The exact GPIO
+connections will be added after the ESP32 board labels are photographed and
+verified.
 
-The repository does not contain firmware yet. Hardware assembly can proceed
-through the documented checkpoints, but the final GPIO table and flashing
-commands must be added after the received ESP32-C5 board is photographed and
-its exposed pins are verified.
+For circuit details and the complete test plan, see
+[TECHNICAL.md](TECHNICAL.md).
 
-## Safety
+## Important Safety Rule
 
-- Unplug the telephone line cord before opening the phone.
-- Never reconnect the modified phone to a telephone wall socket. Ringing
-  voltage can exceed 70 VAC.
-- Remove or physically block the telephone-line jack in the final assembly.
-- Only route isolated, regulated 5 V power into the completed phone.
-- Disconnect all power before continuity or resistance measurements.
-- Do not connect an unidentified handset pair to the audio board.
-- Do not connect either negative BTL speaker output to ground.
-- Stop if a board becomes hot, draws unexpected current, smells, or produces
-  smoke.
+Never connect this phone to a telephone wall jack again. Telephone lines can
+carry dangerous ringing voltage. The finished phone will use only a regulated
+5 V USB power supply.
 
-## Tools and Supplies
+Disconnect every USB cable and power supply before measuring resistance,
+checking continuity, cutting wires, or soldering.
 
-- Digital multimeter with continuity, resistance, and DC-voltage modes
-- Temperature-controlled soldering iron with a fine tip
-- Fine solder, flux, solder wick, tweezers, and magnification
-- Small screwdrivers, wire cutters, and wire strippers
-- Heat-shrink tubing and insulated stranded hookup wire
-- 2.2 kohm resistor for the handset electret microphone bias
-- 10 kohm resistor and 100 nF capacitor for the hook-switch input
-- 3.5 mm TRS plug or sacrificial stereo audio cable for the handset earpiece
-- Perfboard, connectors, standoffs, and strain relief for final assembly
-- Computer with a USB data cable and microSD reader
-- Optional current-limited bench supply for initial testing
+## Parts Used
 
-Do not use loose jumper wires in the final enclosure.
+Use these exact names when following the instructions:
 
-## 1. Inventory and Photograph Everything
-
-Confirm that these parts are present:
-
-- Dyna-Living telephone, model `Dyna-JJ0TOP12254-FBA`
-- ESP32-C5 Mini marked `ESP32-C5_MINI_V1.0`
-- BFab WM8960 Audio HAT, Amazon ASIN `B098R7TTM4`
-- Adafruit-compatible 3.3 V SPI microSD breakout
-- High-endurance microSD card
-- Regulated 5 V power supply
-- Included BFab test speaker
-
-Before connecting anything, take readable photographs of:
-
-1. Both sides of the ESP32-C5 board.
-2. Both sides of the BFab board, including every silkscreen label.
-3. The unopened phone base and all external connectors.
-4. The phone base immediately after opening it, before disconnecting wires.
-5. Both handset capsules, their markings, terminals, and wire colors.
-
-Record board revisions and connector labels in the worksheet at the end of
-this file. Compare the BFab board with the
-[Waveshare reference schematic](https://files.waveshare.com/upload/f/fa/WM8960_Audio_HAT_Schematic.pdf).
-Stop if the microphone input around `MIC1`, `L3`, and `C14` does not match the
-reference design.
-
-## 2. Make the Original Phone Safe
-
-1. Unplug the line cord and handset cord.
-2. Open the phone base without pulling or cutting wires.
-3. Photograph the original PCB and every connector.
-4. Label the handset jack, line jack, hook switch, and rotary-dial wires.
-5. Disconnect the line jack from the circuitry or remove it completely.
-6. Verify with continuity mode that neither line-jack contact connects to the
-   handset jack, hook switch, new electronics, or enclosure metal.
-7. Leave the rotary dial disconnected for the first version.
-
-Do not remove the original PCB until the handset jack and hook-switch wiring
-have been traced. It may be useful as a mechanical mounting reference even
-though its telephone circuit will not be powered.
-
-## 3. Map the Handset
-
-Number the four handset contacts `H1` through `H4` from left to right while
-looking directly into the base jack with its latch opening down. Record this
-orientation with a photograph; reversing the viewing direction reverses the
-numbers.
-
-A conventional 4P4C handset normally uses the center pair for the earpiece and
-the outer pair for the microphone. Photos of the received phone resolve the
-wire functions at the original PCB:
-
-| Wire | Original PCB label | Function |
-| --- | --- | --- |
-| Red | `R+` | Earpiece positive |
-| Black | `R-` | Earpiece negative |
-| Yellow | `M+` | Microphone positive |
-| Green | `M-` | Microphone negative |
-
-1. Open both ends of the handset.
-2. Use continuity mode to map each capsule terminal to `H1` through `H4`.
-3. Mark the earpiece pair and microphone pair in the worksheet.
-4. Measure the earpiece resistance with the handset disconnected.
-5. Identify the microphone part number and construction.
-6. If it is a two-wire electret capsule, identify its positive and negative
-   terminals from markings or the original PCB, not wire color alone.
-7. Confirm continuity from red/black to the earpiece and yellow/green to the
-   microphone before disconnecting any wire from the original PCB.
-
-Expected result: two isolated earpiece wires and two isolated microphone wires.
-Stop if the handset has fewer than four active conductors, shared grounds,
-active electronics, or an unidentified capsule.
-
-## 4. Map the Hook Switch
-
-Photos of the received phone confirm a mechanically actuated, multi-contact
-hook switch mounted on a small PCB. Four white wires run from this assembly to
-a dedicated four-pin plug on the original main board. Reuse the mechanical
-assembly, but disconnect its plug from the telephone electronics before testing
-or attaching it to the ESP32.
-
-Perform these tests with the telephone line and all power disconnected:
-
-1. Unplug the four-wire hook-switch connector from the original main board.
-2. Mark one edge of the cable plug with tape or a permanent marker.
-3. Photograph the marked plug in a fixed orientation and label its contacts
-   `S1` through `S4` from left to right.
-4. Set the multimeter to continuity or its lowest resistance range.
-5. Measure all six contact pairs with the handset resting on the cradle.
-6. Repeat all six measurements with the handset lifted.
-
-Record `OL` for an open circuit or the measured resistance for a closed circuit:
-
-| Pair | Handset down | Handset lifted |
-| --- | --- | --- |
-| `S1-S2` | `OL` | 0.8 ohm |
-| `S1-S3` | `OL` | `OL` |
-| `S1-S4` | `OL` | `OL` |
-| `S2-S3` | `OL` | `OL` |
-| `S2-S4` | 0.8 ohm | `OL` |
-| `S3-S4` | `OL` | 0.5 ohm |
-
-Select one pair that measures below 2 ohms in one cradle position and `OL` in
-the other. Move the cradle repeatedly while watching the meter to confirm that
-the pair changes reliably. Either electrical orientation is usable:
-
-- A pair closed with the handset down makes the GPIO low when idle and high
-  when lifted.
-- A pair closed with the handset lifted makes the GPIO low when lifted; invert
-  the state in firmware.
-
-Use `S2-S4` for this build. It is closed with the handset down and open with the
-handset lifted, producing the preferred low-idle/high-off-hook signal with the
-pull-up circuit below. The switch is a changeover network: when lifted, `S1-S2`
-and `S3-S4` close. This is harmless when unused `S1` and `S3` are individually
-insulated and left electrically floating.
-
-After selecting the pair:
-
-1. Keep the four-pin harness permanently disconnected from the original main
-   board.
-2. Connect `S2` to the ESP32 hook GPIO node.
-3. Connect `S4` to ESP32 ground.
-4. Individually insulate unused `S1` and `S3`.
-5. Verify that none of the four switch conductors has continuity to the line
-   jack, handset conductors, original PCB, or metal enclosure.
-
-If no pair switches cleanly and repeatably, install a separate microswitch under
-the cradle instead of sharing or probing the original powered circuitry.
-
-The eventual GPIO circuit is:
-
-```text
-3.3 V --- 10 kohm ---+--- ESP32 hook GPIO
-                     |
-                     +--- 100 nF --- GND
-                     |
-                     +--- S2 switch S4 --- GND
-```
-
-Choose the final GPIO only after the ESP32 pinout is verified. Avoid ESP32-C5
-boot-strapping GPIO2 and GPIO7. Debounce the selected signal in firmware for
-100 to 200 ms. A stable transition to the lifted state starts prompt playback;
-a stable transition to the replaced state stops recording and finalizes the WAV
-file.
-
-## 5. Verify the Audio Board Before Modifying It
-
-The BFab board should match the Waveshare WM8960 Audio HAT pin assignment:
-
-| BFab signal | Raspberry Pi physical pin | Direction relative to ESP32 |
-| --- | ---: | --- |
-| 5 V | 2 or 4 | Power input |
-| GND | 6 or another ground pin | Common ground |
-| SDA | 3 | ESP32 to/from codec |
-| SCL | 5 | ESP32 to codec |
-| I2S CLK | 12 | ESP32 to codec |
-| I2S LRCLK | 35 | ESP32 to codec |
-| I2S ADC | 38 | Codec to ESP32 |
-| I2S DAC | 40 | ESP32 to codec |
-
-Confirm these connections against the delivered PCB before use. The BFab board
-is powered from 5 V but uses 3.3 V logic. It contains a 24 MHz oscillator, so
-the Raspberry Pi header does not require an ESP32 MCLK connection.
-
-Check whether SDA and SCL already have pull-up resistors to 3.3 V. If they do
-not, add one 4.7 kohm pull-up from SDA to 3.3 V and another from SCL to 3.3 V.
-Do not allow either I2C signal to be pulled up to 5 V.
-
-Do not create two competing 5 V power paths. During programming, either power
-the system from the ESP32 USB connection and a verified 5 V/VBUS pin, or use a
-single external 5 V rail with a common ground. Determine which method is safe
-from the delivered ESP32 board before connecting the HAT.
-
-Before modifying `MIC1`:
-
-1. Inspect for solder bridges and shipping damage.
-2. Measure resistance between 5 V and ground; stop on a near short.
-3. Connect I2C, I2S, 5 V, and ground using the verified GPIO worksheet.
-4. Connect only the included speaker to the marked speaker connector.
-5. Flash the audio bring-up firmware when it is available.
-6. Record five seconds with an onboard microphone and play it back.
-7. Confirm clean audio, stable power, and normal board temperature.
-
-Do not alter the board unless both stock recording and playback work.
-
-## 6. Adapt the Original Handset Microphone
-
-Proceed only if the handset microphone is confirmed to be a two-wire electret
-capsule and the delivered BFab input matches the reference schematic.
-
-For this phone, yellow is microphone positive (`M+`) and green is microphone
-negative (`M-`). Desolder these wires from the original telephone PCB or cut
-them with enough labeled length to reverse the modification. Verify that both
-wires are isolated from the original PCB before attaching them to the BFab
-board.
-
-The reference path is:
-
-```text
-MIC1 DAT --- L3 --- C14 (10 uF) --- WM8960 RINPUT1
-```
-
-The recommended modification is:
-
-```text
-WM8960 MICBIAS --- 2.2 kohm --- microphone positive
-                                          |
-                                          +--- MIC1 DAT-side signal pad
-
-BFab GND ------------------------- microphone negative
-```
-
-1. Disconnect all power.
-2. Use continuity mode to identify the non-ground side of `C9`/`C10`; this is
-   the reference-design `MICBIAS` node. Verify it against the schematic.
-3. Remove `MIC1` or isolate only its `DAT` output. Do not leave its output
-   driving the external microphone node.
-4. Confirm that the selected input pad still connects through `L3` and `C14`
-   to WM8960 `RINPUT1`.
-5. Solder a 2.2 kohm resistor from `MICBIAS` to the yellow `M+` wire.
-6. Connect yellow `M+` to the isolated `MIC1 DAT` input path.
-7. Connect green `M-` to BFab ground.
-8. Add strain relief so handset movement cannot pull an SMD pad from the board.
-9. Inspect under magnification and clean flux residue.
-
-Before powering, verify:
-
-- 5 V is not shorted to ground.
-- 3.3 V is not shorted to ground.
-- `MICBIAS` is not shorted to ground or 3.3 V.
-- The former `MIC1 DAT` output is isolated from the input node.
-- The microphone pair is isolated from the original telephone PCB.
-
-Enable WM8960 `MICBIAS` in firmware before judging microphone operation. Start
-with low input gain, record speech, then increase gain until normal speech is
-clear without clipping or excessive noise.
-
-Stop if the handset uses a carbon transmitter. It needs a different bias and
-preamplifier circuit; do not connect it to this input.
-
-## 7. Connect the Original Earpiece
-
-Choose the output only after measuring earpiece resistance:
-
-- For approximately 16 ohms or higher, begin with the 3.5 mm headphone output.
-  Connect one channel, such as tip/left, and sleeve/ground.
-- For an approximately 8 ohm dynamic earpiece, use one BTL speaker channel,
-  such as `LP` and `LN`.
-- For an open circuit, very low resistance, or an unidentified capsule, stop
-  and inspect the handset before connecting it.
-
-Never connect `LN` or `RN` to ground. They are driven BTL outputs.
-
-For this phone, red is earpiece positive (`R+`) and black is earpiece negative
-(`R-`). Isolate both wires from the original telephone PCB before connecting
-them. For headphone output, connect red to tip/left and black to sleeve/ground.
-For a BTL speaker channel, connect red to `LP` and black to `LN`; neither wire
-may connect to ground in that configuration.
-
-1. Set firmware output volume to its minimum.
-2. Play a quiet test tone or spoken prompt.
-3. Increase volume gradually while listening for distortion or heating.
-4. Use the headphone output unless testing proves that the speaker output is
-   necessary.
-5. Add strain relief to the earpiece wires.
-
-## 8. Connect microSD
-
-Format the high-endurance card as FAT32 and test it in a computer first. Wire
-the breakout only after selecting safe, exposed ESP32 GPIOs:
-
-| microSD signal | ESP32-C5 connection |
+| Short name | Actual part |
 | --- | --- |
-| 3.3 V | `TBD 3V3 pin after board verification` |
-| GND | `GND` |
-| SCK | `TBD` |
-| MOSI | `TBD` |
-| MISO | `TBD` |
-| CS | `TBD` |
+| ESP32 | ESP32-C5 Mini marked `ESP32-C5_MINI_V1.0` |
+| Audio board | Blue Waveshare WM8960 Audio HAT |
+| microSD board | Adafruit product 254, Amazon ASIN `B00NAY2NAI` |
+| Hook switch | Four-white-wire switch operated by the handset cradle |
+| Earpiece | Speaker inside the end of the handset held to your ear |
+| Microphone | Part inside the end of the handset you speak into |
 
-Use short wires and keep them away from the microphone pair. Confirm the
-breakout's exact power-input requirements before powering it. Some breakouts
-have a `VIN` regulator and level shifting, while others expose only a `3V3`
-input. Never connect 5 V to a pin marked `3V3`.
+## What Is Already Known
 
-After storage firmware exists:
+The original telephone board labels identify the handset wires:
 
-1. Mount the card.
-2. Create and read back a test file.
-3. Record at least five minutes of PCM audio without write errors.
-4. Remove power during a disposable test recording and verify boot-time file
-   recovery.
+| Wire | Purpose |
+| --- | --- |
+| Red | Earpiece positive |
+| Black | Earpiece negative |
+| Yellow | Microphone positive |
+| Green | Microphone negative |
 
-## 9. Complete the Bench Prototype
+The four white hook-switch wires were previously marked `S1`, `S2`, `S3`, and
+`S4`. This build uses `S2` and `S4`:
 
-Keep all parts outside the phone until this sequence passes:
+- Handset resting on cradle: `S2` and `S4` are connected.
+- Handset lifted: `S2` and `S4` are disconnected.
+- `S1` and `S3` will not be connected to anything.
 
-1. Power on and mount microSD.
-2. Simulate off-hook with the isolated hook switch.
-3. Play the instruction prompt through the handset earpiece.
-4. Play the beep.
-5. Record through the original handset microphone.
-6. Replace the handset and verify that the WAV file closes cleanly.
-7. Play the WAV file on a computer.
-8. Repeat ten times without resetting the ESP32.
+## Checkpoint 1: Gather Information Before Soldering
 
-Fix noise, gain, power, and file-handling problems on the bench. Do not install
-an unreliable prototype into the phone.
+Do not connect any boards during this checkpoint.
 
-## 10. Install in the Phone
+1. Unplug the phone from the telephone wall jack.
+2. Remove the telephone line cord from the phone.
+3. Disconnect all USB cables and power supplies.
+4. Place the ESP32 on a well-lit surface.
+5. Take one sharp photograph of the top of the ESP32.
+6. Take one sharp photograph of the bottom of the ESP32.
+7. Make sure every printed pin label is readable in the photographs.
+8. Open the speaking end of the handset.
+9. Take a sharp photograph of the microphone, its two connections, and any
+   writing on it.
+10. Stop rather than prying or breaking the handset if it does not open easily.
+11. Leave the microphone connected for now.
+12. Keep the coiled handset cord plugged into the phone base.
+13. Photograph and label the red and black wire connections before removing
+    them.
+14. Desolder the red and black wires from the original telephone board. Do not
+    cut them.
+15. Keep the two bare wire ends separate from each other and every other part.
+16. Set the multimeter to resistance, shown by the ohm symbol.
+17. Touch one meter probe to red and the other probe to black.
+18. Record the stable resistance reading.
 
-1. Remove or block the telephone-line jack.
-2. Mount the ESP32, BFab board, and microSD breakout on standoffs or a rigid
+**Stop here.** The next checkpoint requires:
+
+- Both ESP32 photographs.
+- The handset microphone photograph.
+- The red-to-black resistance reading.
+
+Do not guess the remaining connections. These three items determine the GPIO
+map and the safe connections for the original handset.
+
+## Checkpoint 2: Prepare the Adafruit microSD Board
+
+Start this checkpoint only after the Checkpoint 1 results have been reviewed.
+
+The Adafruit board has eight connections. The names printed on the board mean:
+
+| Printed label | Plain-language meaning | Eventual connection |
+| --- | --- | --- |
+| `5V` | Power for the board | ESP32 5 V/VBUS pin, to be verified |
+| `3V` | Regulated 3.3 V from the board | Leave unused |
+| `GND` | Electrical ground | ESP32 `GND` |
+| `CLK` | SPI clock | ESP32 pin to be selected |
+| `DO` | Data coming out of the card | ESP32 `MISO` pin to be selected |
+| `DI` | Data going into the card | ESP32 `MOSI` pin to be selected |
+| `CS` | Selects the microSD card | ESP32 pin to be selected |
+| `CD` | Optional card-present switch | Leave unused initially |
+
+The board accepts 5 V power and converts it safely for the microSD card. Do not
+connect either power pin until the ESP32 photographs have been reviewed.
+
+When the final pins are known:
+
+1. Solder the supplied straight header into the Adafruit board.
+2. Keep the black plastic part of the header flat against the board while
+   soldering.
+3. Check closely for solder joining two neighboring pins.
+4. Connect only the six required wires: `5V`, `GND`, `CLK`, `DO`, `DI`, and
+   `CS`.
+5. Keep every wire as short as practical.
+6. Leave `3V` and `CD` disconnected.
+7. Do not insert the microSD card until the wiring has been checked.
+
+**Stop after soldering.** Check continuity for accidental shorts before power
+is connected.
+
+## Checkpoint 3: Prepare the Hook Switch
+
+Build this small circuit only after a safe ESP32 GPIO has been selected:
+
+```text
+ESP32 3.3 V --- 10 kohm resistor ---+--- selected hook-switch GPIO
+                                     |
+                                     +--- one side of 100 nF capacitor
+                                     |
+                                     +--- white wire S2
+
+ESP32 GND ---------------------------+--- other side of capacitor
+                                     |
+                                     +--- white wire S4
+
+White wire S1 --------------------------- insulated and unused
+White wire S3 --------------------------- insulated and unused
+```
+
+1. Keep the four-white-wire plug disconnected from the original telephone
+   board permanently.
+2. Insulate `S1` by itself.
+3. Insulate `S3` by itself.
+4. Connect `S4` to ESP32 ground.
+5. Connect `S2`, the resistor, the capacitor, and the selected GPIO exactly as
+   shown.
+
+The firmware will read `LOW` while the handset is down and `HIGH` when the
+handset is lifted.
+
+## Checkpoint 4: Test the Unmodified Audio Board
+
+Do not remove either silver microphone from the Audio board yet.
+
+Place the Audio board so the words `WM8960 Audio HAT` are upright and its long
+black 40-pin connector is along the bottom:
+
+- The 3.5 mm jack on the left is audio output, not microphone input.
+- The right silver microphone is the one that may later be replaced.
+- The green speaker terminals read `LP`, `LN`, `RN`, `RP` from left to right.
+
+After the ESP32 GPIO map and test firmware are ready:
+
+1. Connect the Audio board to the ESP32 using the completed wiring table.
+2. Connect only the small test speaker supplied with the Audio board.
+3. Use the single 5 V power method recorded in the final wiring table. Never
+   connect separate USB and external 5 V supplies at the same time.
+4. Record five seconds through the Audio board's built-in microphone.
+5. Play the recording through the test speaker.
+6. Confirm the sound is clear and neither board becomes hot.
+
+**Stop if recording or playback fails.** Do not modify a board that has not
+passed this stock test.
+
+## Checkpoint 5: Test microSD Storage
+
+Start with a 16 GB or 32 GB high-endurance microSD card.
+
+1. Format the card as FAT32 on a computer.
+2. Insert it into the unpowered Adafruit board.
+3. Recheck all six wires against the final wiring table.
+4. Apply power and run the storage test firmware.
+5. Create a test file, read it back, and verify its contents.
+6. Record at least five minutes of test audio to the card.
+7. Play the file on a computer and listen for missing or damaged audio.
+
+**Stop if any write error occurs.** The guestbook must not be assembled inside
+the phone until storage is reliable.
+
+## Checkpoint 6: Connect the Original Handset
+
+This checkpoint depends on the microphone photograph and earpiece resistance
+from Checkpoint 1. Do not continue with an unidentified microphone or earpiece.
+
+The right silver microphone on the Audio board is a tiny surface-mounted part.
+Replacing it requires hot air, flux, fine tweezers, and magnification. Have an
+electronics repair technician perform this modification if you do not already
+have surface-mount rework experience.
+
+The final handset connections will be selected after the measurements:
+
+- Yellow and green will connect the handset microphone to the verified right
+  microphone input circuit.
+- Red and black will connect the earpiece either to the 3.5 mm output or to
+  `LP` and `LN`, depending on the measured resistance.
+- `LN` is not ground. Never connect it to ESP32 ground.
+
+Start every audio test at the lowest software volume. Stop immediately if the
+earpiece becomes warm, distorted, or painfully loud.
+
+## Checkpoint 7: Test Everything on the Workbench
+
+Keep every board outside the telephone case. Repeat steps 1 through 5 ten times
+without rebooting the ESP32:
+
+1. Put the handset on the cradle. Nothing should record.
+2. Lift the handset. The instructions should play through its earpiece.
+3. Wait for the beep.
+4. Speak a short test message.
+5. Replace the handset. Recording should stop and save.
+6. Disconnect power after the tenth message is saved.
+7. Remove the microSD card.
+8. Confirm that the card contains ten different recordings.
+9. Play every recording on a computer.
+
+Do not install the electronics until all ten recordings are present and
+playable.
+
+## Checkpoint 8: Install the Electronics
+
+1. Remove or physically block the telephone-line jack.
+2. Mount the ESP32, Audio board, and Adafruit board on standoffs or a rigid
    carrier.
-3. Keep the BFab board close to the handset jack.
-4. Twist the microphone pair and route it away from USB, SPI, Wi-Fi antenna,
-   and switching power wires.
-5. Keep the ESP32 antenna clear of metal and wiring.
-6. Make the microSD card accessible without disturbing soldered connections.
-7. Add strain relief to power and handset wiring.
-8. Insulate every exposed joint with heat-shrink tubing or a rigid cover.
-9. Secure all connectors so vibration cannot loosen them.
-10. Verify that the cradle and rotary mechanism cannot strike any new wiring.
-11. Close the enclosure without pinching cables.
+3. Keep the Audio board close to the handset connector.
+4. Keep the yellow and green microphone wires away from USB and microSD wires.
+5. Keep the ESP32 antenna away from metal and wiring.
+6. Secure every cable so pulling it cannot stress a solder joint.
+7. Insulate every unused wire and exposed joint.
+8. Make sure the cradle mechanism cannot touch any wire.
+9. Keep the microSD card accessible if the case permits it.
+10. Close the case without pinching wires.
 
-Before final power-up, repeat all rail-to-ground resistance checks and confirm
-that the line jack remains electrically isolated.
+Repeat the complete lift, record, and hang-up test after closing the case.
 
-## 11. Final Acceptance Tests
+## Current Next Action
 
-Complete these tests before relying on the phone at the wedding:
-
-1. Perform 100 lift, prompt, beep, record, and hang-up cycles.
-2. Confirm 100 unique, playable files.
-3. Test rapid cradle movement and switch bounce.
-4. Hang up during the prompt and during the beep.
-5. Record one full five-minute message.
-6. Test a missing, full, and read-only card.
-7. Remove power during a disposable recording and verify recovery.
-8. Run an eight-hour powered soak test.
-9. Test near loud music and conversation.
-10. Confirm that microphone gain does not clip normal or loud speech.
-11. Verify that Wi-Fi failure never prevents local recording.
-
-Do not deploy the phone until every completed normal call creates exactly one
-playable WAV file and previously completed files survive power interruption.
-
-## Build Worksheet
-
-Fill this in as the hardware is inspected. Replace each `TBD` in the repository
-only with a measured or documented value.
-
-| Measurement | Result |
-| --- | --- |
-| ESP32 board revision | `TBD` |
-| BFab board revision | `TBD` |
-| BFab matches Waveshare schematic | `TBD: yes/no/differences` |
-| Handset connector orientation photo | Received; `H1` through `H4` not yet assigned |
-| Earpiece contacts | Red `R+`, black `R-` |
-| Earpiece resistance | `TBD ohms` |
-| Microphone contacts | Yellow `M+`, green `M-` |
-| Microphone type and marking | `TBD` |
-| Microphone positive contact | Yellow `M+` |
-| Microphone negative contact | Green `M-` |
-| Hook-switch assembly | Four-wire mechanical assembly confirmed; harness disconnects from main PCB |
-| Hook-switch contacts | `S2` to GPIO node, `S4` to ground; insulate `S1` and `S3` |
-| Switch closed when | Handset down: 0.8 ohm; lifted: `OL` |
-| ESP32 SDA GPIO | `TBD` |
-| ESP32 SCL GPIO | `TBD` |
-| ESP32 I2S CLK GPIO | `TBD` |
-| ESP32 I2S LRCLK GPIO | `TBD` |
-| ESP32 I2S input GPIO | `TBD` |
-| ESP32 I2S output GPIO | `TBD` |
-| ESP32 microSD SCK GPIO | `TBD` |
-| ESP32 microSD MOSI GPIO | `TBD` |
-| ESP32 microSD MISO GPIO | `TBD` |
-| ESP32 microSD CS GPIO | `TBD` |
-| ESP32 hook-switch GPIO | `TBD` |
-| 5 V power distribution method | `TBD` |
+Complete Checkpoint 1. Do not solder the ESP32, Audio board, or Adafruit board
+yet. The next revision will replace every remaining "to be selected" entry with
+an exact pin number after the ESP32 photographs and handset measurements are
+available.
