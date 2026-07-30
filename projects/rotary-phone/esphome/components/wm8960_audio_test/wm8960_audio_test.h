@@ -49,6 +49,8 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   size_t captured_samples_{0};
   size_t played_samples_{0};
   int32_t peak_{0};
+  int64_t sum_squares_{0};
+  float playback_gain_{1.0f};
   uint32_t state_started_at_{0};
   TestState state_{TestState::WAITING_TO_START};
 };

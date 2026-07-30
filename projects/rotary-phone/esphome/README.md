@@ -18,3 +18,7 @@ It retains USB logging and the I2C scan but has no Wi-Fi, API, OTA, microSD, or
 handset configuration. Follow [Checkpoint 4B](../BUILD.md#checkpoint-4b-record-and-play-through-i2s)
 for the exact I2S and speaker wiring. Do not modify either onboard microphone
 until the stock record/playback test passes.
+
+The physical test passed on 2026-07-29 with clear spoken-audio playback. The
+generated diagnostic beep was choppy, so the final guestbook firmware must use
+buffered prompt and beep playback rather than this test-tone loop.
