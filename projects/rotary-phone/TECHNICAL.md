@@ -102,14 +102,21 @@ Measurements and direct inspection establish:
 | Function | Coiled-cord contacts and wires | Base-jack wires | Resistance |
 | --- | --- | --- | ---: |
 | Earpiece | `1-4`, black/yellow | Black/yellow | 129.3 ohms |
-| Microphone | `2-3`, red/green | Red/green | Approximately 0.852 kohm |
+| Microphone | `2-3`, red/green | Red/green | Directional |
 
 The extra red/black pair on the small switch PCB is a separate base circuit and
 is not part of either handset pair. Leave it untouched.
 
-The earpiece measurement is complete. Open the speaking end only if it opens
-without force. Identify the microphone part number, construction, and polarity
-before connecting it to the Audio HAT. Stop if it remains unidentified.
+The microphone photo and directional resistance test are consistent with a
+two-wire electret-style microphone. With the red meter probe on coiled-cord
+contact `2`/red and black probe on contact `3`/green, it measures approximately
+0.858 kohm. Reversing the probes produces approximately 1.93 kohm, and the
+reading changes slightly in response to speech. Use this polarity:
+
+| Location | `MIC+` | `MIC-` |
+| --- | --- | --- |
+| Coiled cord | Contact `2`, red | Contact `3`, green |
+| Base jack | Green | Red |
 
 ## 4. Map the Hook Switch
 
@@ -230,13 +237,12 @@ Do not alter the board unless both stock recording and playback work.
 
 ## 6. Adapt the Original Handset Microphone
 
-Proceed only if the handset microphone is confirmed to be a two-wire electret
-capsule and the delivered Audio HAT input matches the reference schematic.
+The handset's directional resistance and response to speech are consistent with
+a two-wire electret-style microphone. Proceed only after the unmodified Audio
+HAT passes its stock test and its input matches the reference schematic.
 
-The base-jack microphone pair is red and green. Its polarity is not yet known.
-Identify the wire reaching the capsule's positive terminal as `MIC+` and the
-other as `MIC-`. Isolate both from the original PCB before attaching them to the
-Audio HAT.
+The base-jack microphone pair is green `MIC+` and red `MIC-`. Isolate both from
+the original PCB before attaching them to the Audio HAT.
 
 The reference path is:
 
@@ -261,9 +267,9 @@ Audio HAT GND -------------------- microphone negative
    driving the external microphone node.
 4. Confirm that the selected input pad still connects through `L3` and `C14`
    to WM8960 `RINPUT1`.
-5. Solder a 2.2 kohm resistor from `MICBIAS` to `MIC+`.
-6. Connect `MIC+` to the isolated `MIC1 DAT` input path.
-7. Connect `MIC-` to Audio HAT ground.
+5. Solder a 2.2 kohm resistor from `MICBIAS` to base-jack green `MIC+`.
+6. Connect base-jack green `MIC+` to the isolated `MIC1 DAT` input path.
+7. Connect base-jack red `MIC-` to Audio HAT ground.
 8. Add strain relief so handset movement cannot pull an SMD pad from the board.
 9. Inspect under magnification and clean flux residue.
 
@@ -402,9 +408,9 @@ and Seeed's official pin map. The handset capsule measurements remain open.
 | Earpiece contacts | Coiled cord `1-4` black/yellow; base jack black/yellow |
 | Earpiece resistance | 129.3 ohms; use 3.5 mm headphone output |
 | Microphone contacts | Coiled cord `2-3` red/green; base jack red/green |
-| Microphone type and marking | `TBD` |
-| Microphone positive contact | `TBD from capsule inspection` |
-| Microphone negative contact | `TBD from capsule inspection` |
+| Microphone type | Electrical behavior consistent with a two-wire electret-style microphone |
+| Microphone positive contact | Coiled red/contact `2`; base-jack green |
+| Microphone negative contact | Coiled green/contact `3`; base-jack red |
 | Hook-switch assembly | Four-wire mechanical assembly confirmed; harness disconnects from main PCB |
 | Hook-switch contacts | `S2` to GPIO node, `S4` to ground; insulate `S1` and `S3` |
 | Switch closed when | Handset down: 0.8 ohm; lifted: `OL` |
