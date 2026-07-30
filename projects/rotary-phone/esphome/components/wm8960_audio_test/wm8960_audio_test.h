@@ -4,8 +4,10 @@
 #include "esphome/core/component.h"
 
 #include "driver/i2s_std.h"
+#include "esp_http_server.h"
 
 #include <cstdio>
+#include <string>
 
 namespace esphome::wm8960_audio_test {
 
@@ -21,6 +23,9 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   void loop() override;
   void dump_config() override;
   float get_setup_priority() const override { return setup_priority::DATA; }
+
+  /// Full download URL of the most recently saved message, or empty before the first save.
+  std::string get_last_message_url() const;
 
  protected:
   enum class RecorderState : uint8_t {
@@ -47,6 +52,10 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   bool play_tone_();
   void shutdown_();
   void reset_cycle_metrics_();
+  void start_http_server_();
+  bool http_busy_() const;
+  static esp_err_t handle_message_list_(httpd_req_t *req);
+  static esp_err_t handle_message_file_(httpd_req_t *req);
 
   uint8_t bclk_pin_{};
   uint8_t lrclk_pin_{};
@@ -61,6 +70,9 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   uint32_t next_message_index_{1};
   bool message_index_initialized_{false};
   uint32_t saved_message_count_{0};
+  httpd_handle_t http_server_{nullptr};
+  uint32_t http_last_attempt_{0};
+  std::string last_saved_file_{};
   size_t captured_samples_{0};
   size_t blocks_since_sync_{0};
   int32_t raw_peak_{0};

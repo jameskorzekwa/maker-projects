@@ -1,5 +1,6 @@
 #include "wm8960_audio_test.h"
 
+#include "esphome/components/network/util.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
@@ -36,7 +37,113 @@ void WM8960AudioTest::setup() {
   ESP_LOGI(TAG, "Guestbook recorder armed; lift the handset to record a message");
 }
 
+std::string WM8960AudioTest::get_last_message_url() const {
+  if (this->last_saved_file_.empty())
+    return {};
+  return "http://" + network::get_ip_addresses()[0].str() + "/messages/" + this->last_saved_file_;
+}
+
+bool WM8960AudioTest::http_busy_() const {
+  return this->state_ == RecorderState::WAIT_BEFORE_BEEP || this->state_ == RecorderState::WAITING_TO_RECORD ||
+         this->state_ == RecorderState::RECORDING;
+}
+
+void WM8960AudioTest::start_http_server_() {
+  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.server_port = 80;
+  config.stack_size = 8192;
+  config.lru_purge_enable = true;
+  config.uri_match_fn = httpd_uri_match_wildcard;
+  if (httpd_start(&this->http_server_, &config) != ESP_OK) {
+    ESP_LOGW(TAG, "Could not start the message download server");
+    this->http_server_ = nullptr;
+    return;
+  }
+  httpd_uri_t list_uri{};
+  list_uri.uri = "/messages";
+  list_uri.method = HTTP_GET;
+  list_uri.handler = WM8960AudioTest::handle_message_list_;
+  list_uri.user_ctx = this;
+  httpd_register_uri_handler(this->http_server_, &list_uri);
+  httpd_uri_t file_uri{};
+  file_uri.uri = "/messages/*";
+  file_uri.method = HTTP_GET;
+  file_uri.handler = WM8960AudioTest::handle_message_file_;
+  file_uri.user_ctx = this;
+  httpd_register_uri_handler(this->http_server_, &file_uri);
+}
+
+esp_err_t WM8960AudioTest::handle_message_list_(httpd_req_t *req) {
+  httpd_resp_set_type(req, "application/json");
+  std::string json = "[";
+  DIR *dir = opendir("/sdcard");
+  if (dir != nullptr) {
+    for (struct dirent *entry = readdir(dir); entry != nullptr; entry = readdir(dir)) {
+      unsigned index = 0;
+      int consumed = 0;
+      sscanf(entry->d_name, "MSG%5u.WAV%n", &index, &consumed);
+      if (consumed != 12)
+        continue;
+      char path[48];
+      snprintf(path, sizeof(path), "/sdcard/%s", entry->d_name);
+      struct stat file_stat {};
+      const long size = stat(path, &file_stat) == 0 ? file_stat.st_size : 0;
+      char item[96];
+      snprintf(item, sizeof(item), "%s{\"name\":\"%s\",\"size\":%ld}", json.size() > 1 ? "," : "",
+               entry->d_name, size);
+      json += item;
+    }
+    closedir(dir);
+  }
+  json += "]";
+  httpd_resp_send(req, json.c_str(), HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t WM8960AudioTest::handle_message_file_(httpd_req_t *req) {
+  auto *self = static_cast<WM8960AudioTest *>(req->user_ctx);
+  if (self->http_busy_()) {
+    httpd_resp_set_status(req, "503 Service Unavailable");
+    httpd_resp_send(req, "recording in progress", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+  }
+  const char *name = strrchr(req->uri, '/');
+  name = name == nullptr ? req->uri : name + 1;
+  unsigned index = 0;
+  int consumed = 0;
+  sscanf(name, "MSG%5u.WAV%n", &index, &consumed);
+  if (consumed != 12 || strlen(name) != 12) {
+    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no such message");
+    return ESP_OK;
+  }
+  char path[48];
+  snprintf(path, sizeof(path), "/sdcard/%s", name);
+  FILE *file = fopen(path, "rb");
+  if (file == nullptr) {
+    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no such message");
+    return ESP_OK;
+  }
+  httpd_resp_set_type(req, "audio/wav");
+  char buffer[4096];
+  size_t bytes_read = 0;
+  while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+    if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK) {
+      fclose(file);
+      return ESP_FAIL;
+    }
+  }
+  fclose(file);
+  httpd_resp_send_chunk(req, nullptr, 0);
+  return ESP_OK;
+}
+
 void WM8960AudioTest::loop() {
+  // The listen socket needs the network stack, which starts after this component's setup.
+  if (this->http_server_ == nullptr && network::is_connected() &&
+      millis() - this->http_last_attempt_ >= 5000) {
+    this->http_last_attempt_ = millis();
+    this->start_http_server_();
+  }
   this->update_hook_();
   switch (this->state_) {
     case RecorderState::IDLE:
@@ -300,6 +407,7 @@ bool WM8960AudioTest::finalize_recording_(bool keep_file) {
                               std::max<size_t>(this->captured_samples_, 1));
   ESP_LOGI(TAG, "SAVED %s: %.1f s, raw peak %" PRIi32 ", RMS %.1f, filtered peak %" PRIi32,
            this->final_path_, seconds, this->raw_peak_, rms, this->filtered_peak_);
+  this->last_saved_file_ = this->final_path_ + 8;  // Strip the "/sdcard/" prefix.
   this->saved_message_count_++;
   this->next_message_index_++;
   return true;

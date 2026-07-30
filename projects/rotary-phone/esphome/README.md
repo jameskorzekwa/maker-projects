@@ -37,10 +37,26 @@ hook wire `S2` to `D7` and `S4` to ground; insulate `S1` and `S3` individually.
 The permanent circuit still requires the 10 kohm pull-up and 100 nF capacitor
 in [Checkpoint 3](../BUILD.md#checkpoint-3-prepare-the-hook-switch).
 
+## Home Assistant playback
+
+The recorder also runs an `esp_http_server` on port 80 once Wi-Fi connects.
+`GET /messages` returns a JSON list of saved recordings and
+`GET /messages/MSG#####.WAV` streams one; downloads answer `503` while a
+recording cycle is active. A template text sensor named `Last Message`
+publishes the full download URL of each newly saved message.
+
+On the Home Assistant side, the Downloader integration (download directory
+`/media`) and the `Rotary Phone: copy new message to media` automation download
+every new message into `/media/rotary-phone`, where the Media browser can play
+it. The server must start after the network is up: the component retries
+`httpd_start` from `loop()` every five seconds until `network::is_connected()`
+is true, because component setup runs before the network stack exists.
+
 ## Known limitations
 
 - The original handset microphone is quiet and power-noise sensitive; battery
   power with supply decoupling is the quietest tested source. A MAX4466
   amplified module will replace it inside the handset.
-- Playback of saved messages from Home Assistant's media browser is planned
-  but not yet implemented.
+- The automatic download automation was verified with a manual backfill of
+  `MSG00001.WAV`; its live trigger from a fresh recording awaits the next
+  bench test.
