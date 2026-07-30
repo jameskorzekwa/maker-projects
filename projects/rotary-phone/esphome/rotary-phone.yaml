@@ -1,0 +1,19 @@
+esphome:
+  name: rotary-phone
+  friendly_name: Rotary Phone Guestbook
+  comment: Temporary I2C-only probe for the unmodified WM8960 Audio HAT
+
+esp32:
+  board: seeed_xiao_esp32c6
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+
+i2c:
+  id: codec_bus
+  sda: GPIO22
+  scl: GPIO23
+  scan: true
+  frequency: 100kHz

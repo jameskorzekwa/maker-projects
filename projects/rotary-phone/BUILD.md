@@ -112,6 +112,8 @@ The base-jack colors are reversed because of the mirrored 4P4C connection.
 ## Checkpoint 2: Prepare the Adafruit microSD Board
 
 Start this checkpoint only after the Checkpoint 1 results have been reviewed.
+This checkpoint may be deferred until the Adafruit board arrives; continue with
+Checkpoint 4A in the meantime.
 
 The Adafruit board has eight connections. The names printed on the board mean:
 
@@ -182,6 +184,33 @@ black 40-pin connector is along the bottom:
 - The 3.5 mm jack on the left is audio output, not microphone input.
 - The right silver microphone is the one that may later be replaced.
 - The green speaker terminals read `LP`, `LN`, `RN`, `RP` from left to right.
+
+### Checkpoint 4A: Detect the Codec Over I2C
+
+This first test uses only four wires. Do not connect the speaker, handset,
+microSD board, or any I2S signal yet.
+
+| Audio board signal | Raspberry Pi header pin | XIAO connection |
+| --- | ---: | --- |
+| 5 V | 2 | `VBUS` |
+| Ground | 6 | `GND` |
+| I2C data, `SDA` | 3 | `D4` |
+| I2C clock, `SCL` | 5 | `D5` |
+
+1. Disconnect USB-C and every other power source.
+2. Leave both silver Audio board microphones untouched.
+3. Identify Raspberry Pi header pin 1 from the board marker before counting any
+   pins. Stop and request an orientation check if the marker is unclear.
+4. Connect only the four rows in the table.
+5. Inspect for reversed pins, loose strands, and solder bridges.
+6. Open `esphome/rotary-phone.yaml` in HA ESPHome Device Builder.
+7. Install it to the XIAO over USB and open the USB logs.
+8. Confirm the scan reports I2C address `0x1A`.
+
+**Stop if `0x1A` is absent.** Disconnect USB immediately if either board becomes
+warm. Do not add I2S wiring until this probe succeeds.
+
+### Checkpoint 4B: Record and Play Through I2S
 
 After the audio test firmware is ready:
 
@@ -285,5 +314,6 @@ Repeat the complete lift, record, and hang-up test after closing the case.
 
 ## Current Next Action
 
-Checkpoint 1 is complete. Proceed to Checkpoint 2 and prepare the Adafruit
-microSD board. Do not modify either onboard Audio board microphone yet.
+The microSD checkpoint is deferred until its board arrives. Proceed with
+Checkpoint 4A only: connect Audio board power and I2C, then flash the temporary
+ESPHome probe. Do not connect I2S, a speaker, or the handset yet.
