@@ -32,14 +32,25 @@ Use these exact names when following the instructions:
 
 ## What Is Already Known
 
-The original telephone board labels identify the handset wires:
+The coiled cord and base jack use mirrored color orders. This is normal for a
+4P4C telephone handset connection. Do not rearrange the wires.
 
-| Wire | Purpose |
+| Coiled-cord wire | Base-jack wire |
 | --- | --- |
-| Red | Earpiece positive |
-| Black | Earpiece negative |
-| Yellow | Microphone positive |
-| Green | Microphone negative |
+| Yellow | Black |
+| Green | Red |
+| Red | Green |
+| Black | Yellow |
+
+Physical inspection and resistance measurements identify the two circuits:
+
+| Function | Coiled-cord contacts | Base-jack wires | Measurement |
+| --- | --- | --- | ---: |
+| Earpiece | `1-4`, black and yellow | Black and yellow | 129.3 Ω |
+| Microphone | `2-3`, red and green | Red and green | Approximately 0.852 kΩ |
+
+The extra red/black pair connected to the small switch board is not part of the
+handset connection. Leave it untouched.
 
 The four white hook-switch wires were previously marked `S1`, `S2`, `S3`, and
 `S4`. This build uses `S2` and `S4`:
@@ -75,42 +86,16 @@ The three power labels are:
 - `GND`: common electrical ground.
 - `3V3`: 3.3 V for the hook-switch pull-up resistor.
 
-## Checkpoint 1: Measure the Earpiece
+## Checkpoint 1: Handset Mapping Complete
 
-The earlier handset photos already identify the four wire colors. Do not send
-those wiring photos again. This measurement checks the resistance of the small
-speaker inside the handset so its safe Audio board output can be selected.
+The earpiece and microphone pairs are now identified. The 129.3 Ω earpiece will
+use one channel of the Audio board's 3.5 mm headphone output. It will not use
+the `LP`/`LN` speaker terminals.
 
-1. Unplug the phone from the telephone wall jack.
-2. Remove the telephone line cord from the phone.
-3. Disconnect all USB cables and power supplies.
-4. Keep the coiled handset cord plugged into the phone base.
-5. If red and black are still attached to the original telephone board, stop
-   and say so before desoldering anything.
-6. Ignore any reading taken while that connector is plugged into the original
-   telephone board. That reading includes the telephone electronics and is not
-   the earpiece resistance.
-7. After the four-wire connector is unplugged, keep its exposed contacts away
-   from every other wire and part.
-8. Set the multimeter to resistance, shown by the ohm symbol (`Ω`). Use the
-   `200 Ω` range if the meter does not select a range automatically.
-9. Touch the two meter probes together and record that reading.
-10. Touch one probe to red and the other probe to black. Polarity does not
-   matter for this measurement.
-11. Record the stable reading, including the `Ω` symbol. Report `OL` if that is
-    what the meter displays.
-12. Open the speaking end of the handset only if it opens without force.
-13. Send one close photograph of the actual microphone capsule and any writing
-    on it. This is different from the wiring photos already received.
-
-**Stop here.** Report only these new results:
-
-- The reading with the meter probes touching each other.
-- The red-to-black resistance reading.
-- The microphone-capsule close-up, if the handset opens easily.
-
-Do not guess the earpiece connection. The resistance determines whether red and
-black use the Audio board's headphone output or speaker output.
+Microphone polarity and construction are not known yet. Open the speaking end
+only if it opens without force, then photograph the microphone capsule, its two
+connections, and every marking. Do not connect the red/green microphone pair to
+the Audio board until that inspection is complete.
 
 ## Checkpoint 2: Prepare the Adafruit microSD Board
 
@@ -231,21 +216,21 @@ the phone until storage is reliable.
 
 ## Checkpoint 6: Connect the Original Handset
 
-This checkpoint depends on the microphone-capsule close-up and earpiece
-resistance from Checkpoint 1. Do not continue with an unidentified microphone
-or earpiece.
+This checkpoint depends on the microphone-capsule close-up from Checkpoint 1.
+Do not continue with an unidentified microphone.
 
 The right silver microphone on the Audio board is a tiny surface-mounted part.
 Replacing it requires hot air, flux, fine tweezers, and magnification. Have an
 electronics repair technician perform this modification if you do not already
 have surface-mount rework experience.
 
-The final handset connections will be selected after the measurements:
+The handset connections are:
 
-- Yellow and green will connect the handset microphone to the verified right
-  microphone input circuit.
-- Red and black will connect the earpiece either to the 3.5 mm output or to
-  `LP` and `LN`, depending on the measured resistance.
+- Base-jack red and green form the microphone pair. Their polarity remains to
+  be identified from the microphone capsule.
+- Base-jack yellow connects to the tip of a 3.5 mm plug.
+- Base-jack black connects to the sleeve of that 3.5 mm plug.
+- Leave the plug's ring connection unused.
 - `LN` is not ground. Never connect it to ESP32 ground.
 
 Start every audio test at the lowest software volume. Stop immediately if the
@@ -275,7 +260,7 @@ playable.
 2. Mount the ESP32, Audio board, and Adafruit board on standoffs or a rigid
    carrier.
 3. Keep the Audio board close to the handset connector.
-4. Keep the yellow and green microphone wires away from USB and microSD wires.
+4. Keep the red and green microphone wires away from USB and microSD wires.
 5. Keep the ESP32 antenna away from metal and wiring.
 6. Secure every cable so pulling it cannot stress a solder joint.
 7. Insulate every unused wire and exposed joint.
@@ -287,9 +272,6 @@ Repeat the complete lift, record, and hang-up test after closing the case.
 
 ## Current Next Action
 
-Complete the resistance measurement in Checkpoint 1. The ESP32 photos and
-handset wiring photos have already been recorded and do not need to be sent
-again. If red and black are still soldered to the original telephone board,
-stop and report that before removing them. If the isolated red-to-black reading
-is still `OL` with both ends of the coiled handset cord fully inserted, the next
-step is measuring directly at the earpiece in the listening end of the handset.
+Open the speaking end of the handset only if it opens without force. Send one
+close photograph showing the microphone capsule, both attached wires, and any
+markings. Do not solder the handset to the Audio board yet.

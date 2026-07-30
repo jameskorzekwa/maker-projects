@@ -87,34 +87,29 @@ looking directly into the base jack with its latch opening down. Record this
 orientation with a photograph; reversing the viewing direction reverses the
 numbers.
 
-A conventional 4P4C handset normally uses the center pair for the earpiece and
-the outer pair for the microphone. Photos of the received phone resolve the
-wire functions at the original PCB:
+The received 4P4C cord and base jack use mirrored color orders. This is a normal
+plug/jack orientation and must not be rewired:
 
-| Wire | Original PCB label | Function |
-| --- | --- | --- |
-| Red | `R+` | Earpiece positive |
-| Black | `R-` | Earpiece negative |
-| Yellow | `M+` | Microphone positive |
-| Green | `M-` | Microphone negative |
+| Coiled-cord wire | Base-jack wire |
+| --- | --- |
+| Yellow | Black |
+| Green | Red |
+| Red | Green |
+| Black | Yellow |
 
-1. Open both ends of the handset.
-2. Use continuity mode to map each capsule terminal to `H1` through `H4`.
-3. Mark the earpiece pair and microphone pair in the worksheet.
-4. Leave both ends of the coiled handset cord plugged in.
-5. Isolate red and black from the original telephone PCB.
-6. Measure resistance directly between the isolated red and black wires. A
-   measurement taken while they are connected to the original PCB is invalid
-   because it includes the telephone electronics.
-7. Identify the microphone part number and construction.
-8. If it is a two-wire electret capsule, identify its positive and negative
-   terminals from markings or the original PCB, not wire color alone.
-9. Confirm continuity from red/black to the earpiece and yellow/green to the
-   microphone before disconnecting any wire from the original PCB.
+Measurements and direct inspection establish:
 
-Expected result: two isolated earpiece wires and two isolated microphone wires.
-Stop if the handset has fewer than four active conductors, shared grounds,
-active electronics, or an unidentified capsule.
+| Function | Coiled-cord contacts and wires | Base-jack wires | Resistance |
+| --- | --- | --- | ---: |
+| Earpiece | `1-4`, black/yellow | Black/yellow | 129.3 ohms |
+| Microphone | `2-3`, red/green | Red/green | Approximately 0.852 kohm |
+
+The extra red/black pair on the small switch PCB is a separate base circuit and
+is not part of either handset pair. Leave it untouched.
+
+The earpiece measurement is complete. Open the speaking end only if it opens
+without force. Identify the microphone part number, construction, and polarity
+before connecting it to the Audio HAT. Stop if it remains unidentified.
 
 ## 4. Map the Hook Switch
 
@@ -238,11 +233,10 @@ Do not alter the board unless both stock recording and playback work.
 Proceed only if the handset microphone is confirmed to be a two-wire electret
 capsule and the delivered Audio HAT input matches the reference schematic.
 
-For this phone, yellow is microphone positive (`M+`) and green is microphone
-negative (`M-`). Desolder these wires from the original telephone PCB or cut
-them with enough labeled length to reverse the modification. Verify that both
-wires are isolated from the original PCB before attaching them to the Audio
-HAT.
+The base-jack microphone pair is red and green. Its polarity is not yet known.
+Identify the wire reaching the capsule's positive terminal as `MIC+` and the
+other as `MIC-`. Isolate both from the original PCB before attaching them to the
+Audio HAT.
 
 The reference path is:
 
@@ -267,9 +261,9 @@ Audio HAT GND -------------------- microphone negative
    driving the external microphone node.
 4. Confirm that the selected input pad still connects through `L3` and `C14`
    to WM8960 `RINPUT1`.
-5. Solder a 2.2 kohm resistor from `MICBIAS` to the yellow `M+` wire.
-6. Connect yellow `M+` to the isolated `MIC1 DAT` input path.
-7. Connect green `M-` to Audio HAT ground.
+5. Solder a 2.2 kohm resistor from `MICBIAS` to `MIC+`.
+6. Connect `MIC+` to the isolated `MIC1 DAT` input path.
+7. Connect `MIC-` to Audio HAT ground.
 8. Add strain relief so handset movement cannot pull an SMD pad from the board.
 9. Inspect under magnification and clean flux residue.
 
@@ -290,22 +284,16 @@ preamplifier circuit; do not connect it to this input.
 
 ## 7. Connect the Original Earpiece
 
-Choose the output only after measuring earpiece resistance:
+The measured earpiece resistance is 129.3 ohms. Use one channel of the 3.5 mm
+headphone output; do not use the BTL speaker terminals.
 
-- For approximately 16 ohms or higher, begin with the 3.5 mm headphone output.
-  Connect one channel, such as tip/left, and sleeve/ground.
-- For an approximately 8 ohm dynamic earpiece, use one BTL speaker channel,
-  such as `LP` and `LN`.
-- For an open circuit, very low resistance, or an unidentified capsule, stop
-  and inspect the handset before connecting it.
+The base-jack earpiece pair is yellow and black. Isolate both wires from the
+original telephone PCB. Connect yellow to the 3.5 mm plug's tip and black to its
+sleeve. Leave the ring unused. Polarity does not affect a single mono earpiece,
+but this convention keeps black as the return wire.
 
-Never connect `LN` or `RN` to ground. They are driven BTL outputs.
-
-For this phone, red is earpiece positive (`R+`) and black is earpiece negative
-(`R-`). Isolate both wires from the original telephone PCB before connecting
-them. For headphone output, connect red to tip/left and black to sleeve/ground.
-For a BTL speaker channel, connect red to `LP` and black to `LN`; neither wire
-may connect to ground in that configuration.
+Never connect `LN` or `RN` to ground. They are driven BTL outputs and are not
+used for this earpiece.
 
 1. Set firmware output volume to its minimum.
 2. Play a quiet test tone or spoken prompt.
@@ -411,12 +399,12 @@ and Seeed's official pin map. The handset capsule measurements remain open.
 | Audio board identity | Waveshare WM8960 Audio HAT; no revision marking visible |
 | Audio board matches Waveshare schematic | Visual layout confirmed; electrical and stock functional tests pending |
 | Handset connector orientation photo | Received; `H1` through `H4` not yet assigned |
-| Earpiece contacts | Red `R+`, black `R-` |
-| Earpiece resistance | `TBD ohms` |
-| Microphone contacts | Yellow `M+`, green `M-` |
+| Earpiece contacts | Coiled cord `1-4` black/yellow; base jack black/yellow |
+| Earpiece resistance | 129.3 ohms; use 3.5 mm headphone output |
+| Microphone contacts | Coiled cord `2-3` red/green; base jack red/green |
 | Microphone type and marking | `TBD` |
-| Microphone positive contact | Yellow `M+` |
-| Microphone negative contact | Green `M-` |
+| Microphone positive contact | `TBD from capsule inspection` |
+| Microphone negative contact | `TBD from capsule inspection` |
 | Hook-switch assembly | Four-wire mechanical assembly confirmed; harness disconnects from main PCB |
 | Hook-switch contacts | `S2` to GPIO node, `S4` to ground; insulate `S1` and `S3` |
 | Switch closed when | Handset down: 0.8 ohm; lifted: `OL` |

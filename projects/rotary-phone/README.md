@@ -13,9 +13,9 @@ modifications.
 
 ## Project Status
 
-Hardware characterization and bench bring-up. The hook switch and handset wire
-colors are known. The handset earpiece resistance and microphone type still
-need to be recorded. The controller and GPIO table are now confirmed.
+Hardware characterization and bench bring-up. The controller, GPIO table, hook
+switch, handset pairs, and 129.3 ohm earpiece are confirmed. The microphone type
+and polarity still need to be identified.
 
 ## Selected Hardware
 
@@ -108,11 +108,22 @@ these checks before designing the final wiring:
 8. Replace incompatible transducers inside the handset while retaining the
    original four-wire coiled cord.
 
-Photos of the received phone confirm four separately terminated handset wires.
-The original PCB silkscreen identifies red as receiver positive (`R+`), black
-as receiver negative (`R-`), yellow as microphone positive (`M+`), and green as
-microphone negative (`M-`). Earpiece resistance and microphone construction
-still require physical measurements.
+Photos, direct inspection, and resistance measurements identify two isolated
+handset pairs. The coiled cord and base jack use mirrored individual colors,
+which is normal for a 4P4C telephone handset connection:
+
+| Coiled-cord wire | Base-jack wire |
+| --- | --- |
+| Yellow | Black |
+| Green | Red |
+| Red | Green |
+| Black | Yellow |
+
+The black/yellow pair is the earpiece and measures 129.3 ohms. It will use one
+channel of the WM8960 board's 3.5 mm headphone output. The red/green pair is the
+microphone and measures approximately 0.852 kohm; its construction and polarity
+still require physical inspection. An additional red/black pair belongs to a
+separate base switch circuit and is not part of the handset.
 
 Photos also confirm a mechanically actuated hook-switch assembly on a small
 PCB. A dedicated four-wire harness connects it to the original main board. The
@@ -127,19 +138,9 @@ therefore low while idle and high when recording should begin.
 No manufacturer service schematic or model-specific handset pinout was found
 for Dyna-Living model `Dyna-JJ0TOP12254-FBA` (Amazon ASIN `B08GR4KCPF`). The
 listing confirms that it is a modern, line-powered telephone with a detachable
-handset cord. A conventional 4P4C handset cord normally assigns the center two
-contacts to the receiver and the outer two contacts to the transmitter. The
-received phone's PCB labels confirm the following wire functions and polarity:
-
-| Wire | Original PCB label | Function |
-| --- | --- | --- |
-| Red | `R+` | Earpiece positive |
-| Black | `R-` | Earpiece negative |
-| Yellow | `M+` | Microphone positive |
-| Green | `M-` | Microphone negative |
-
-Continuity to the handset capsules must still be checked before disconnecting
-the original PCB.
+handset cord. This handset uses contacts `1-4` for the black/yellow earpiece and
+contacts `2-3` for the red/green microphone. Direct capsule inspection overrides
+generic 4P4C color conventions.
 
 The purchased Waveshare board has two onboard analog MEMS microphones and no
 external microphone connector; its 3.5 mm jack is output-only. In the matching
