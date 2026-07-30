@@ -47,7 +47,7 @@ Physical inspection and resistance measurements identify the two circuits:
 | Function | Coiled-cord contacts | Base-jack wires | Measurement |
 | --- | --- | --- | ---: |
 | Earpiece | `1-4`, black and yellow | Black and yellow | 129.3 Ω |
-| Microphone | `2-3`, red and green | Red and green | Approximately 0.852 kΩ |
+| Microphone | `2-3`, red and green | Red and green | Directional |
 
 The extra red/black pair connected to the small switch board is not part of the
 handset connection. Leave it untouched.
@@ -92,10 +92,22 @@ The earpiece and microphone pairs are now identified. The 129.3 Ω earpiece will
 use one channel of the Audio board's 3.5 mm headphone output. It will not use
 the `LP`/`LN` speaker terminals.
 
-Microphone polarity and construction are not known yet. Open the speaking end
-only if it opens without force, then photograph the microphone capsule, its two
-connections, and every marking. Do not connect the red/green microphone pair to
-the Audio board until that inspection is complete.
+The microphone photo and directional resistance test are consistent with a
+two-wire electret-style microphone:
+
+- Red meter probe on coiled-cord contact `2`/red and black probe on contact
+  `3`/green: approximately 0.858 kΩ.
+- Reversed probes: approximately 1.93 kΩ.
+- The reading changes slightly while speaking.
+
+Use this polarity:
+
+| Location | Microphone positive | Microphone negative |
+| --- | --- | --- |
+| Coiled cord | Contact `2`, red | Contact `3`, green |
+| Base jack | Green | Red |
+
+The base-jack colors are reversed because of the mirrored 4P4C connection.
 
 ## Checkpoint 2: Prepare the Adafruit microSD Board
 
@@ -216,8 +228,8 @@ the phone until storage is reliable.
 
 ## Checkpoint 6: Connect the Original Handset
 
-This checkpoint depends on the microphone-capsule close-up from Checkpoint 1.
-Do not continue with an unidentified microphone.
+Proceed only after the unmodified Audio board passes its stock recording and
+playback test.
 
 The right silver microphone on the Audio board is a tiny surface-mounted part.
 Replacing it requires hot air, flux, fine tweezers, and magnification. Have an
@@ -226,8 +238,9 @@ have surface-mount rework experience.
 
 The handset connections are:
 
-- Base-jack red and green form the microphone pair. Their polarity remains to
-  be identified from the microphone capsule.
+- Base-jack green is microphone positive. It connects to the biased microphone
+  signal input described in the technical reference.
+- Base-jack red is microphone negative. It connects to Audio board ground.
 - Base-jack yellow connects to the tip of a 3.5 mm plug.
 - Base-jack black connects to the sleeve of that 3.5 mm plug.
 - Leave the plug's ring connection unused.
@@ -272,6 +285,5 @@ Repeat the complete lift, record, and hang-up test after closing the case.
 
 ## Current Next Action
 
-Open the speaking end of the handset only if it opens without force. Send one
-close photograph showing the microphone capsule, both attached wires, and any
-markings. Do not solder the handset to the Audio board yet.
+Checkpoint 1 is complete. Proceed to Checkpoint 2 and prepare the Adafruit
+microSD board. Do not modify either onboard Audio board microphone yet.

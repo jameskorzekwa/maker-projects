@@ -14,8 +14,8 @@ modifications.
 ## Project Status
 
 Hardware characterization and bench bring-up. The controller, GPIO table, hook
-switch, handset pairs, and 129.3 ohm earpiece are confirmed. The microphone type
-and polarity still need to be identified.
+switch, handset pairs, 129.3 ohm earpiece, and microphone polarity are confirmed.
+The unmodified Audio HAT still requires stock recording and playback tests.
 
 ## Selected Hardware
 
@@ -120,10 +120,11 @@ which is normal for a 4P4C telephone handset connection:
 | Black | Yellow |
 
 The black/yellow pair is the earpiece and measures 129.3 ohms. It will use one
-channel of the WM8960 board's 3.5 mm headphone output. The red/green pair is the
-microphone and measures approximately 0.852 kohm; its construction and polarity
-still require physical inspection. An additional red/black pair belongs to a
-separate base switch circuit and is not part of the handset.
+channel of the WM8960 board's 3.5 mm headphone output. The red/green pair is an
+electret-style microphone: coiled-cord red/contact `2` is positive and green/
+contact `3` is negative. The mirrored jack makes base green positive and base
+red negative. An additional red/black pair belongs to a separate base switch
+circuit and is not part of the handset.
 
 Photos also confirm a mechanically actuated hook-switch assembly on a small
 PCB. A dedicated four-wire harness connects it to the original main board. The
@@ -155,9 +156,8 @@ Waveshare reference schematic:
 - The board operates at 5 V power and 3.3 V logic, with I2C control and I2S
   audio.
 
-This topology should support the phone's original microphone if it is a
-two-wire electret capsule, as expected for a modern electronic telephone. The
-proposed modification for one channel is:
+This topology supports the phone's measured two-wire electret-style microphone.
+The proposed modification for one channel is:
 
 ```text
 WM8960 MICBIAS --- 2.2 kohm --- handset microphone +
@@ -184,7 +184,7 @@ Before applying power:
 2. Photograph the handset capsule, its markings, terminals, and wire colors.
 3. Identify the receiver and transmitter pairs by continuity instead of wire
    color alone.
-4. Establish electret microphone polarity.
+4. Confirm the documented microphone polarity before permanent soldering.
 5. Isolate the handset jack from the original telephone PCB before connecting
    it to the WM8960 board.
 6. Photograph both sides of the delivered Waveshare board and confirm that its
