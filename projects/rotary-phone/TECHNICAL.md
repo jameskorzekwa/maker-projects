@@ -4,10 +4,12 @@ This document records the electrical details, measurements, and complete test
 plan. It is not the starting point. Follow the plain-language
 [build guide](BUILD.md) one checkpoint at a time.
 
-The repository does not contain firmware yet. Hardware assembly can proceed
-through the documented checkpoints. Photos identify the controller as a Seeed
+The repository contains diagnostic ESPHome firmware for I2C, stock audio, and
+hook-switch bring-up. The live Device Builder component has continued to evolve
+during handset testing; live experimental changes are documented below but are
+not production guestbook firmware. Photos identify the controller as a Seeed
 Studio XIAO ESP32-C6 and confirm all exposed pin labels, so the GPIO table is
-now complete.
+complete.
 
 ## Safety
 
@@ -274,6 +276,11 @@ level and envelope were improved. This does not block hardware acceptance;
 final firmware must prebuffer prompt and beep PCM, finish speaker playback, and
 start capture only after the output pipeline reports idle.
 
+Handset headphone-output testing passed on 2026-07-30. The cut 3.5 mm TRS cable
+maps blue to tip, red to ring, and gold to sleeve. Blue/tip connects to base
+yellow, gold/sleeve to base black, and red/ring is unused. The original 129.3
+ohm earpiece reproduced the beep and recorded speech without heating.
+
 ## 6. Adapt the Original Handset Microphone
 
 The handset's directional resistance and response to speech are consistent with
@@ -324,6 +331,54 @@ Enable WM8960 `MICBIAS` in firmware before judging microphone operation. Start
 with low input gain, record speech, then increase gain until normal speech is
 clear without clipping or excessive noise.
 
+### Received Handset Microphone Results
+
+The `MIC1`-side parts are labeled, top to bottom, `C14`, `C18`, `L3`, `C17`,
+`C16`, and `C15`. `L3` measured approximately 0.4 ohm before removal. After it
+was removed, the C14/input-side pad measured approximately 0.1 ohm to `C14` and
+remained open to the former microphone-side pad and ground.
+
+`C9` and `C10` are the second and third parts in the six-part vertical column
+immediately left of codec `U2`. With firmware register `R25/0x19` enabling
+WM8960 `MICBIAS`, their shared non-ground side measures approximately 2.9 to
+3.0 V. The current temporary circuit is:
+
+```text
+C9/C10 MICBIAS --- 2.2 kohm ---+--- base green, handset MIC+
+                                |
+                                +--- C14/input-side former L3 pad
+
+Audio HAT ground ------------------- base red, handset MIC-
+```
+
+The microphone node measures approximately 0.9 V. The first high-gain handset
+test produced loud static with only faint shouted speech. Moving the resistor
+feed from XIAO 3.3 V to the HAT rail helped slightly; moving it to the proper
+WM8960 `MICBIAS` node improved biasing but exposed strong supply-related buzz.
+Power-source A/B tests were decisive: laptop USB was worst, the tested dedicated
+supply was quieter, and a battery was quietest. Additional bulk and ceramic
+decoupling across the 5 V and ground feed materially improved playback. Do not
+place a capacitor from the microphone signal node to ground; it would shunt the
+audio signal.
+
+With laptop power, added decoupling, +12 dB right PGA, +29 dB boost, and a
+two-stage 180 Hz software high-pass, the diagnostic logged raw peak 4584/RMS
+945.0 and filtered peak 1661/RMS 61.8. The large reduction confirms dominant
+low-frequency supply interference, but the result sounded too quiet and thin.
+The latest compiled experiment changes the right PGA to +24 dB, headphone
+output to -6 dB, and filtering to one 100 Hz stage. It also supports a fresh
+debounced beep/record/playback cycle after every handset lift and cancellation
+when the handset is replaced. These exact changes compile but still require
+physical acceptance testing.
+
+The original capsule is scheduled to be replaced by a MAX4466 amplified
+electret module, Amazon ASIN `B08N4FNFTR`. The board is approximately 20.8 x
+13.8 x 7.5 mm, operates from 2.4 to 5.5 V, and offers adjustable 25x to 125x
+gain. If it fits, it will amplify speech inside the handset before the coiled
+cable. The four conductors can be reassigned to earpiece signal, shared ground,
+filtered 3.3 V, and amplifier output. Remove the present MICBIAS resistor and
+reduce codec input gain before testing the amplified output.
+
 Stop if the handset uses a carbon transmitter. It needs a different bias and
 preamplifier circuit; do not connect it to this input.
 
@@ -368,6 +423,12 @@ using the assigned XIAO SPI pins:
 Use short wires and keep them away from the microphone pair. Do not substitute
 the pin names from a different microSD module. The label `DO` maps to ESP32
 `MISO`; `DI` maps to ESP32 `MOSI`.
+
+The board arrived on 2026-07-30 but has not been wired or powered. The initial
+firmware checkpoint will use ESP-IDF SDSPI on `SPI2_HOST`, start at a conservative
+SPI frequency, mount an existing FAT32 filesystem with formatting disabled,
+write and `fsync` a known test file, read it back byte-for-byte, and leave the
+filesystem mounted. This must pass before implementing WAV streaming.
 
 After storage firmware exists:
 
@@ -442,7 +503,7 @@ and Seeed's official pin map. The handset capsule measurements remain open.
 | --- | --- |
 | ESP32 board | Seeed Studio XIAO ESP32-C6 |
 | Audio board identity | Waveshare WM8960 Audio HAT; no revision marking visible |
-| Audio board matches Waveshare schematic | Visual layout confirmed; electrical and stock functional tests pending |
+| Audio board matches Waveshare schematic | Confirmed; I2C and stock audio tests passed |
 | Handset connector orientation photo | Received; `H1` through `H4` not yet assigned |
 | Earpiece contacts | Coiled cord `1-4` black/yellow; base jack black/yellow |
 | Earpiece resistance | 129.3 ohms; use 3.5 mm headphone output |
@@ -465,6 +526,11 @@ and Seeed's official pin map. The handset capsule measurements remain open.
 | ESP32 microSD CS GPIO | `D3`, GPIO21 |
 | ESP32 hook-switch GPIO | `D7`, GPIO17 |
 | 5 V power distribution method | USB-C input to XIAO; `VBUS` to Audio HAT and Adafruit `5V` |
+| Handset earpiece test | Passed through HAT headphone output |
+| Handset microphone test | Partial; recognizable but quiet, power-noise limited |
+| Quietest tested source | Standalone battery; laptop USB is unsuitable for recording |
+| Live connectivity | Encrypted ESPHome API over Wi-Fi and password-protected OTA |
+| microSD status | Board received; wiring and filesystem tests pending |
 
 <!-- markdownlint-enable MD013 -->
 
