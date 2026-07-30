@@ -242,6 +242,16 @@ Before modifying `MIC1`:
 
 Do not alter the board unless both stock recording and playback work.
 
+The temporary Checkpoint 4B firmware is implemented as the local ESPHome
+external component `esphome/components/wm8960_audio_test/`. It uses ESP-IDF's
+standard full-duplex I2S driver with the XIAO as clock controller and the
+WM8960 as peripheral. The HAT's onboard 24 MHz oscillator supplies MCLK, so no
+MCLK wire is connected to the XIAO. The one-shot test uses 16 kHz, 16-bit I2S,
+keeps the class-D gain low, records one onboard microphone into RAM for four
+seconds, plays the recording through both supplied speakers, and then powers
+down the codec outputs. This is diagnostic firmware, not the final guestbook
+audio implementation.
+
 ## 6. Adapt the Original Handset Microphone
 
 The handset's directional resistance and response to speech are consistent with

@@ -1,15 +1,20 @@
-# ESPHome Audio HAT Probe
+# ESPHome Audio HAT Test
 
-`rotary-phone.yaml` is a temporary, offline configuration for the first safe
-test of the XIAO ESP32-C6 and unmodified WM8960 Audio HAT.
+`rotary-phone.yaml` is a temporary, offline configuration for testing the XIAO
+ESP32-C6 and unmodified WM8960 Audio HAT.
 
-It intentionally enables only USB logging and an I2C scan. It does not contain
-Wi-Fi, API, OTA, audio, microSD, or handset configuration.
+Checkpoint 4A confirmed the codec at I2C address `0x1A`. The current
+configuration performs the Checkpoint 4B stock audio test. It uses the local
+`wm8960_audio_test` external component to:
 
-Connect only the four signals documented in the main
-[build guide](../BUILD.md), install the configuration over USB from ESPHome
-Device Builder, and open USB logs. A working Audio HAT appears at I2C address
-`0x1A`.
+1. Initialize the HAT's 24 MHz clock path, onboard microphones, ADC, DAC, and
+   class-D outputs at low gain.
+2. Play a short, quiet start beep.
+3. Record four seconds from one onboard microphone into RAM at 16 kHz.
+4. Play that recording through both supplied test speakers.
+5. Shut down the codec outputs and wait for Reset before repeating.
 
-Do not add the Audio HAT's I2S signals or modify either onboard microphone until
-this probe succeeds.
+It retains USB logging and the I2C scan but has no Wi-Fi, API, OTA, microSD, or
+handset configuration. Follow [Checkpoint 4B](../BUILD.md#checkpoint-4b-record-and-play-through-i2s)
+for the exact I2S and speaker wiring. Do not modify either onboard microphone
+until the stock record/playback test passes.
