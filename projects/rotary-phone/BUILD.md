@@ -184,6 +184,17 @@ black 40-pin connector is along the bottom:
 - The 3.5 mm jack on the left is audio output, not microphone input.
 - The right silver microphone is the one that may later be replaced.
 - The green speaker terminals read `LP`, `LN`, `RN`, `RP` from left to right.
+- Raspberry Pi header pins 1 and 2 are at the far-right end, below the right
+  microphone and beside the button. They are not at the earphone-jack end.
+
+At that far-right end, the row closer to the board components contains the odd
+pin numbers and the row closer to the board edge contains the even numbers:
+
+```text
+Toward board components:  pin 5  pin 3  pin 1
+Toward bottom board edge: pin 6  pin 4  pin 2
+                                      right end
+```
 
 ### Checkpoint 4A: Detect the Codec Over I2C
 
@@ -199,8 +210,10 @@ microSD board, or any I2S signal yet.
 
 1. Disconnect USB-C and every other power source.
 2. Leave both silver Audio board microphones untouched.
-3. Identify Raspberry Pi header pin 1 from the board marker before counting any
-   pins. Stop and request an orientation check if the marker is unclear.
+3. Start at the header's far-right end, below the right microphone. Identify
+   pin 1 in the row closer to the components and pin 2 directly below it in the
+   row closer to the board edge. Stop and request an orientation check if this
+   does not match the board.
 4. Connect only the four rows in the table.
 5. Inspect for reversed pins, loose strands, and solder bridges.
 6. Open `esphome/rotary-phone.yaml` in HA ESPHome Device Builder.

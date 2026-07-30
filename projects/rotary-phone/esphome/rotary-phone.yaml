@@ -10,6 +10,12 @@ esp32:
 
 logger:
   level: DEBUG
+  hardware_uart: USB_SERIAL_JTAG
+
+interval:
+  - interval: 5s
+    then:
+      - logger.log: "Rotary phone probe heartbeat"
 
 i2c:
   id: codec_bus
