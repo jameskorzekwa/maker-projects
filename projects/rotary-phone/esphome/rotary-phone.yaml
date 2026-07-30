@@ -44,6 +44,17 @@ sd_card_test:
   mosi_pin: 18
   cs_pin: 21
 
+text_sensor:
+  - platform: template
+    name: "Last Message"
+    icon: "mdi:phone-voip"
+    update_interval: 5s
+    lambda: |-
+      auto url = id(codec_audio_test).get_last_message_url();
+      if (url.empty())
+        return {};
+      return url;
+
 interval:
   - interval: 2s
     then:

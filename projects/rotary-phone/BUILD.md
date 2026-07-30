@@ -396,7 +396,7 @@ Repeat the complete lift, record, and hang-up test after closing the case.
 The guestbook recorder works end-to-end on the bench: lifting the handset
 plays a beep after a two-second settling delay, streams handset audio to the
 card, and finalizes a numbered `MSG#####.WAV` on hang-up. The first real
-message, `MSG00001.WAV`, saved successfully at 5.5 seconds. Two firmware
-milestones remain before enclosure installation: copying completed messages to
-Home Assistant's media folder for playback from the Media browser, and the
-MAX4466 handset microphone installation after it is delivered.
+message, `MSG00001.WAV`, saved successfully at 5.5 seconds and is playable
+from Home Assistant's Media browser under `rotary-phone`. Next: record one
+more bench message to confirm the automatic download automation fires, then
+install the MAX4466 handset microphone when it is delivered.
