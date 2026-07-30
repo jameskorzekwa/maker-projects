@@ -15,18 +15,28 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   void set_dac_pin(uint8_t pin) { this->dac_pin_ = pin; }
 
   void setup() override;
+  void loop() override;
   void dump_config() override;
   float get_setup_priority() const override { return setup_priority::DATA; }
 
  protected:
-  static void task_entry_(void *parameter);
-  void run_test_();
+  enum class TestState : uint8_t {
+    WAITING_TO_START,
+    WAITING_TO_RECORD,
+    RECORDING,
+    PLAYING,
+    COMPLETE,
+    FAILED,
+  };
+
+  void start_test_();
+  void fail_test_(const char *message);
   bool initialize_i2s_();
   bool initialize_codec_();
   bool write_register_(uint8_t reg, uint16_t value);
   bool play_tone_();
-  bool record_audio_(int16_t *recording, size_t sample_count);
-  bool play_audio_(const int16_t *recording, size_t sample_count);
+  bool record_audio_block_();
+  bool play_audio_block_();
   void shutdown_();
 
   uint8_t bclk_pin_{};
@@ -35,6 +45,12 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   uint8_t dac_pin_{};
   i2s_chan_handle_t tx_handle_{nullptr};
   i2s_chan_handle_t rx_handle_{nullptr};
+  int16_t *recording_{nullptr};
+  size_t captured_samples_{0};
+  size_t played_samples_{0};
+  int32_t peak_{0};
+  uint32_t state_started_at_{0};
+  TestState state_{TestState::WAITING_TO_START};
 };
 
 }  // namespace esphome::wm8960_audio_test

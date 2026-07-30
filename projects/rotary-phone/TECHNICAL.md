@@ -250,7 +250,11 @@ MCLK wire is connected to the XIAO. The one-shot test uses 16 kHz, 16-bit I2S,
 keeps the class-D gain low, records one onboard microphone into RAM for four
 seconds, plays the recording through both supplied speakers, and then powers
 down the codec outputs. This is diagnostic firmware, not the final guestbook
-audio implementation.
+audio implementation. Its first build made codec I2C calls from a separate
+FreeRTOS audio task: the setup-task reset succeeded, but the first post-I2S
+worker-task write failed. The corrected implementation is a nonblocking
+ESPHome main-loop state machine, keeping all codec I2C operations on the I2C
+owner task while processing recording and playback one I2S block at a time.
 
 ## 6. Adapt the Original Handset Microphone
 

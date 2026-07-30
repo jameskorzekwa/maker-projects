@@ -249,6 +249,10 @@ microphone, and plays the recording through both test speakers.
 
 <!-- markdownlint-enable MD013 -->
 
+The bench wiring was visually verified with these jumper colors: blue pin 12
+to `D0`, purple pin 35 to `D1`, orange pin 38 to `D2`, and green pin 40 to
+`D6`.
+
 1. Connect the Audio board to the XIAO exactly as shown in the table.
 2. Insert the supplied speakers' keyed four-wire plug into the white `SPEAKER`
    socket. Do not also use the green screw terminals.
