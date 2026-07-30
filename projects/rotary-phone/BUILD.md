@@ -1,9 +1,9 @@
 # Step-by-Step Build Guide
 
 This is the guide to follow while building the phone. Complete one checkpoint,
-verify the result, and stop before starting the next checkpoint. The exact GPIO
-connections will be added after the ESP32 board labels are photographed and
-verified.
+verify the result, and stop before starting the next checkpoint. Photos confirm
+the controller and all of its exposed pins, so the GPIO connections below are
+final for the bench prototype.
 
 For circuit details and the complete test plan, see
 [TECHNICAL.md](TECHNICAL.md).
@@ -23,7 +23,7 @@ Use these exact names when following the instructions:
 
 | Short name | Actual part |
 | --- | --- |
-| ESP32 | ESP32-C5 Mini marked `ESP32-C5_MINI_V1.0` |
+| ESP32 | Seeed Studio XIAO ESP32-C6 |
 | Audio board | Blue Waveshare WM8960 Audio HAT |
 | microSD board | Adafruit product 254, Amazon ASIN `B00NAY2NAI` |
 | Hook switch | Four-white-wire switch operated by the handset cradle |
@@ -48,40 +48,69 @@ The four white hook-switch wires were previously marked `S1`, `S2`, `S3`, and
 - Handset lifted: `S2` and `S4` are disconnected.
 - `S1` and `S3` will not be connected to anything.
 
-## Checkpoint 1: Gather Information Before Soldering
+Photos also confirm the complete XIAO ESP32-C6 pin map. Use the labels printed
+on the back of the board rather than counting pads:
 
-Do not connect any boards during this checkpoint.
+<!-- markdownlint-disable MD013 -->
+
+| XIAO label | Chip GPIO | Assigned job |
+| --- | ---: | --- |
+| `D0` | GPIO0 | Audio bit clock |
+| `D1` | GPIO1 | Audio left/right clock |
+| `D2` | GPIO2 | Recorded audio from Audio board to ESP32 |
+| `D3` | GPIO21 | microSD card select |
+| `D4` | GPIO22 | Audio board I2C data |
+| `D5` | GPIO23 | Audio board I2C clock |
+| `D6` | GPIO16 | Playback audio from ESP32 to Audio board |
+| `D7` | GPIO17 | Hook switch |
+| `D8` | GPIO19 | microSD clock |
+| `D9` | GPIO20 | microSD data out, called `MISO` |
+| `D10` | GPIO18 | microSD data in, called `MOSI` |
+
+<!-- markdownlint-enable MD013 -->
+
+The three power labels are:
+
+- `VBUS`: 5 V from the USB-C connection.
+- `GND`: common electrical ground.
+- `3V3`: 3.3 V for the hook-switch pull-up resistor.
+
+## Checkpoint 1: Measure the Earpiece
+
+The earlier handset photos already identify the four wire colors. Do not send
+those wiring photos again. This measurement checks the resistance of the small
+speaker inside the handset so its safe Audio board output can be selected.
 
 1. Unplug the phone from the telephone wall jack.
 2. Remove the telephone line cord from the phone.
 3. Disconnect all USB cables and power supplies.
-4. Place the ESP32 on a well-lit surface.
-5. Take one sharp photograph of the top of the ESP32.
-6. Take one sharp photograph of the bottom of the ESP32.
-7. Make sure every printed pin label is readable in the photographs.
-8. Open the speaking end of the handset.
-9. Take a sharp photograph of the microphone, its two connections, and any
-   writing on it.
-10. Stop rather than prying or breaking the handset if it does not open easily.
-11. Leave the microphone connected for now.
-12. Keep the coiled handset cord plugged into the phone base.
-13. Photograph and label the red and black wire connections before removing
-    them.
-14. Desolder the red and black wires from the original telephone board. Do not
-    cut them.
-15. Keep the two bare wire ends separate from each other and every other part.
-16. Set the multimeter to resistance, shown by the ohm symbol.
-17. Touch one meter probe to red and the other probe to black.
-18. Record the stable resistance reading.
+4. Keep the coiled handset cord plugged into the phone base.
+5. If red and black are still attached to the original telephone board, stop
+   and say so before desoldering anything.
+6. Ignore any reading taken while that connector is plugged into the original
+   telephone board. That reading includes the telephone electronics and is not
+   the earpiece resistance.
+7. After the four-wire connector is unplugged, keep its exposed contacts away
+   from every other wire and part.
+8. Set the multimeter to resistance, shown by the ohm symbol (`Ω`). Use the
+   `200 Ω` range if the meter does not select a range automatically.
+9. Touch the two meter probes together and record that reading.
+10. Touch one probe to red and the other probe to black. Polarity does not
+   matter for this measurement.
+11. Record the stable reading, including the `Ω` symbol. Report `OL` if that is
+    what the meter displays.
+12. Open the speaking end of the handset only if it opens without force.
+13. Send one close photograph of the actual microphone capsule and any writing
+    on it. This is different from the wiring photos already received.
 
-**Stop here.** The next checkpoint requires:
+**Stop here.** Report only these new results:
 
-- Both ESP32 photographs.
-- The handset microphone photograph.
+- The reading with the meter probes touching each other.
 - The red-to-black resistance reading.
+- The microphone-capsule close-up, if the handset opens easily.
 
-Do not guess the remaining connections. These three items determine the GPIO
-map and the safe connections for the original handset.
+Do not guess the earpiece connection. The resistance determines whether red and
+black use the Audio board's headphone output or speaker output.
 
 ## Checkpoint 2: Prepare the Adafruit microSD Board
 
@@ -91,19 +120,18 @@ The Adafruit board has eight connections. The names printed on the board mean:
 
 | Printed label | Plain-language meaning | Eventual connection |
 | --- | --- | --- |
-| `5V` | Power for the board | ESP32 5 V/VBUS pin, to be verified |
+| `5V` | Power for the board | XIAO `VBUS` |
 | `3V` | Regulated 3.3 V from the board | Leave unused |
-| `GND` | Electrical ground | ESP32 `GND` |
-| `CLK` | SPI clock | ESP32 pin to be selected |
-| `DO` | Data coming out of the card | ESP32 `MISO` pin to be selected |
-| `DI` | Data going into the card | ESP32 `MOSI` pin to be selected |
-| `CS` | Selects the microSD card | ESP32 pin to be selected |
+| `GND` | Electrical ground | XIAO `GND` |
+| `CLK` | SPI clock | XIAO `D8` |
+| `DO` | Data coming out of the card | XIAO `D9` |
+| `DI` | Data going into the card | XIAO `D10` |
+| `CS` | Selects the microSD card | XIAO `D3` |
 | `CD` | Optional card-present switch | Leave unused initially |
 
-The board accepts 5 V power and converts it safely for the microSD card. Do not
-connect either power pin until the ESP32 photographs have been reviewed.
-
-When the final pins are known:
+The board accepts 5 V power and converts it safely for the microSD card. Power
+the XIAO through USB-C and use `VBUS` as the single 5 V source. Never connect a
+second 5 V supply at the same time.
 
 1. Solder the supplied straight header into the Adafruit board.
 2. Keep the black plastic part of the header flat against the board while
@@ -120,16 +148,16 @@ is connected.
 
 ## Checkpoint 3: Prepare the Hook Switch
 
-Build this small circuit only after a safe ESP32 GPIO has been selected:
+The hook-switch GPIO is XIAO `D7`:
 
 ```text
-ESP32 3.3 V --- 10 kohm resistor ---+--- selected hook-switch GPIO
+XIAO 3V3 ------- 10 kohm resistor ---+--- XIAO D7
                                      |
                                      +--- one side of 100 nF capacitor
                                      |
                                      +--- white wire S2
 
-ESP32 GND ---------------------------+--- other side of capacitor
+XIAO GND ----------------------------+--- other side of capacitor
                                      |
                                      +--- white wire S4
 
@@ -141,9 +169,8 @@ White wire S3 --------------------------- insulated and unused
    board permanently.
 2. Insulate `S1` by itself.
 3. Insulate `S3` by itself.
-4. Connect `S4` to ESP32 ground.
-5. Connect `S2`, the resistor, the capacitor, and the selected GPIO exactly as
-   shown.
+4. Connect `S4` to XIAO `GND`.
+5. Connect `S2`, the resistor, the capacitor, and `D7` exactly as shown.
 
 The firmware will read `LOW` while the handset is down and `HIGH` when the
 handset is lifted.
@@ -159,9 +186,24 @@ black 40-pin connector is along the bottom:
 - The right silver microphone is the one that may later be replaced.
 - The green speaker terminals read `LP`, `LN`, `RN`, `RP` from left to right.
 
-After the ESP32 GPIO map and test firmware are ready:
+After the audio test firmware is ready:
 
-1. Connect the Audio board to the ESP32 using the completed wiring table.
+<!-- markdownlint-disable MD013 -->
+
+| Audio board signal | Raspberry Pi header pin | XIAO connection |
+| --- | ---: | --- |
+| 5 V | 2 | `VBUS` |
+| Ground | 6 | `GND` |
+| I2C data, `SDA` | 3 | `D4` |
+| I2C clock, `SCL` | 5 | `D5` |
+| Audio bit clock | 12 | `D0` |
+| Audio left/right clock | 35 | `D1` |
+| Recorded audio from Audio board | 38 | `D2` |
+| Playback audio to Audio board | 40 | `D6` |
+
+<!-- markdownlint-enable MD013 -->
+
+1. Connect the Audio board to the XIAO exactly as shown in the table.
 2. Connect only the small test speaker supplied with the Audio board.
 3. Use the single 5 V power method recorded in the final wiring table. Never
    connect separate USB and external 5 V supplies at the same time.
@@ -189,8 +231,9 @@ the phone until storage is reliable.
 
 ## Checkpoint 6: Connect the Original Handset
 
-This checkpoint depends on the microphone photograph and earpiece resistance
-from Checkpoint 1. Do not continue with an unidentified microphone or earpiece.
+This checkpoint depends on the microphone-capsule close-up and earpiece
+resistance from Checkpoint 1. Do not continue with an unidentified microphone
+or earpiece.
 
 The right silver microphone on the Audio board is a tiny surface-mounted part.
 Replacing it requires hot air, flux, fine tweezers, and magnification. Have an
@@ -244,7 +287,9 @@ Repeat the complete lift, record, and hang-up test after closing the case.
 
 ## Current Next Action
 
-Complete Checkpoint 1. Do not solder the ESP32, Audio board, or Adafruit board
-yet. The next revision will replace every remaining "to be selected" entry with
-an exact pin number after the ESP32 photographs and handset measurements are
-available.
+Complete the resistance measurement in Checkpoint 1. The ESP32 photos and
+handset wiring photos have already been recorded and do not need to be sent
+again. If red and black are still soldered to the original telephone board,
+stop and report that before removing them. If the isolated red-to-black reading
+is still `OL` with both ends of the coiled handset cord fully inserted, the next
+step is measuring directly at the earpiece in the listening end of the handset.

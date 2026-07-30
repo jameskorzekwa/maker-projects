@@ -5,9 +5,9 @@ plan. It is not the starting point. Follow the plain-language
 [build guide](BUILD.md) one checkpoint at a time.
 
 The repository does not contain firmware yet. Hardware assembly can proceed
-through the documented checkpoints, but the final GPIO table and flashing
-commands must be added after the received ESP32-C5 board is photographed and
-its exposed pins are verified.
+through the documented checkpoints. Photos identify the controller as a Seeed
+Studio XIAO ESP32-C6 and confirm all exposed pin labels, so the GPIO table is
+now complete.
 
 ## Safety
 
@@ -43,7 +43,7 @@ Do not use loose jumper wires in the final enclosure.
 Confirm that these parts are present:
 
 - Dyna-Living telephone, model `Dyna-JJ0TOP12254-FBA`
-- ESP32-C5 Mini marked `ESP32-C5_MINI_V1.0`
+- Seeed Studio XIAO ESP32-C6
 - Waveshare WM8960 Audio HAT, sold through Amazon ASIN `B098R7TTM4`
 - [Adafruit MicroSD Card Breakout Board+ product 254](https://www.adafruit.com/product/254),
   Amazon ASIN `B00NAY2NAI`
@@ -51,9 +51,9 @@ Confirm that these parts are present:
 - Regulated 5 V power supply
 - Included Waveshare test speaker
 
-Before connecting anything, take readable photographs of:
+The received photographs record:
 
-1. Both sides of the ESP32-C5 board.
+1. Both sides of the XIAO ESP32-C6, including all exposed pin labels.
 2. Both sides of the Waveshare board, including every silkscreen label.
 3. The unopened phone base and all external connectors.
 4. The phone base immediately after opening it, before disconnecting wires.
@@ -101,11 +101,15 @@ wire functions at the original PCB:
 1. Open both ends of the handset.
 2. Use continuity mode to map each capsule terminal to `H1` through `H4`.
 3. Mark the earpiece pair and microphone pair in the worksheet.
-4. Measure the earpiece resistance with the handset disconnected.
-5. Identify the microphone part number and construction.
-6. If it is a two-wire electret capsule, identify its positive and negative
+4. Leave both ends of the coiled handset cord plugged in.
+5. Isolate red and black from the original telephone PCB.
+6. Measure resistance directly between the isolated red and black wires. A
+   measurement taken while they are connected to the original PCB is invalid
+   because it includes the telephone electronics.
+7. Identify the microphone part number and construction.
+8. If it is a two-wire electret capsule, identify its positive and negative
    terminals from markings or the original PCB, not wire color alone.
-7. Confirm continuity from red/black to the earpiece and yellow/green to the
+9. Confirm continuity from red/black to the earpiece and yellow/green to the
    microphone before disconnecting any wire from the original PCB.
 
 Expected result: two isolated earpiece wires and two isolated microphone wires.
@@ -169,37 +173,35 @@ After selecting the pair:
 If no pair switches cleanly and repeatably, install a separate microswitch under
 the cradle instead of sharing or probing the original powered circuitry.
 
-The eventual GPIO circuit is:
+The hook-switch circuit uses XIAO `D7`, which is ESP32-C6 GPIO17:
 
 ```text
-3.3 V --- 10 kohm ---+--- ESP32 hook GPIO
-                     |
-                     +--- 100 nF --- GND
-                     |
-                     +--- S2 switch S4 --- GND
+XIAO 3V3 --- 10 kohm ---+--- XIAO D7
+                         |
+                         +--- 100 nF --- XIAO GND
+                         |
+                         +--- S2 switch S4 --- XIAO GND
 ```
 
-Choose the final GPIO only after the ESP32 pinout is verified. Avoid ESP32-C5
-boot-strapping GPIO2 and GPIO7. Debounce the selected signal in firmware for
-100 to 200 ms. A stable transition to the lifted state starts prompt playback;
-a stable transition to the replaced state stops recording and finalizes the WAV
-file.
+Debounce the signal in firmware for 100 to 200 ms. A stable transition to the
+lifted state starts prompt playback; a stable transition to the replaced state
+stops recording and finalizes the WAV file.
 
 ## 5. Verify the Audio Board Before Modifying It
 
 The delivered board is a Waveshare-branded WM8960 Audio HAT and visually
 matches the published layout. It uses this Raspberry Pi header assignment:
 
-| Audio HAT signal | Raspberry Pi physical pin | Direction relative to ESP32 |
+| Audio HAT signal | Raspberry Pi physical pin | XIAO connection |
 | --- | ---: | --- |
-| 5 V | 2 or 4 | Power input |
-| GND | 6 or another ground pin | Common ground |
-| SDA | 3 | ESP32 to/from codec |
-| SCL | 5 | ESP32 to codec |
-| I2S CLK | 12 | ESP32 to codec |
-| I2S LRCLK | 35 | ESP32 to codec |
-| I2S ADC | 38 | Codec to ESP32 |
-| I2S DAC | 40 | ESP32 to codec |
+| 5 V | 2 or 4 | `VBUS` |
+| GND | 6 or another ground pin | `GND` |
+| SDA | 3 | `D4`, GPIO22 |
+| SCL | 5 | `D5`, GPIO23 |
+| I2S CLK | 12 | `D0`, GPIO0 |
+| I2S LRCLK | 35 | `D1`, GPIO1 |
+| I2S ADC | 38 | `D2`, GPIO2 |
+| I2S DAC | 40 | `D6`, GPIO16 |
 
 With the Raspberry Pi header along the bottom edge and the component labels
 upright, `MIC2` is the left onboard microphone and `MIC1` is the right onboard
@@ -215,10 +217,9 @@ Check whether SDA and SCL already have pull-up resistors to 3.3 V. If they do
 not, add one 4.7 kohm pull-up from SDA to 3.3 V and another from SCL to 3.3 V.
 Do not allow either I2C signal to be pulled up to 5 V.
 
-Do not create two competing 5 V power paths. During programming, either power
-the system from the ESP32 USB connection and a verified 5 V/VBUS pin, or use a
-single external 5 V rail with a common ground. Determine which method is safe
-from the delivered ESP32 board before connecting the HAT.
+Power the XIAO through USB-C. Its documented `VBUS` pad is the single 5 V rail
+for the Audio HAT and Adafruit board. Use a common `GND` rail. Do not connect an
+external 5 V source while USB-C is connected.
 
 Before modifying `MIC1`:
 
@@ -318,17 +319,17 @@ may connect to ground in that configuration.
 Format the high-endurance card as FAT32 and test it in a computer first. The
 Adafruit 254 board includes a regulator and logic-level shifting. Use its `5V`
 power input with this 5 V system; leave its `3V` pin unused. Wire it only after
-selecting safe, exposed ESP32 GPIOs:
+using the assigned XIAO SPI pins:
 
-| Adafruit label | Meaning | ESP32-C5 connection |
+| Adafruit label | Meaning | XIAO connection |
 | --- | --- | --- |
-| `5V` | Board power input | `TBD 5 V/VBUS pin after board verification` |
+| `5V` | Board power input | `VBUS` |
 | `3V` | Regulated 3.3 V | Leave disconnected |
 | `GND` | Ground | `GND` |
-| `CLK` | SPI clock | `TBD` |
-| `DO` | Data out from card | `TBD MISO` |
-| `DI` | Data into card | `TBD MOSI` |
-| `CS` | Card select | `TBD` |
+| `CLK` | SPI clock | `D8`, GPIO19 |
+| `DO` | Data out from card | `D9`, GPIO20/MISO |
+| `DI` | Data into card | `D10`, GPIO18/MOSI |
+| `CS` | Card select | `D3`, GPIO21 |
 | `CD` | Optional card detect | Leave disconnected for initial build |
 
 Use short wires and keep them away from the microphone pair. Do not substitute
@@ -399,14 +400,14 @@ playable WAV file and previously completed files survive power interruption.
 
 ## Build Worksheet
 
-Fill this in as the hardware is inspected. Replace each `TBD` in the repository
-only with a measured or documented value.
+The controller and GPIO entries below are confirmed from the board photographs
+and Seeed's official pin map. The handset capsule measurements remain open.
 
 <!-- markdownlint-disable MD013 -->
 
 | Measurement | Result |
 | --- | --- |
-| ESP32 board revision | `TBD` |
+| ESP32 board | Seeed Studio XIAO ESP32-C6 |
 | Audio board identity | Waveshare WM8960 Audio HAT; no revision marking visible |
 | Audio board matches Waveshare schematic | Visual layout confirmed; electrical and stock functional tests pending |
 | Handset connector orientation photo | Received; `H1` through `H4` not yet assigned |
@@ -419,23 +420,25 @@ only with a measured or documented value.
 | Hook-switch assembly | Four-wire mechanical assembly confirmed; harness disconnects from main PCB |
 | Hook-switch contacts | `S2` to GPIO node, `S4` to ground; insulate `S1` and `S3` |
 | Switch closed when | Handset down: 0.8 ohm; lifted: `OL` |
-| ESP32 SDA GPIO | `TBD` |
-| ESP32 SCL GPIO | `TBD` |
-| ESP32 I2S CLK GPIO | `TBD` |
-| ESP32 I2S LRCLK GPIO | `TBD` |
-| ESP32 I2S input GPIO | `TBD` |
-| ESP32 I2S output GPIO | `TBD` |
-| ESP32 microSD SCK GPIO | `TBD` |
-| ESP32 microSD MOSI GPIO | `TBD` |
-| ESP32 microSD MISO GPIO | `TBD` |
-| ESP32 microSD CS GPIO | `TBD` |
-| ESP32 hook-switch GPIO | `TBD` |
-| 5 V power distribution method | `TBD` |
+| ESP32 SDA GPIO | `D4`, GPIO22 |
+| ESP32 SCL GPIO | `D5`, GPIO23 |
+| ESP32 I2S CLK GPIO | `D0`, GPIO0 |
+| ESP32 I2S LRCLK GPIO | `D1`, GPIO1 |
+| ESP32 I2S input GPIO | `D2`, GPIO2 |
+| ESP32 I2S output GPIO | `D6`, GPIO16 |
+| ESP32 microSD SCK GPIO | `D8`, GPIO19 |
+| ESP32 microSD MOSI GPIO | `D10`, GPIO18 |
+| ESP32 microSD MISO GPIO | `D9`, GPIO20 |
+| ESP32 microSD CS GPIO | `D3`, GPIO21 |
+| ESP32 hook-switch GPIO | `D7`, GPIO17 |
+| 5 V power distribution method | USB-C input to XIAO; `VBUS` to Audio HAT and Adafruit `5V` |
 
 <!-- markdownlint-enable MD013 -->
 
 ## References
 
+- [Seeed Studio XIAO ESP32-C6 documentation](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/)
+- [ESP-IDF stable ESP32-C6 documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/)
 - [Adafruit product 254](https://www.adafruit.com/product/254)
 - [Adafruit product 254 wiring guide](https://learn.adafruit.com/adafruit-micro-sd-breakout-board-card-tutorial/arduino-wiring)
 - [Waveshare WM8960 Audio HAT](https://www.waveshare.com/wiki/WM8960_Audio_HAT)
