@@ -1,24 +1,20 @@
-# ESPHome Audio HAT Test
+# ESPHome Bench Tests
 
 `rotary-phone.yaml` is a temporary, offline configuration for testing the XIAO
-ESP32-C6 and unmodified WM8960 Audio HAT.
+ESP32-C6 and rotary-phone hardware.
 
-Checkpoint 4A confirmed the codec at I2C address `0x1A`. The current
-configuration performs the Checkpoint 4B stock audio test. It uses the local
-`wm8960_audio_test` external component to:
+The current configuration performs the hook-switch bench test on GPIO17/`D7`:
 
-1. Initialize the HAT's 24 MHz clock path, onboard microphones, ADC, DAC, and
-   class-D outputs at low gain.
-2. Play a short, quiet start beep.
-3. Record four seconds from one onboard microphone into RAM at 16 kHz.
-4. Play that recording through both supplied test speakers.
-5. Shut down the codec outputs and wait for Reset before repeating.
+- Internal pull-up enabled
+- 150 ms delayed-on and delayed-off debounce
+- `ON CRADLE` and `LIFTED` status every two seconds
+- Immediate lift and replacement event logs
 
-It retains USB logging and the I2C scan but has no Wi-Fi, API, OTA, microSD, or
-handset configuration. Follow [Checkpoint 4B](../BUILD.md#checkpoint-4b-record-and-play-through-i2s)
-for the exact I2S and speaker wiring. Do not modify either onboard microphone
-until the stock record/playback test passes.
+Connect hook wire `S2` to `D7` and `S4` to ground; insulate `S1` and `S3`
+individually. This internal-pull-up setup is for bench testing. The permanent
+circuit still requires the 10 kohm pull-up and 100 nF capacitor in
+[Checkpoint 3](../BUILD.md#checkpoint-3-prepare-the-hook-switch).
 
-The physical test passed on 2026-07-29 with clear spoken-audio playback. The
-generated diagnostic beep was choppy, so the final guestbook firmware must use
-buffered prompt and beep playback rather than this test-tone loop.
+The local `wm8960_audio_test` component remains in this directory as the record
+of the completed audio test but is not loaded by the current YAML. Audio
+hardware testing passed on 2026-07-29 with clear spoken-audio playback.

@@ -189,6 +189,12 @@ Debounce the signal in firmware for 100 to 200 ms. A stable transition to the
 lifted state starts prompt playback; a stable transition to the replaced state
 stops recording and finalizes the WAV file.
 
+Bench verification passed on 2026-07-29 using the XIAO's internal pull-up and
+150 ms delayed-on/delayed-off filters. Logs consistently showed `ON CRADLE`
+with the handset down, `LIFTED` with it raised, and one transition event in each
+direction. The external 10 kohm pull-up and 100 nF capacitor remain required for
+the permanent circuit.
+
 ## 5. Verify the Audio Board Before Modifying It
 
 The delivered board is a Waveshare-branded WM8960 Audio HAT and visually

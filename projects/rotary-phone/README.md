@@ -18,7 +18,8 @@ switch, handset pairs, 129.3 ohm earpiece, and microphone polarity are confirmed
 The XIAO detects the unmodified WM8960 Audio HAT at its expected I2C address,
 `0x1A`. The stock I2S test recorded clear audio from an onboard microphone and
 played it through the supplied speaker system. Audio hardware bring-up passed;
-microSD storage, hook-switch integration, and handset adaptation remain.
+the `S2-S4` hook-switch pair also reports reliable lift and replacement events
+on `D7`. microSD storage is deferred, and handset adaptation remains next.
 
 ## Selected Hardware
 

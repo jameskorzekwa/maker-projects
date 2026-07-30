@@ -1,7 +1,7 @@
 esphome:
   name: rotary-phone
   friendly_name: Rotary Phone Guestbook
-  comment: Temporary stock record/playback test for the WM8960 Audio HAT
+  comment: Temporary hook-switch input and debounce test
 
 esp32:
   board: seeed_xiao_esp32c6
@@ -12,29 +12,29 @@ logger:
   level: DEBUG
   hardware_uart: USB_SERIAL_JTAG
 
-external_components:
-  - source:
-      type: local
-      path: components
-    components: [wm8960_audio_test]
-
 interval:
-  - interval: 5s
+  - interval: 2s
     then:
-      - logger.log: "Rotary phone audio test heartbeat"
+      - lambda: |-
+          ESP_LOGI("hook_test", "HOOK STATE: %s", id(hook_switch).state ? "LIFTED" : "ON CRADLE");
 
-i2c:
-  id: codec_bus
-  sda: GPIO22
-  scl: GPIO23
-  scan: true
-  frequency: 100kHz
-
-wm8960_audio_test:
-  id: codec_audio_test
-  i2c_id: codec_bus
-  address: 0x1A
-  bclk_pin: 0
-  lrclk_pin: 1
-  adc_pin: 2
-  dac_pin: 16
+binary_sensor:
+  - platform: gpio
+    id: hook_switch
+    internal: true
+    pin:
+      number: GPIO17
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 150ms
+      - delayed_off: 150ms
+    on_press:
+      then:
+        - lambda: |-
+            ESP_LOGI("hook_test", "HOOK EVENT: handset lifted");
+    on_release:
+      then:
+        - lambda: |-
+            ESP_LOGI("hook_test", "HOOK EVENT: handset placed on cradle");
