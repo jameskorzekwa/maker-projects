@@ -15,11 +15,42 @@ modifications.
 
 Hardware characterization and bench bring-up. The controller, GPIO table, hook
 switch, handset pairs, 129.3 ohm earpiece, and microphone polarity are confirmed.
-The XIAO detects the unmodified WM8960 Audio HAT at its expected I2C address,
-`0x1A`. The stock I2S test recorded clear audio from an onboard microphone and
-played it through the supplied speaker system. Audio hardware bring-up passed;
-the `S2-S4` hook-switch pair also reports reliable lift and replacement events
-on `D7`. microSD storage is deferred, and handset adaptation remains next.
+The XIAO detects the WM8960 Audio HAT at `0x1A`; stock I2S recording/playback,
+the original handset earpiece, and the `S2-S4` hook-switch pair have passed bench
+tests. The right `MIC1` input has been isolated and adapted for the original
+handset microphone, but that capsule remains too quiet and sensitive to power
+noise. A MAX4466 amplified microphone module is planned for the handset.
+
+The live ESPHome configuration now has encrypted Wi-Fi API access and
+password-protected OTA. Experimental source that rearms the beep/record/playback
+test on every debounced handset lift validates and compiles, but repeated-cycle
+behavior has not yet been physically accepted. The Adafruit microSD board has
+arrived and its wiring/mount/write/read checkpoint is next.
+
+## Current Bench Findings
+
+- The handset earpiece works from one channel of the HAT headphone jack. The
+  cut TRS cable maps blue to tip, red to ring, and gold to sleeve; blue/tip goes
+  to base yellow, gold/sleeve to base black, and red/ring remains insulated.
+- `MIC1` ferrite bead `L3` was removed. The C14/input-side pad remains connected
+  to `C14` and isolated from the former onboard microphone output.
+- WM8960 `MICBIAS` is enabled and measures about 2.9 to 3.0 V at the non-ground
+  side of `C9`/`C10`. A 2.2 kohm resistor biases base green at approximately
+  0.9 V; base red is microphone ground.
+- The original capsule produces recognizable speech, but it is very quiet.
+  Laptop USB produces severe buzz, a dedicated wall supply is better, and a
+  battery is substantially quieter. Added 5 V bulk/ceramic decoupling also
+  improved the result. Final power must match the battery-quality baseline.
+- The latest physically measured laptop-powered capture reported raw peak 4584
+  and RMS 945.0; a two-stage 180 Hz filter reduced it to peak 1661 and RMS 61.8,
+  showing that most interference was low-frequency power noise. That filter
+  sounded too thin. The next compiled build instead uses a gentle single-stage
+  100 Hz high-pass, +24 dB right input PGA, +29 dB boost, and -6 dB headphone
+  output; this exact combination remains unverified on hardware.
+- A six-pack MAX4466 module (Amazon ASIN `B08N4FNFTR`) was selected for the
+  handset upgrade. The approximately 20.8 x 13.8 x 7.5 mm board operates from
+  2.4 to 5.5 V and has adjustable 25x to 125x gain. It will replace the current
+  passive MICBIAS circuit after it arrives and is measured against the handset.
 
 ## Selected Hardware
 
@@ -88,7 +119,7 @@ sequence. It also supports microSD through the SD SPI host driver.
 | Certified 5 V, 2 A USB supply | Power | Keep mains voltage outside the phone |
 | 10 kohm resistor and 100 nF capacitor | Hook-switch pull-up and debounce | Values may be adjusted during testing |
 | Perfboard or custom PCB, connectors, and standoffs | Permanent assembly | Do not use loose jumpers in the final build |
-| Optional electret microphone and 8/32 ohm earpiece | Replacement transducers | Only needed if the originals are unsuitable |
+| MAX4466 electret microphone amplifier module | Planned handset microphone replacement | Amazon ASIN `B08N4FNFTR`; verify fit before installation |
 | Optional concealed RGB LED | Status indication | Ready, recording, upload, and error states |
 
 <!-- markdownlint-enable MD013 -->
@@ -402,7 +433,8 @@ Acceptance criteria:
 
 ## Open Decisions
 
-- Whether internal handset transducers may be replaced if necessary.
+- Whether the MAX4466 board fits inside the handset and can provide clean gain
+  without coupling earpiece return current into its shared ground.
 - Whether cloud backup is required and, if so, whether to use R2 or S3.
 - Whether the device will use venue Wi-Fi, a dedicated hotspot, or local
   storage only.

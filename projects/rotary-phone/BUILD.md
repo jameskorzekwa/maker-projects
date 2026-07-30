@@ -50,7 +50,8 @@ Physical inspection and resistance measurements identify the two circuits:
 | Microphone | `2-3`, red and green | Red and green | Directional |
 
 The extra red/black pair connected to the small switch board is not part of the
-handset connection. Leave it untouched.
+handset connection. Its original line-powered function was not conclusively
+traced; leave both wires disconnected and individually insulated.
 
 The four white hook-switch wires were previously marked `S1`, `S2`, `S3`, and
 `S4`. This build uses `S2` and `S4`:
@@ -111,9 +112,9 @@ The base-jack colors are reversed because of the mirrored 4P4C connection.
 
 ## Checkpoint 2: Prepare the Adafruit microSD Board
 
-Start this checkpoint only after the Checkpoint 1 results have been reviewed.
-This checkpoint may be deferred until the Adafruit board arrives; continue with
-Checkpoint 4A in the meantime.
+The Adafruit board has arrived. This is the current checkpoint. Complete only
+the physical preparation and continuity checks below, then stop for firmware
+and powered testing.
 
 The Adafruit board has eight connections. The names printed on the board mean:
 
@@ -144,6 +145,9 @@ second 5 V supply at the same time.
 
 **Stop after soldering.** Check continuity for accidental shorts before power
 is connected.
+
+**Current status, 2026-07-30:** board received; header, wiring, card mount, and
+file tests are not yet verified.
 
 ## Checkpoint 3: Prepare the Hook Switch
 
@@ -320,6 +324,25 @@ The handset connections are:
 Start every audio test at the lowest software volume. Stop immediately if the
 earpiece becomes warm, distorted, or painfully loud.
 
+**Earpiece result, 2026-07-30: PASS.** A cut TRS cable maps blue to tip, red to
+ring, and gold to sleeve. Blue/tip to base yellow and gold/sleeve to base black
+played both the beep and recorded speech through the original 129.3 ohm
+earpiece. Red/ring remains individually insulated.
+
+**Original microphone result, 2026-07-30: PARTIAL.** `L3` beside `MIC1` was
+removed, leaving the C14/input-side pad connected to `C14` and isolated from
+the original microphone output. WM8960 `MICBIAS` measures 2.9 to 3.0 V at
+`C9`/`C10`; a 2.2 kohm resistor feeds base green and the C14-side signal pad,
+while base red goes to ground. The microphone node measures about 0.9 V. Speech
+is recognizable but very quiet, and power noise dominates on computer USB.
+Battery power is substantially quieter than either laptop USB or the tested
+wall supply. Added supply decoupling improved the result.
+
+The selected next microphone is a MAX4466 amplified electret module, Amazon
+ASIN `B08N4FNFTR`. Do not remove the present microphone or reassign handset
+wires until that board arrives, its 20.8 x 13.8 x 7.5 mm fit is checked, and a
+new wiring checkpoint is written.
+
 ## Checkpoint 7: Test Everything on the Workbench
 
 Keep every board outside the telephone case. Repeat steps 1 through 5 ten times
@@ -356,6 +379,8 @@ Repeat the complete lift, record, and hang-up test after closing the case.
 
 ## Current Next Action
 
-The microSD checkpoint is deferred until its board arrives. Proceed with
-Checkpoint 4A only: connect Audio board power and I2C, then flash the temporary
-ESPHome probe. Do not connect I2S, a speaker, or the handset yet.
+Proceed with Checkpoint 2 only. With all power disconnected, inspect the
+Adafruit 254 board, solder its straight header, and stop before connecting it
+to the XIAO. The first powered storage checkpoint will mount an existing FAT32
+filesystem without formatting it, write and flush a known test file, and read
+the file back byte-for-byte before any audio is written to the card.
