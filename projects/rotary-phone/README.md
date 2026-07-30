@@ -21,11 +21,14 @@ tests. The right `MIC1` input has been isolated and adapted for the original
 handset microphone, but that capsule remains too quiet and sensitive to power
 noise. A MAX4466 amplified microphone module is planned for the handset.
 
-The live ESPHome configuration now has encrypted Wi-Fi API access and
-password-protected OTA. Experimental source that rearms the beep/record/playback
-test on every debounced handset lift validates and compiles, but repeated-cycle
-behavior has not yet been physically accepted. The Adafruit microSD board has
-arrived and its wiring/mount/write/read checkpoint is next.
+The live ESPHome configuration has encrypted Wi-Fi API access and
+password-protected OTA. The Adafruit microSD board is wired and verified: the
+`sd_card_test` component mounts the FAT card over SPI, writes a test file with
+`fsync`, and reads it back byte-for-byte. The guestbook recorder works on the
+bench: every handset lift beeps after a two-second delay and streams handset
+audio to a numbered, crash-safe `MSG#####.WAV`, finalized on hang-up. The first
+real message saved successfully on 2026-07-30. Home Assistant media playback
+and the MAX4466 microphone remain next.
 
 ## Current Bench Findings
 

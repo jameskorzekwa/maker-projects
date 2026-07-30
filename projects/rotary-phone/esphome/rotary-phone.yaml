@@ -1,16 +1,48 @@
 esphome:
   name: rotary-phone
   friendly_name: Rotary Phone Guestbook
-  comment: Temporary hook-switch input and debounce test
+  comment: Temporary handset earpiece and hook-switch test
 
 esp32:
   board: seeed_xiao_esp32c6
   framework:
     type: esp-idf
+    advanced:
+      # The guestbook recorder needs opendir, rename, and unlink on the card.
+      disable_vfs_support_dir: false
 
 logger:
   level: DEBUG
   hardware_uart: USB_SERIAL_JTAG
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [sd_card_test, wm8960_audio_test]
+
+i2c:
+  id: codec_bus
+  sda: GPIO22
+  scl: GPIO23
+  scan: true
+  frequency: 100kHz
+
+wm8960_audio_test:
+  id: codec_audio_test
+  i2c_id: codec_bus
+  address: 0x1A
+  bclk_pin: 0
+  lrclk_pin: 1
+  adc_pin: 2
+  dac_pin: 16
+  output: headphone
+
+sd_card_test:
+  clk_pin: 19
+  miso_pin: 20
+  mosi_pin: 18
+  cs_pin: 21
 
 interval:
   - interval: 2s
