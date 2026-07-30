@@ -269,6 +269,13 @@ to `D0`, purple pin 35 to `D1`, orange pin 38 to `D2`, and green pin 40 to
 **Stop if recording or playback fails.** Do not modify a board that has not
 passed this stock test.
 
+**Checkpoint result, 2026-07-29: PASS.** The onboard microphone recording played
+back clearly through the supplied speaker system. The temporary generated beep
+was audible but choppy; this is a diagnostic-firmware buffering issue, not an
+audio-hardware failure. Final firmware will play a buffered prompt such as
+"Please record a message for the bride and groom after the beep," drain the
+prompt, play a buffered beep, and only then begin recording.
+
 ## Checkpoint 5: Test microSD Storage
 
 Start with a 16 GB or 32 GB high-endurance microSD card.

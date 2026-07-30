@@ -37,6 +37,17 @@ void WM8960AudioTest::loop() {
       break;
     case TestState::WAITING_TO_RECORD:
       if (millis() - this->state_started_at_ >= 250) {
+        std::array<int16_t, FRAMES_PER_BLOCK * 2> discarded_audio{};
+        size_t discarded_frames = 0;
+        for (size_t block = 0; block < 8; block++) {
+          size_t bytes_read = 0;
+          if (i2s_channel_read(this->rx_handle_, discarded_audio.data(), sizeof(discarded_audio), &bytes_read, 0) !=
+                  ESP_OK ||
+              bytes_read == 0)
+            break;
+          discarded_frames += bytes_read / (2 * sizeof(int16_t));
+        }
+        ESP_LOGI(TAG, "Discarded %u stale microphone frames before recording", discarded_frames);
         ESP_LOGI(TAG, "RECORDING NOW: speak toward either silver onboard microphone for 4 seconds");
         this->state_ = TestState::RECORDING;
       }
@@ -45,13 +56,13 @@ void WM8960AudioTest::loop() {
       if (!this->record_audio_block_()) {
         this->fail_test_("Could not capture microphone audio");
       } else if (this->captured_samples_ >= RECORD_SAMPLES) {
-        ESP_LOGI(TAG, "Captured microphone peak: %" PRIi32 " of 32767", this->peak_);
+        const float rms = std::sqrt(static_cast<float>(this->sum_squares_) / this->captured_samples_);
+        if (this->peak_ > 0)
+          this->playback_gain_ = std::min(4.0f, std::max(1.0f, 12000.0f / this->peak_));
+        ESP_LOGI(TAG, "Captured microphone peak: %" PRIi32 ", RMS: %.1f, playback gain: %.2fx", this->peak_, rms,
+                 this->playback_gain_);
         ESP_LOGI(TAG, "Recording complete; playing it through both test speakers");
-        if (!this->write_register_(0x05, 0x000)) {
-          this->fail_test_("Could not unmute the speakers for playback");
-        } else {
-          this->state_ = TestState::PLAYING;
-        }
+        this->state_ = TestState::PLAYING;
       }
       break;
     case TestState::PLAYING:
@@ -92,25 +103,21 @@ void WM8960AudioTest::start_test_() {
     return;
   }
 
+  ESP_LOGI(TAG, "Initializing the WM8960 codec before starting I2S clocks");
+  if (!this->initialize_codec_()) {
+    this->fail_test_("Could not initialize the WM8960 codec");
+    return;
+  }
+
   ESP_LOGI(TAG, "Initializing the ESP32 I2S peripheral");
   if (!this->initialize_i2s_()) {
     this->fail_test_("Could not initialize the ESP32 I2S peripheral");
     return;
   }
 
-  ESP_LOGI(TAG, "Initializing the WM8960 codec at low speaker volume");
-  if (!this->initialize_codec_()) {
-    this->fail_test_("Could not initialize the WM8960 codec");
-    return;
-  }
-
   ESP_LOGI(TAG, "Playing the start beep");
   if (!this->play_tone_()) {
     this->fail_test_("Could not play the start beep");
-    return;
-  }
-  if (!this->write_register_(0x05, 0x008)) {
-    this->fail_test_("Could not mute the speakers before recording");
     return;
   }
   this->state_started_at_ = millis();
@@ -201,8 +208,8 @@ bool WM8960AudioTest::initialize_codec_() {
       {0x21, 0x138, 0},   // Right input boost path.
       {0x22, 0x150, 0},   // Left DAC to output mixer.
       {0x25, 0x150, 0},   // Right DAC to output mixer.
-      {0x28, 0x06D, 0},   // Left speaker PGA -12 dB.
-      {0x29, 0x16D, 0},   // Right speaker PGA -12 dB; update both.
+      {0x28, 0x073, 0},   // Left speaker PGA -6 dB.
+      {0x29, 0x173, 0},   // Right speaker PGA -6 dB; update both.
       {0x2F, 0x03C, 0},   // Input PGAs and output mixers on.
       {0x19, 0x0FC, 0},   // VMID, VREF, inputs and ADCs on.
       {0x1A, 0x199, 0},   // DACs, speaker PGAs and PLL on.
@@ -234,14 +241,25 @@ bool WM8960AudioTest::write_register_(uint8_t reg, uint16_t value) {
 
 bool WM8960AudioTest::play_tone_() {
   std::array<int16_t, FRAMES_PER_BLOCK * 2> stereo{};
-  constexpr size_t frames = SAMPLE_RATE / 3;
+  constexpr size_t frames = SAMPLE_RATE * 4 / 10;
+  constexpr size_t fade_frames = SAMPLE_RATE / 100;
   size_t completed = 0;
+
+  // Let the newly enabled DAC and class-D path settle before generating the tone.
+  for (size_t block = 0; block < 7; block++) {
+    size_t written = 0;
+    if (i2s_channel_write(this->tx_handle_, stereo.data(), sizeof(stereo), &written, 1000) != ESP_OK)
+      return false;
+  }
 
   while (completed < frames) {
     const size_t block_frames = std::min(FRAMES_PER_BLOCK, frames - completed);
     for (size_t index = 0; index < block_frames; index++) {
-      const float phase = 2.0f * PI * 880.0f * static_cast<float>(completed + index) / SAMPLE_RATE;
-      const int16_t sample = static_cast<int16_t>(std::sin(phase) * 1000.0f);
+      const size_t position = completed + index;
+      const float phase = 2.0f * PI * 1000.0f * static_cast<float>(position) / SAMPLE_RATE;
+      const float fade_in = std::min(1.0f, static_cast<float>(position) / fade_frames);
+      const float fade_out = std::min(1.0f, static_cast<float>(frames - position) / fade_frames);
+      const int16_t sample = static_cast<int16_t>(std::sin(phase) * 8000.0f * std::min(fade_in, fade_out));
       stereo[index * 2] = sample;
       stereo[index * 2 + 1] = sample;
     }
@@ -261,9 +279,17 @@ bool WM8960AudioTest::play_tone_() {
 }
 
 bool WM8960AudioTest::record_audio_block_() {
+  std::array<int16_t, FRAMES_PER_BLOCK * 2> silence{};
+  size_t bytes_written = 0;
+  esp_err_t error = i2s_channel_write(this->tx_handle_, silence.data(), sizeof(silence), &bytes_written, 1000);
+  if (error != ESP_OK) {
+    ESP_LOGE(TAG, "I2S silence write failed: %s", esp_err_to_name(error));
+    return false;
+  }
+
   std::array<int16_t, FRAMES_PER_BLOCK * 2> stereo{};
   size_t bytes_read = 0;
-  const esp_err_t error = i2s_channel_read(this->rx_handle_, stereo.data(), sizeof(stereo), &bytes_read, 1000);
+  error = i2s_channel_read(this->rx_handle_, stereo.data(), sizeof(stereo), &bytes_read, 1000);
   if (error != ESP_OK) {
     ESP_LOGE(TAG, "I2S microphone read failed: %s", esp_err_to_name(error));
     return false;
@@ -271,9 +297,12 @@ bool WM8960AudioTest::record_audio_block_() {
   const size_t frames_read = bytes_read / (2 * sizeof(int16_t));
   const size_t frames_to_copy = std::min(frames_read, RECORD_SAMPLES - this->captured_samples_);
   for (size_t index = 0; index < frames_to_copy; index++) {
-    const int16_t sample = stereo[index * 2];
+    const int32_t left = stereo[index * 2];
+    const int32_t right = stereo[index * 2 + 1];
+    const int16_t sample = static_cast<int16_t>((left + right) / 2);
     this->recording_[this->captured_samples_ + index] = sample;
     this->peak_ = std::max(this->peak_, std::abs(static_cast<int32_t>(sample)));
+    this->sum_squares_ += static_cast<int64_t>(sample) * sample;
   }
   this->captured_samples_ += frames_to_copy;
   return true;
@@ -283,7 +312,9 @@ bool WM8960AudioTest::play_audio_block_() {
   std::array<int16_t, FRAMES_PER_BLOCK * 2> stereo{};
   const size_t block_frames = std::min(FRAMES_PER_BLOCK, RECORD_SAMPLES - this->played_samples_);
   for (size_t index = 0; index < block_frames; index++) {
-    const int16_t sample = this->recording_[this->played_samples_ + index] / 2;
+    const int32_t scaled = static_cast<int32_t>(
+        std::lround(this->recording_[this->played_samples_ + index] * this->playback_gain_));
+    const int16_t sample = static_cast<int16_t>(std::clamp<int32_t>(scaled, -16000, 16000));
     stereo[index * 2] = sample;
     stereo[index * 2 + 1] = sample;
   }
@@ -300,17 +331,6 @@ bool WM8960AudioTest::play_audio_block_() {
 
 void WM8960AudioTest::shutdown_() {
   if (this->tx_handle_ != nullptr) {
-    this->write_register_(0x05, 0x008);
-    delay(35);
-    this->write_register_(0x31, 0x037);
-    this->write_register_(0x1A, 0x001);
-    this->write_register_(0x2F, 0x000);
-    this->write_register_(0x19, 0x0C0);
-    this->write_register_(0x04, 0x0DC);
-    this->write_register_(0x1A, 0x000);
-    this->write_register_(0x1C, 0x09C);
-    this->write_register_(0x19, 0x000);
-
     if (this->rx_handle_ != nullptr)
       i2s_channel_disable(this->rx_handle_);
     i2s_channel_disable(this->tx_handle_);
@@ -320,6 +340,18 @@ void WM8960AudioTest::shutdown_() {
     this->rx_handle_ = nullptr;
     this->tx_handle_ = nullptr;
   }
+
+  // The bench HAT lacks strong I2C pull-ups, so stop the fast audio clocks before control writes.
+  this->write_register_(0x05, 0x008);
+  delay(35);
+  this->write_register_(0x31, 0x037);
+  this->write_register_(0x1A, 0x001);
+  this->write_register_(0x2F, 0x000);
+  this->write_register_(0x19, 0x0C0);
+  this->write_register_(0x04, 0x0DC);
+  this->write_register_(0x1A, 0x000);
+  this->write_register_(0x1C, 0x09C);
+  this->write_register_(0x19, 0x000);
 }
 
 }  // namespace esphome::wm8960_audio_test

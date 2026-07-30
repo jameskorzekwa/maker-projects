@@ -255,6 +255,18 @@ FreeRTOS audio task: the setup-task reset succeeded, but the first post-I2S
 worker-task write failed. The corrected implementation is a nonblocking
 ESPHome main-loop state machine, keeping all codec I2C operations on the I2C
 owner task while processing recording and playback one I2S block at a time.
+That build still received I2C NACKs after the audio clocks started, confirming
+the HAT's lack of external SDA/SCL pull-ups matters with the loose bench wiring.
+The current diagnostic configures the codec before starting I2S, continuously
+transmits silence during capture, and stops I2S before codec shutdown. Add the
+documented 4.7 kohm pull-ups to 3.3 V before the final permanent build needs
+codec control while audio clocks are active.
+
+The reordered test passed on 2026-07-29: microphone capture and spoken-audio
+playback were clear. The generated test beep remained choppy even after its
+level and envelope were improved. This does not block hardware acceptance;
+final firmware must prebuffer prompt and beep PCM, finish speaker playback, and
+start capture only after the output pipeline reports idle.
 
 ## 6. Adapt the Original Handset Microphone
 

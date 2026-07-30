@@ -16,8 +16,9 @@ modifications.
 Hardware characterization and bench bring-up. The controller, GPIO table, hook
 switch, handset pairs, 129.3 ohm earpiece, and microphone polarity are confirmed.
 The XIAO detects the unmodified WM8960 Audio HAT at its expected I2C address,
-`0x1A`. A temporary USB-only firmware now provides a low-volume, four-second
-stock I2S record/playback test. The physical audio test is pending.
+`0x1A`. The stock I2S test recorded clear audio from an onboard microphone and
+played it through the supplied speaker system. Audio hardware bring-up passed;
+microSD storage, hook-switch integration, and handset adaptation remain.
 
 ## Selected Hardware
 
@@ -41,6 +42,8 @@ onboard antenna, and a u.FL antenna connector.
 ## Requirements
 
 - Play instructions when the handset is lifted.
+- Initial prompt wording: "Please record a message for the bride and groom after
+  the beep." Final wording may be replaced without changing the firmware flow.
 - Play a short beep after the instructions.
 - Record mono voice audio immediately after the beep.
 - Stop and safely finalize the recording when the handset is replaced.
