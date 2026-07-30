@@ -223,6 +223,11 @@ microSD board, or any I2S signal yet.
 **Stop if `0x1A` is absent.** Disconnect USB immediately if either board becomes
 warm. Do not add I2S wiring until this probe succeeds.
 
+**Checkpoint result, 2026-07-29: PASS.** With the four wires on header pins 2,
+3, 5, and 6 at the right-microphone end, the ESPHome scan found the WM8960 at
+address `0x1A`. The XIAO, Audio board power, and I2C control connection are
+working.
+
 ### Checkpoint 4B: Record and Play Through I2S
 
 After the audio test firmware is ready:
