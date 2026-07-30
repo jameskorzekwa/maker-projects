@@ -211,6 +211,13 @@ microphone. Modify the right-side `MIC1` channel for the handset. The 3.5 mm
 jack is output-only. The screw-terminal outputs are labeled left to right as
 `LP`, `LN`, `RN`, and `RP`; `LN` and `RN` are driven outputs, not ground.
 
+In this same orientation, Raspberry Pi header pins 1 and 2 are the far-right
+pair below `MIC1`, beside the button. Pin 1 is in the row closer to the board
+components; pin 2 is directly below it in the row closer to the board edge.
+Numbering continues right-to-left, with odd pins in the component-side row and
+even pins in the edge-side row. The far-left pair by the earphone jack is pins
+39 and 40, not pins 1 and 2.
+
 Confirm these connections against the delivered PCB before use. The Audio HAT
 is powered from 5 V but uses 3.3 V logic. It contains a 24 MHz oscillator, so
 the Raspberry Pi header does not require an ESP32 MCLK connection.
