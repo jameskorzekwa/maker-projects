@@ -92,6 +92,11 @@ The delivered board is Waveshare-branded and visually matches the
 reference design. Complete its stock record and playback test before modifying
 it.
 
+The initial I2C-only probe is provided as an
+[ESPHome configuration](esphome/rotary-phone.yaml). It uses the HA ESPHome
+Device Builder to verify that the unmodified codec responds at address `0x1A`
+before I2S, speakers, handset wiring, or microSD are connected.
+
 ## Phase 1: Characterize the Phone
 
 The Amazon listing does not document the phone's internal circuitry. Complete
