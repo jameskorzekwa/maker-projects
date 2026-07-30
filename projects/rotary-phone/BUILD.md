@@ -174,6 +174,12 @@ White wire S3 --------------------------- insulated and unused
 The firmware will read `LOW` while the handset is down and `HIGH` when the
 handset is lifted.
 
+**Bench result, 2026-07-29: PASS.** With `S2` connected directly to `D7`, `S4`
+to ground, the XIAO's internal pull-up enabled, and 150 ms firmware debounce,
+the logs consistently reported `ON CRADLE`, `LIFTED`, and the corresponding
+transition events. Install the external 10 kohm resistor and 100 nF capacitor
+shown above before permanent assembly.
+
 ## Checkpoint 4: Test the Unmodified Audio Board
 
 Do not remove either silver microphone from the Audio board yet.
