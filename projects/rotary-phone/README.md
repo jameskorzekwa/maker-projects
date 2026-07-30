@@ -1,6 +1,6 @@
 # Rotary Phone Wedding Audio Guestbook
 
-An ESP32-C5-based audio guestbook built into a rotary-style telephone. When a
+An ESP32-C6-based audio guestbook built into a rotary-style telephone. When a
 guest lifts the handset, the phone plays prerecorded instructions and a beep.
 It then records the guest's message until the handset is replaced. Every
 message is saved to microSD, with optional background upload to cloud storage.
@@ -8,19 +8,19 @@ message is saved to microSD, with optional background upload to cloud storage.
 Follow the plain-language [step-by-step build guide](BUILD.md) one checkpoint at
 a time. Component-level explanations, measurements, and the complete test plan
 are kept separately in [TECHNICAL.md](TECHNICAL.md). Do not skip a stop point:
-the ESP32 board pin labels and original handset parts must be verified before
-final wiring or irreversible modifications.
+the original handset parts must be measured before final wiring or irreversible
+modifications.
 
 ## Project Status
 
 Hardware characterization and bench bring-up. The hook switch and handset wire
-colors are known. The handset earpiece resistance, microphone type, and exposed
-ESP32 pins still need to be recorded before the final GPIO table is created.
+colors are known. The handset earpiece resistance and microphone type still
+need to be recorded. The controller and GPIO table are now confirmed.
 
 ## Selected Hardware
 
 - [Dyna-Living vintage rotary-style telephone](https://a.co/d/09yagHqx)
-- [ESP32-C5 Mini development board](https://www.aliexpress.us/item/3256812460666139.html)
+- [Seeed Studio XIAO ESP32-C6](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/)
 - [Waveshare WM8960 Audio HAT](https://www.amazon.com/dp/B098R7TTM4),
   sold through the BFab listing
 - [Adafruit MicroSD Card Breakout Board+ product 254](https://www.adafruit.com/product/254),
@@ -31,11 +31,10 @@ vintage telephone. Its listing says the handset and telephone cords plug into
 the base and that it requires no batteries. The original telephone-line
 circuit will not be used.
 
-The controller board is marked `ESP32-C5_MINI_V1.0`. It provides USB-C power
-and programming, dual-band Wi-Fi, an onboard antenna, a u.FL antenna connector,
-and a limited selection of exposed GPIO pins. The seller does not provide a
-reliable schematic, so its pin mapping and flash configuration must be verified
-on the received board.
+The controller's front label identifies it as a Seeed Studio XIAO ESP32-C6.
+Photos of its back confirm the complete `D0` through `D10`, `VBUS`, `GND`, and
+`3V3` pin labels. It provides USB-C power and programming, 2.4 GHz Wi-Fi 6, an
+onboard antenna, and a u.FL antenna connector.
 
 ## Requirements
 
@@ -54,7 +53,7 @@ on the received board.
 
 ```text
 Handset microphone ---+
-                      +-- WM8960 audio codec -- I2S/I2C -- ESP32-C5
+                      +-- WM8960 audio codec -- I2S/I2C -- ESP32-C6
 Handset earpiece ------+                              |
                                                      +-- SPI microSD
 Cradle hook switch ----------------------------------+
@@ -65,7 +64,7 @@ Cradle hook switch ----------------------------------+
 MicroSD is the authoritative storage location. Cloud storage is a secondary,
 asynchronous backup and must never be required to accept a new message.
 
-The ESP32-C5 has one I2S peripheral with separate transmit and receive channels
+The ESP32-C6 has one I2S peripheral with separate transmit and receive channels
 and DMA support. That is sufficient because playback and recording happen in
 sequence. It also supports microSD through the SD SPI host driver.
 
@@ -75,7 +74,7 @@ sequence. It also supports microSD through the SD SPI host driver.
 
 | Item | Purpose | Notes |
 | --- | --- | --- |
-| ESP32-C5 Mini board | Main controller | Buy one spare |
+| Seeed Studio XIAO ESP32-C6 | Main controller | Verified from received photos |
 | Waveshare WM8960 Audio HAT | Microphone ADC and earpiece DAC/amplifier | Delivered Waveshare-branded board sold through the BFab listing |
 | Adafruit MicroSD Card Breakout Board+ product 254 | Local storage interface | Use its `5V`, `GND`, `CLK`, `DO`, `DI`, and `CS` connections |
 | 16 GB or 32 GB high-endurance microSD card | Message storage | Buy and test one spare |
@@ -195,7 +194,7 @@ pulse support can be added later without affecting the core guestbook workflow.
 
 ## Phase 2: Build a Bench Prototype
 
-Assemble the ESP32-C5, codec, microSD breakout, mapped hook switch, and a
+Assemble the XIAO ESP32-C6, codec, microSD breakout, mapped hook switch, and a
 test microphone and speaker outside the phone.
 
 Prove the following in order:
@@ -207,9 +206,19 @@ Prove the following in order:
 5. Finalize a valid WAV file on a simulated hang-up.
 6. Repeat without rebooting or leaking resources.
 
-Do not assign final GPIOs until the physical board is checked. Official
-ESP32-C5 documentation identifies GPIO2 and GPIO7 as boot-strapping pins. Avoid
-external circuits that could force those pins to the wrong state during boot.
+The received board photos and Seeed's official pin map establish this complete
+allocation:
+
+<!-- markdownlint-disable MD013 -->
+
+| Job | XIAO pin |
+| --- | --- |
+| Audio I2S bit clock, left/right clock, input, output | `D0`, `D1`, `D2`, `D6` |
+| Audio I2C data and clock | `D4`, `D5` |
+| microSD card select, clock, MISO, MOSI | `D3`, `D8`, `D9`, `D10` |
+| Hook switch | `D7` |
+
+<!-- markdownlint-enable MD013 -->
 
 Expected signal requirements are:
 
@@ -221,7 +230,7 @@ Expected signal requirements are:
 
 ## Phase 3: Firmware
 
-Use the current stable ESP-IDF release with ESP32-C5 support. The initial
+Use the current stable ESP-IDF release with ESP32-C6 support. The initial
 implementation should use a small event-driven state machine rather than audio
 or networking frameworks that obscure file handling.
 
@@ -386,14 +395,13 @@ Acceptance criteria:
 - Whether the device will use venue Wi-Fi, a dedicated hotspot, or local
   storage only.
 - Whether to add a small external status panel or keep indicators concealed.
-- The final GPIO allocation after verifying the exact ESP32-C5 Mini board.
 
 ## Technical References
 
-- [ESP-IDF stable ESP32-C5 documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c5/)
-- [ESP32-C5 I2S documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c5/api-reference/peripherals/i2s.html)
-- [ESP32-C5 SD SPI host documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c5/api-reference/peripherals/sdspi_host.html)
-- [ESP32-C5 GPIO restrictions](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c5/api-reference/peripherals/gpio.html)
+- [Seeed Studio XIAO ESP32-C6](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/)
+- [ESP-IDF stable ESP32-C6 documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/)
+- [ESP32-C6 I2S documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/api-reference/peripherals/i2s.html)
+- [ESP32-C6 SD SPI host documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/api-reference/peripherals/sdspi_host.html)
 - [Waveshare WM8960 Audio Board](https://www.waveshare.com/wiki/WM8960_Audio_Board)
 - [Waveshare WM8960 Audio HAT](https://www.waveshare.com/wiki/WM8960_Audio_HAT)
 - [Waveshare WM8960 Audio HAT schematic](https://files.waveshare.com/upload/f/fa/WM8960_Audio_HAT_Schematic.pdf)
