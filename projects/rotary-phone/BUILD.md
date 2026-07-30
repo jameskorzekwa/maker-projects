@@ -230,7 +230,9 @@ working.
 
 ### Checkpoint 4B: Record and Play Through I2S
 
-After the audio test firmware is ready:
+This test uses the temporary firmware in `esphome/`. It initializes the codec at
+low speaker volume, plays a short beep, records four seconds from an onboard
+microphone, and plays the recording through both test speakers.
 
 <!-- markdownlint-disable MD013 -->
 
@@ -248,12 +250,17 @@ After the audio test firmware is ready:
 <!-- markdownlint-enable MD013 -->
 
 1. Connect the Audio board to the XIAO exactly as shown in the table.
-2. Connect only the small test speaker supplied with the Audio board.
+2. Insert the supplied speakers' keyed four-wire plug into the white `SPEAKER`
+   socket. Do not also use the green screw terminals.
 3. Use the single 5 V power method recorded in the final wiring table. Never
    connect separate USB and external 5 V supplies at the same time.
-4. Record five seconds through the Audio board's built-in microphone.
-5. Play the recording through the test speaker.
-6. Confirm the sound is clear and neither board becomes hot.
+4. Install `esphome/rotary-phone.yaml` over USB and keep USB logs open.
+5. Wait for `Playing the start beep`. After the beep, speak toward either silver
+   onboard microphone for four seconds.
+6. Listen as the firmware immediately plays the recording through both test
+   speakers.
+7. Confirm the beep and speech are audible and neither board becomes hot.
+8. Press the XIAO Reset button to repeat the one-shot test if needed.
 
 **Stop if recording or playback fails.** Do not modify a board that has not
 passed this stock test.

@@ -16,7 +16,8 @@ modifications.
 Hardware characterization and bench bring-up. The controller, GPIO table, hook
 switch, handset pairs, 129.3 ohm earpiece, and microphone polarity are confirmed.
 The XIAO detects the unmodified WM8960 Audio HAT at its expected I2C address,
-`0x1A`. The Audio HAT still requires stock I2S recording and playback tests.
+`0x1A`. A temporary USB-only firmware now provides a low-volume, four-second
+stock I2S record/playback test. The physical audio test is pending.
 
 ## Selected Hardware
 
