@@ -424,11 +424,30 @@ Use short wires and keep them away from the microphone pair. Do not substitute
 the pin names from a different microSD module. The label `DO` maps to ESP32
 `MISO`; `DI` maps to ESP32 `MOSI`.
 
-The board arrived on 2026-07-30 but has not been wired or powered. The initial
-firmware checkpoint will use ESP-IDF SDSPI on `SPI2_HOST`, start at a conservative
-SPI frequency, mount an existing FAT32 filesystem with formatting disabled,
-write and `fsync` a known test file, read it back byte-for-byte, and leave the
-filesystem mounted. This must pass before implementing WAV streaming.
+The storage checkpoint passed on 2026-07-30. The `sd_card_test` component uses
+ESP-IDF SDSPI at 4 MHz, mounts the existing FAT32 filesystem with formatting
+disabled, writes and `fsync`s `SDTEST.TXT`, reads it back byte-for-byte, and
+leaves `/sdcard` mounted. The available card is 196.9 GB; its prior Linux
+contents were intentionally erased on the Mac and replaced with an MBR
+partition table and a single FAT32 volume named `ROTARY`.
+
+Two ESP-IDF configuration gotchas cost debugging time and are load-bearing:
+
+- The default FAT configuration disables long filenames, so any name outside
+  DOS 8.3 form makes `fopen` fail even though the mount succeeded. All card
+  filenames use 8.3 form (`SDTEST.TXT`, `MSG#####.WAV`).
+- ESPHome disables `CONFIG_VFS_SUPPORT_DIR` by default, which makes `opendir`,
+  `readdir`, `rename`, and `unlink` fail while plain file I/O works. The YAML
+  sets `esp32: framework: advanced: disable_vfs_support_dir: false`.
+
+The guestbook recorder built on this checkpoint is verified on the bench: a
+debounced handset lift waits two seconds, beeps through the earpiece, streams
+filtered right-channel handset audio to `/sdcard/MSG#####.TMP` with roughly one
+`fsync` per second, and renames it to `MSG#####.WAV` on hang-up after patching
+the WAV header. Message numbering scans the card at first use; messages under
+half a second are discarded; a five-minute limit finalizes automatically. The
+first real message, `MSG00001.WAV` at 5.5 seconds, logged raw peak 11118 and
+RMS 1643.8 on battery power.
 
 After storage firmware exists:
 
@@ -530,7 +549,8 @@ and Seeed's official pin map. The handset capsule measurements remain open.
 | Handset microphone test | Partial; recognizable but quiet, power-noise limited |
 | Quietest tested source | Standalone battery; laptop USB is unsuitable for recording |
 | Live connectivity | Encrypted ESPHome API over Wi-Fi and password-protected OTA |
-| microSD status | Board received; wiring and filesystem tests pending |
+| microSD status | Wired and verified; FAT mount, write, and readback pass at 4 MHz SDSPI |
+| Guestbook recorder | First message `MSG00001.WAV` saved from a handset lift/hang-up cycle |
 
 <!-- markdownlint-enable MD013 -->
 

@@ -1,34 +1,46 @@
-# ESPHome Bench Tests
+# ESPHome Bench Firmware
 
-`rotary-phone.yaml` is a temporary bench configuration for testing the XIAO
-ESP32-C6 and rotary-phone hardware. The tracked file records an earlier
-checkpoint; the live Device Builder YAML now also has encrypted Wi-Fi API
-access and password-protected OTA.
+`rotary-phone.yaml` is the bench configuration for the XIAO ESP32-C6 and
+rotary-phone hardware. The tracked file matches the live Device Builder YAML
+except for the Wi-Fi, encrypted-API, and OTA credential blocks, which exist
+only on the server. The ESP-IDF `disable_vfs_support_dir: false` option is
+required: ESPHome's default disables `opendir`, `rename`, and `unlink`, which
+the recorder needs for message numbering and crash-safe finalizing.
 
-The hook-switch bench setup on GPIO17/`D7` uses:
+## `wm8960_audio_test` component
 
-- Internal pull-up enabled
-- 150 ms delayed-on and delayed-off debounce
-- `ON CRADLE` and `LIFTED` status every two seconds
-- Immediate lift and replacement event logs
+Despite its historical name, this is now the working guestbook recorder. On
+every debounced handset lift it waits two seconds so the handset can reach the
+ear, initializes the WM8960, plays a beep through the earpiece via the
+headphone output, and streams the handset microphone (right input, `MICBIAS`
+biased, 100 Hz software high-pass) to the card as 16 kHz/16-bit mono PCM.
+Replacing the handset finalizes a numbered `/sdcard/MSG#####.WAV`; recordings
+stream to a `.TMP` file with roughly one `fsync` per second and are renamed on
+completion, so an interruption cannot damage finished messages. Messages
+shorter than half a second are discarded, a five-minute limit finalizes
+automatically, and the cycle rearms after every hang-up. The first real
+message, `MSG00001.WAV`, was recorded and saved on 2026-07-30.
 
-Connect hook wire `S2` to `D7` and `S4` to ground; insulate `S1` and `S3`
-individually. This internal-pull-up setup is for bench testing. The permanent
-circuit still requires the 10 kohm pull-up and 100 nF capacitor in
-[Checkpoint 3](../BUILD.md#checkpoint-3-prepare-the-hook-switch).
+## `sd_card_test` component
 
-Audio hardware testing passed on 2026-07-29 with clear stock spoken-audio
-playback. The live experimental `wm8960_audio_test` has since been adapted for
-the handset earpiece and right `MIC1` input. It enables `MICBIAS`, applies
-software high-pass filtering, reports raw and filtered levels, and compiles
-with repeatable 150 ms debounced hook-triggered cycles. Those live changes are
-diagnostic and have not yet been promoted to production guestbook firmware.
+Verified 2026-07-30. Mounts the FAT filesystem over SDSPI at 4 MHz on
+`D8`/`D9`/`D10` with CS on `D3`, without formatting, then writes and reads back
+`SDTEST.TXT` byte-for-byte. It leaves `/sdcard` mounted for the recorder. File
+names must stay in DOS 8.3 form because long-filename support is disabled in
+the default FAT configuration.
 
-The original handset microphone remains quiet and power-noise limited. Battery
-power and added supply decoupling are substantially quieter than laptop USB.
-A MAX4466 amplified microphone module is planned for the handset after the
-microSD checkpoint.
+## Hook switch
 
-The Adafruit 254 microSD board has arrived. Its first test will use `D3`/GPIO21
-for CS, `D8`/GPIO19 for clock, `D9`/GPIO20 for MISO, and `D10`/GPIO18 for MOSI.
-No card wiring or filesystem test has passed yet.
+The bench setup on GPIO17/`D7` uses the internal pull-up with 150 ms debounce
+in the recorder component, plus a 2-second status log from the YAML. Connect
+hook wire `S2` to `D7` and `S4` to ground; insulate `S1` and `S3` individually.
+The permanent circuit still requires the 10 kohm pull-up and 100 nF capacitor
+in [Checkpoint 3](../BUILD.md#checkpoint-3-prepare-the-hook-switch).
+
+## Known limitations
+
+- The original handset microphone is quiet and power-noise sensitive; battery
+  power with supply decoupling is the quietest tested source. A MAX4466
+  amplified module will replace it inside the handset.
+- Playback of saved messages from Home Assistant's media browser is planned
+  but not yet implemented.

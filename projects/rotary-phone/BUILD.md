@@ -146,8 +146,11 @@ second 5 V supply at the same time.
 **Stop after soldering.** Check continuity for accidental shorts before power
 is connected.
 
-**Current status, 2026-07-30:** board received; header, wiring, card mount, and
-file tests are not yet verified.
+**Checkpoint result, 2026-07-30: PASS.** The board arrived with its header
+already soldered, and continuity checks found no shorts between adjacent pins
+or either power rail. The six required wires were connected to the XIAO and
+verified: `5V` to `VBUS`, `GND` to `GND`, `CLK` to `D8`, `DO` to `D9`, `DI` to
+`D10`, and `CS` to `D3`. `3V` and `CD` remain disconnected.
 
 ## Checkpoint 3: Prepare the Hook Switch
 
@@ -301,6 +304,17 @@ Start with a 16 GB or 32 GB high-endurance microSD card.
 **Stop if any write error occurs.** The guestbook must not be assembled inside
 the phone until storage is reliable.
 
+**Partial result, 2026-07-30: file test PASS.** The available card is a 196.9 GB
+microSD rather than the recommended 16 or 32 GB size. Its previous Linux
+contents were intentionally erased, and it was repartitioned as MBR with a
+single FAT32 volume named `ROTARY`. With the card installed and the phone on
+battery power, the `sd_card_test` firmware mounted the filesystem, wrote
+`SDTEST.TXT` with `fsync`, and read it back byte-for-byte. The first attempt
+failed only because the test filename exceeded the DOS 8.3 limit; ESP-IDF's
+default FAT configuration disables long filenames. The five-minute audio
+recording portion of this checkpoint remains open until the WAV recorder
+firmware exists.
+
 ## Checkpoint 6: Connect the Original Handset
 
 Proceed only after the unmodified Audio board passes its stock recording and
@@ -379,8 +393,10 @@ Repeat the complete lift, record, and hang-up test after closing the case.
 
 ## Current Next Action
 
-Proceed with Checkpoint 2 only. With all power disconnected, inspect the
-Adafruit 254 board, solder its straight header, and stop before connecting it
-to the XIAO. The first powered storage checkpoint will mount an existing FAT32
-filesystem without formatting it, write and flush a known test file, and read
-the file back byte-for-byte before any audio is written to the card.
+The guestbook recorder works end-to-end on the bench: lifting the handset
+plays a beep after a two-second settling delay, streams handset audio to the
+card, and finalizes a numbered `MSG#####.WAV` on hang-up. The first real
+message, `MSG00001.WAV`, saved successfully at 5.5 seconds. Two firmware
+milestones remain before enclosure installation: copying completed messages to
+Home Assistant's media folder for playback from the Media browser, and the
+MAX4466 handset microphone installation after it is delivered.
