@@ -24,7 +24,7 @@ void SDCardTest::setup() {
   this->status_ = "initializing";
 
   sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-  host.max_freq_khz = 4000;
+  host.max_freq_khz = 8000;  // Faster transfers shorten each write's interference window.
   const auto spi_host = static_cast<spi_host_device_t>(host.slot);
 
   spi_bus_config_t bus_config{};
