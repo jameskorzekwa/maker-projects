@@ -55,8 +55,8 @@ starved audio callback means a dropout in someone's message.
 | Phase | Scope | State |
 | --- | --- | --- |
 | 0 | Preserve and document the ESP32 build | Done |
-| 1 | OS, HAT, mixer, and the tick gate test | Tools ready |
-| 2 | Handset wiring: earpiece, microphone, hook switch | |
+| 1 | OS, HAT, mixer, and the tick gate test | Done, gate passed |
+| 2 | Handset wiring: earpiece, microphone, hook switch | Hook switch done |
 | 3 | Recorder application and state machine | |
 | 4 | Robustness: read-only root, service supervision | |
 | 5 | Home Assistant integration over MQTT | |

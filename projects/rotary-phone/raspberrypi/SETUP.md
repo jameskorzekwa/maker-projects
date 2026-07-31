@@ -44,9 +44,17 @@ overlay.
 Edit `/boot/firmware/config.txt`:
 
 ```ini
+dtparam=i2c_arm=on
 dtparam=i2s=on
 dtoverlay=wm8960-soundcard
 ```
+
+All three lines are required. Enabling I2S alone loads the modules and
+registers the I2S controller, but the codec is addressed over I2C, so without
+`i2c_arm` the driver never finds it. The failure is quiet and misleading:
+`lsmod` shows `snd_soc_wm8960` loaded, `dmesg` reports no error, and
+`arecord -l` simply lists nothing. Check `/sys/kernel/debug/asoc/components`
+to see the I2S controller present with no codec beside it.
 
 On Bookworm this file is at `/boot/firmware/config.txt`. Older guides say
 `/boot/config.txt`, which is now a compatibility symlink at best.
@@ -82,18 +90,31 @@ The WM8960 comes up with capture muted and its input routing unset. Nothing
 records until the mixer is configured, and a silent recording at this stage
 almost always means mixer state rather than wiring.
 
-Enumerate the controls before changing anything, because names vary between
-kernel versions:
+The card exposes 53 controls. Enumerate them before changing anything, since
+names vary between kernel versions:
 
 ```bash
 amixer -c wm8960soundcard scontrols
 ```
 
-Expect to set, at minimum:
+On kernel 6.18 the defaults are almost right, with one exception that blocks
+capture entirely:
 
-- The capture switch, to unmute
-- The input boost mixer, to connect `RINPUT1` to the ADC
-- The capture volume
+| Control | Default | Needed |
+| --- | --- | --- |
+| `Capture` | 39/63 (+12 dB), on | fine |
+| `ADC PCM` | 195/255 (0 dB) | fine |
+| `Right Boost Mixer RINPUT1` | on | fine |
+| `Left/Right Input Mixer Boost` | **off** | **on** |
+
+`Input Mixer Boost` connects the input PGA's output into the boost mixer that
+feeds the ADC. With it off the signal path is broken after the PGA, so
+recordings are silent even though every other control looks correct:
+
+```bash
+amixer -c 0 sset 'Right Input Mixer Boost' on
+amixer -c 0 sset 'Left Input Mixer Boost' on
+```
 
 **This board's microphone is on the right channel.** The handset microphone
 reaches the codec through `RINPUT1` by way of the `L3` and `C14` modification
@@ -150,11 +171,63 @@ Interpretation:
 Speak nothing during either recording. The analyzer looks for periodic
 structure, and speech is not periodic but is loud enough to mask what is.
 
+### Result on 2026-07-31
+
+```text
+control.wav (card idle)      peak 1274   floor 71   spikes 1
+loaded.wav  (card hammered)  peak  395   floor 57   spikes 0
+```
+
+No spikes at all while writing hard to the card, and the loaded take carries a
+*lower* noise floor than the idle one. Write current coupling into the front
+end would raise it, not lower it. The single spike in the control take was
+room noise.
+
+The tick that the ESP32 build could only mask, at a cost of 3.4% of every
+recording, does not occur here. The premise of the migration holds, and the
+mute machinery does not need porting.
+
+One caveat worth keeping: this ran at modest capture gain, +12 dB on the input
+PGA and 0 dB on the ADC, not the gain the finished recorder will use. Repeat
+the comparison once the application records at production levels.
+
 ## 7. Wire the hook switch
 
-Deferred to Phase 2, but note the constraint now: the HAT occupies the I2S
-pins (GPIO 18, 19, 20, 21) and I2C (GPIO 2, 3). Choose a hook switch pin clear
-of both. GPIO 17 or GPIO 27 are free and convenient.
+The HAT claims GPIO 2 and 3 for I2C, GPIO 18 to 21 for I2S, and GPIO 0 and 1
+for its ID EEPROM. Confirm with `pinctrl get 0-27` before choosing a pin
+rather than trusting a pinout diagram, since audio HATs sometimes take extra
+GPIOs for amplifier enable or mute.
 
-The debounce network characterised during the ESP32 build carries over
-unchanged: 10 kOhm pull-up with a 100 nF capacitor across the switch.
+GPIO 17 is free. Wire the cradle switch between:
+
+- **Physical pin 11**, GPIO 17, signal
+- **Physical pin 9**, ground
+
+They are adjacent on the same row, which keeps it to a clean two-wire tap. The
+switch is a passive mechanical contact, so the wires are interchangeable.
+
+Isolate both wires from the original telephone PCB. Nothing from the old line
+circuit should reach a 3.3 V input.
+
+### Measured behaviour
+
+Enable the internal pull-up (`pinctrl set 17 ip pu`, or `pull_up=True` in
+gpiozero) and the pin idles high.
+
+| Handset | GPIO 17 |
+| --- | --- |
+| On cradle | LOW (switch closed to ground) |
+| Lifted | HIGH (switch open, pull-up) |
+
+This matches the low-idle, high-off-hook signal characterised during the ESP32
+build, measured independently here.
+
+Sampling the pin in a tight loop across several deliberate lift and replace
+cycles produced **seven transitions and no bounce at all**, every edge
+separated by more than a second. The loop samples in the tens of kHz, so
+millisecond-scale chatter would have appeared.
+
+No external pull-up or debounce capacitor is required. Keep roughly 100 ms of
+software debounce anyway: the measurement used slow deliberate movements, and
+a guest dropping the handset onto the cradle is a harsher test than anything
+recorded here.
