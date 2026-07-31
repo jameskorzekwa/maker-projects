@@ -15,6 +15,19 @@ logger:
   level: DEBUG
   hardware_uart: USB_SERIAL_JTAG
 
+# The live configuration adds wifi, api, ota and captive_portal blocks that are kept out of the
+# repository because they carry credentials. One setting there is not optional and must survive
+# any rebuild of that config:
+#
+#   wifi:
+#     power_save_mode: none
+#
+# Without it the radio takes a modem sleep, and pm_sleep -> esp_phy_disable -> the temperature
+# sensor read stalls long enough to trip the interrupt watchdog. The device reboots, and because
+# the template text sensor below does not restore across a boot, the message that had just been
+# saved is never announced to Home Assistant. The recording survives on the card; the
+# notification does not.
+
 external_components:
   - source:
       type: local

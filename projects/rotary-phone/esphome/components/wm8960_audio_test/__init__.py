@@ -7,6 +7,7 @@ CONF_ADC_PIN = "adc_pin"
 CONF_BCLK_PIN = "bclk_pin"
 CONF_DAC_PIN = "dac_pin"
 CONF_LRCLK_PIN = "lrclk_pin"
+CONF_OUTPUT = "output"
 
 DEPENDENCIES = ["i2c"]
 
@@ -23,6 +24,9 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_LRCLK_PIN): cv.int_range(min=0, max=30),
             cv.Required(CONF_ADC_PIN): cv.int_range(min=0, max=30),
             cv.Required(CONF_DAC_PIN): cv.int_range(min=0, max=30),
+            cv.Optional(CONF_OUTPUT, default="speaker"): cv.one_of(
+                "speaker", "headphone", lower=True
+            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -38,3 +42,4 @@ async def to_code(config):
     cg.add(var.set_lrclk_pin(config[CONF_LRCLK_PIN]))
     cg.add(var.set_adc_pin(config[CONF_ADC_PIN]))
     cg.add(var.set_dac_pin(config[CONF_DAC_PIN]))
+    cg.add(var.set_headphone_output(config[CONF_OUTPUT] == "headphone"))

@@ -27,11 +27,15 @@ static constexpr size_t FRAMES_PER_BLOCK = 256;
 static constexpr size_t MAX_RECORD_SAMPLES = SAMPLE_RATE * 300;  // Five-minute message limit.
 static constexpr size_t MIN_KEEP_SAMPLES = SAMPLE_RATE / 2;      // Discard sub-half-second messages.
 static constexpr size_t SAMPLES_PER_SYNC = SAMPLE_RATE * 8;      // fsync stalls the card; keep them rare.
-static constexpr size_t RING_CAPACITY = 32768;                   // Two seconds of audio between mic and card.
+// 128 KB: four seconds of audio between microphone and card. Must stay a power of two because
+// the ring indexes through RING_MASK. If this allocation ever fails, setup() says so and the
+// component marks itself failed rather than recording garbage.
+static constexpr size_t RING_CAPACITY = 65536;
 static constexpr size_t RING_MASK = RING_CAPACITY - 1;
-// Diagnostic cadence: one large write every ~1.5 s. If the recorded ticking slows to match,
-// the card's write-current spikes are coupling into the microphone line electrically.
-static constexpr size_t WRITE_CHUNK_SAMPLES = 24576;
+// One write per ~3.1 s instead of ~1.5 s. Each burst costs a fixed ~39 ms of card latency plus
+// transfer time, so halving the write count removes half the disturbances outright and leaves
+// a full second of ring headroom to keep capturing while the card is busy.
+static constexpr size_t WRITE_CHUNK_SAMPLES = 49152;
 static constexpr uint32_t LIFT_TO_BEEP_DELAY_MS = 2000;          // Time to raise the handset to the ear.
 static constexpr uint32_t WAV_HEADER_BYTES = 44;
 static constexpr float PI = 3.14159265358979323846f;
@@ -510,6 +514,24 @@ static constexpr int32_t FILTER_SHIFT = 13;
 static constexpr int32_t HIGH_PASS_300HZ[5] = {7537, -15074, 7537, -15022, 6935};
 static constexpr int32_t LOW_PASS_3800HZ[5] = {2214, 4428, 2214, -754, 1418};
 
+// The tick survived the preamp, an isolated preamp supply, and a codec-analog ground reference.
+// It is the card's 100-200 mA write surge coupling into the front end, which is a hardware
+// problem software cannot remove. What software does know is exactly when each write happens,
+// so mute that window instead of letting the tick through.
+static constexpr bool DUCK_ENABLED = true;
+
+// Margin covers surge leading and trailing the blocking call. DUCK_EDGE_MS is only consulted
+// when DUCK_FULL_WINDOW is false, and is kept so the cheaper option can be re-measured if the
+// coupling is ever fixed in hardware.
+static constexpr uint32_t DUCK_MARGIN_MS = 10;
+static constexpr uint32_t DUCK_EDGE_MS = 20;
+// Edge-only muting was retried at correct gain, once the clipping that could have masked the
+// verdict was gone, and the tick returned while the mutes stayed audible: worse on both counts.
+// The disturbance genuinely spans the whole burst, so mute all of it. This is the software
+// ceiling; the ~120 ms gap every 3 s it costs is the price until the coupling is fixed in
+// hardware.
+static constexpr bool DUCK_FULL_WINDOW = true;
+
 // Gain 0..32 for one duck window with 2 ms linear fades at both edges.
 static int32_t duck_window_gain(size_t sample, size_t from, size_t to) {
   if (to <= from || sample < from || sample >= to)
@@ -557,15 +579,19 @@ bool WM8960AudioTest::record_audio_block_() {
       const int32_t band_limited = run_biquad(
           LOW_PASS_3800HZ, this->band_pass_state_[1],
           run_biquad(HIGH_PASS_300HZ, this->band_pass_state_[0], slot_1));
-      int32_t amplified = band_limited * 5 / 2;  // 2.5x makeup gain after filtering.
-      // The card ticks the analog path at each write's start and end; two 12 ms micro-mutes,
-      // targeted by continuous sample index, remove them without eating the speech between.
-      const size_t global_index = this->captured_samples_ + index;
-      const int32_t duck_gain =
-          std::min(duck_window_gain(global_index, this->duck_a_from_, this->duck_a_to_),
-                   duck_window_gain(global_index, this->duck_b_from_, this->duck_b_to_));
-      if (duck_gain < 32)
-        amplified = amplified * duck_gain / 32;
+      // No digital makeup gain: the MAX4466 sets the level in analog, ahead of the ADC, so the
+      // codec sees a real signal instead of quantization noise multiplied after the fact.
+      int32_t amplified = band_limited;
+      if (DUCK_ENABLED) {
+        // Mute the window the last card write occupied, located by continuous sample index so
+        // the audio drained after the write still lines up with when it happened.
+        const size_t global_index = this->captured_samples_ + index;
+        const int32_t duck_gain =
+            std::min(duck_window_gain(global_index, this->duck_a_from_, this->duck_a_to_),
+                     duck_window_gain(global_index, this->duck_b_from_, this->duck_b_to_));
+        if (duck_gain < 32)
+          amplified = amplified * duck_gain / 32;
+      }
       const int16_t sample = static_cast<int16_t>(std::clamp<int32_t>(amplified, -32767, 32767));
       if (this->ring_count_ == RING_CAPACITY) {
         // Sacrifice the oldest audio rather than corrupting the stream; log once per message.
@@ -590,7 +616,6 @@ bool WM8960AudioTest::record_audio_block_() {
 
   // One large chunk per pass: rare bursts, each with two matching micro-mutes in the audio.
   if (this->ring_count_ >= WRITE_CHUNK_SAMPLES) {
-    static constexpr size_t EDGE_SAMPLES = 12 * (SAMPLE_RATE / 1000);  // 12 ms per transient.
     const size_t base = this->captured_samples_;
     const uint32_t write_started_ms = millis();
     if (!this->write_ring_to_file_(WRITE_CHUNK_SAMPLES))
@@ -603,11 +628,21 @@ bool WM8960AudioTest::record_audio_block_() {
       }
     }
     const uint32_t write_ms = millis() - write_started_ms;
-    const size_t span = static_cast<size_t>(write_ms + 10) * (SAMPLE_RATE / 1000);
-    this->duck_a_from_ = base;
-    this->duck_a_to_ = base + EDGE_SAMPLES;  // Current step as the write begins.
-    this->duck_b_to_ = base + span;          // Trailing transient as the card finishes.
-    this->duck_b_from_ = span > EDGE_SAMPLES ? base + span - EDGE_SAMPLES : base;
+    const size_t span = static_cast<size_t>(write_ms + DUCK_MARGIN_MS) * (SAMPLE_RATE / 1000);
+    const size_t edge = DUCK_EDGE_MS * (SAMPLE_RATE / 1000);
+    if (DUCK_FULL_WINDOW) {
+      this->duck_a_from_ = base;
+      this->duck_a_to_ = base + span;
+      this->duck_b_from_ = 0;  // One window covers everything; the second pair stays disarmed.
+      this->duck_b_to_ = 0;
+    } else {
+      this->duck_a_from_ = base;                                 // Current steps up here.
+      this->duck_a_to_ = base + std::min(edge, span);
+      this->duck_b_to_ = base + span;                            // And back down here.
+      this->duck_b_from_ = span > edge ? base + span - edge : base;
+    }
+    ESP_LOGD(TAG, "card write took %" PRIu32 " ms, muting %s of a %.0f ms window", write_ms,
+             DUCK_FULL_WINDOW ? "all" : "2x20 ms", 1000.0f * span / SAMPLE_RATE);
   }
   return true;
 }
@@ -735,9 +770,13 @@ bool WM8960AudioTest::initialize_codec_() {
       {0x07, 0x002, 0},   // Peripheral mode, Philips I2S, 16-bit samples.
       {0x06, 0x008, 0},   // Gradual DAC soft-unmute.
       {0x00, 0x027, 0},   // Left input PGA +12 dB.
-      {0x01, 0x13F, 0},   // Right handset input PGA +30 dB; update both.
+      // INVOL counts 0.75 dB steps from -17.25 dB at 0, so 23 is 0 dB. Recordings railed at full
+      // scale with RMS up to 25000, so take 15 dB out here (INVOL 3) rather than wait on the
+      // preamp trimmer. The trimmer is still the better place to fix this: attenuating after a
+      // too-hot preamp wastes the headroom instead of never overdriving the input at all.
+      {0x01, 0x103, 0},   // Right input PGA -15 dB.
       {0x20, 0x138, 0},   // Left input boost path.
-      {0x21, 0x128, 0},   // Right handset input boost +20 dB: the boost mixer is the noisiest stage.
+      {0x21, 0x108, 0},   // Right input boost 0 dB: no codec gain belongs ahead of a preamp.
       {0x22, 0x150, 0},   // Left DAC to output mixer.
       {0x25, 0x150, 0},   // Right DAC to output mixer.
       // Sidetone (0x2E right-boost bypass) stays OFF: at +50 dB front-end gain it feeds back
