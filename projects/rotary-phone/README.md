@@ -27,10 +27,16 @@ password-protected OTA. The Adafruit microSD board is wired and verified: the
 `fsync`, and reads it back byte-for-byte. The guestbook recorder works on the
 bench: every handset lift beeps after a two-second delay and streams handset
 audio to a numbered, crash-safe `MSG#####.WAV`, finalized on hang-up. The first
-real message saved successfully on 2026-07-30. Saved messages are now playable
+real message saved successfully on 2026-07-30. Saved messages are playable
 from Home Assistant's Media browser: the phone serves recordings over HTTP, a
-`Last Message` sensor announces each new file, and an HA automation copies it
-into `/media/rotary-phone`. The MAX4466 handset microphone remains next.
+`Last Message` sensor announces each new file, and HA automations copy it into
+`/media/rotary-phone` and send a tap-to-listen phone notification. The phone
+now also provisions itself like the planned rental product: with no stored
+network it broadcasts a setup AP with a branded captive portal, joined by
+scanning a printed QR code — the full flow passed end-to-end on 2026-07-31.
+An ElevenLabs greeting with an embedded beep plays before each recording.
+Known issues: card-write ticking in recordings (software micro-mutes under
+test) and low original-microphone level; the MAX4466 install is next.
 
 ## Current Bench Findings
 

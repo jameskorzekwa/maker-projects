@@ -5,12 +5,16 @@
 #include "esphome/core/log.h"
 
 #include "driver/gpio.h"
+#include "esp_wifi.h"
 
 #include <algorithm>
 #include <array>
 #include <cinttypes>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include <string>
+#include <vector>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -22,7 +26,12 @@ static constexpr uint32_t SAMPLE_RATE = 16000;
 static constexpr size_t FRAMES_PER_BLOCK = 256;
 static constexpr size_t MAX_RECORD_SAMPLES = SAMPLE_RATE * 300;  // Five-minute message limit.
 static constexpr size_t MIN_KEEP_SAMPLES = SAMPLE_RATE / 2;      // Discard sub-half-second messages.
-static constexpr size_t BLOCKS_PER_SYNC = 62;                    // Roughly one fsync per second.
+static constexpr size_t SAMPLES_PER_SYNC = SAMPLE_RATE * 8;      // fsync stalls the card; keep them rare.
+static constexpr size_t RING_CAPACITY = 32768;                   // Two seconds of audio between mic and card.
+static constexpr size_t RING_MASK = RING_CAPACITY - 1;
+// Diagnostic cadence: one large write every ~1.5 s. If the recorded ticking slows to match,
+// the card's write-current spikes are coupling into the microphone line electrically.
+static constexpr size_t WRITE_CHUNK_SAMPLES = 24576;
 static constexpr uint32_t LIFT_TO_BEEP_DELAY_MS = 2000;          // Time to raise the handset to the ear.
 static constexpr uint32_t WAV_HEADER_BYTES = 44;
 static constexpr float PI = 3.14159265358979323846f;
@@ -31,6 +40,12 @@ void WM8960AudioTest::setup() {
   // Reset immediately so a previous interrupted cycle cannot leave the amplifiers enabled.
   if (!this->write_register_(0x0F, 0x000)) {
     ESP_LOGE(TAG, "Could not reset the WM8960 codec");
+    this->mark_failed();
+    return;
+  }
+  this->ring_ = static_cast<int16_t *>(malloc(RING_CAPACITY * sizeof(int16_t)));
+  if (this->ring_ == nullptr) {
+    ESP_LOGE(TAG, "Could not allocate the recording ring buffer");
     this->mark_failed();
     return;
   }
@@ -71,6 +86,110 @@ void WM8960AudioTest::start_http_server_() {
   file_uri.handler = WM8960AudioTest::handle_message_file_;
   file_uri.user_ctx = this;
   httpd_register_uri_handler(this->http_server_, &file_uri);
+  httpd_uri_t prompt_uri{};
+  prompt_uri.uri = "/prompt";
+  prompt_uri.method = HTTP_PUT;
+  prompt_uri.handler = WM8960AudioTest::handle_prompt_upload_;
+  prompt_uri.user_ctx = this;
+  httpd_register_uri_handler(this->http_server_, &prompt_uri);
+  httpd_uri_t index_uri{};
+  index_uri.uri = "/";
+  index_uri.method = HTTP_GET;
+  index_uri.handler = WM8960AudioTest::handle_index_;
+  index_uri.user_ctx = this;
+  httpd_register_uri_handler(this->http_server_, &index_uri);
+}
+
+esp_err_t WM8960AudioTest::handle_index_(httpd_req_t *req) {
+  auto *self = static_cast<WM8960AudioTest *>(req->user_ctx);
+  httpd_resp_set_type(req, "text/html");
+  std::string html =
+      "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+      "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+      "<title>Rotary Phone Guestbook</title><style>"
+      "body{font-family:sans-serif;max-width:640px;margin:2em auto;padding:0 1em;background:#faf7f2}"
+      "h1{font-size:1.4em}li{margin:1.2em 0;list-style:none;background:#fff;border-radius:8px;"
+      "padding:1em;box-shadow:0 1px 3px rgba(0,0,0,.15)}audio{width:100%;margin-top:.5em}"
+      "small{color:#666}</style></head><body><h1>&#9742; Rotary Phone Guestbook</h1>";
+  if (self->http_busy_()) {
+    html += "<p>A message is being recorded right now; refresh in a moment.</p></body></html>";
+    httpd_resp_send(req, html.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+  }
+  std::vector<std::string> names;
+  DIR *dir = opendir("/sdcard");
+  if (dir != nullptr) {
+    for (struct dirent *entry = readdir(dir); entry != nullptr; entry = readdir(dir)) {
+      unsigned index = 0;
+      int consumed = 0;
+      sscanf(entry->d_name, "MSG%5u.WAV%n", &index, &consumed);
+      if (consumed == 12)
+        names.emplace_back(entry->d_name);
+    }
+    closedir(dir);
+  }
+  std::sort(names.rbegin(), names.rend());  // Newest first.
+  char count_line[64];
+  snprintf(count_line, sizeof(count_line), "<p><small>%u recorded message%s</small></p><ul>",
+           static_cast<unsigned>(names.size()), names.size() == 1 ? "" : "s");
+  html += count_line;
+  for (const auto &name : names) {
+    char path[48];
+    snprintf(path, sizeof(path), "/sdcard/%s", name.c_str());
+    struct stat file_stat {};
+    const long seconds =
+        stat(path, &file_stat) == 0 ? (file_stat.st_size - WAV_HEADER_BYTES) / (SAMPLE_RATE * 2) : 0;
+    char item[256];
+    snprintf(item, sizeof(item),
+             "<li><b>%s</b> <small>%ld s</small>"
+             "<audio controls preload='none' src='/messages/%s'></audio></li>",
+             name.c_str(), seconds, name.c_str());
+    html += item;
+  }
+  html += "</ul></body></html>";
+  httpd_resp_send(req, html.c_str(), HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t WM8960AudioTest::handle_prompt_upload_(httpd_req_t *req) {
+  auto *self = static_cast<WM8960AudioTest *>(req->user_ctx);
+  if (self->http_busy_()) {
+    httpd_resp_set_status(req, "503 Service Unavailable");
+    httpd_resp_send(req, "recording in progress", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+  }
+  if (req->content_len <= WAV_HEADER_BYTES || req->content_len > 4 * 1024 * 1024) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid prompt size");
+    return ESP_OK;
+  }
+  FILE *file = fopen("/sdcard/PROMPT.TMP", "wb");
+  if (file == nullptr) {
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "could not open file");
+    return ESP_OK;
+  }
+  char buffer[4096];
+  size_t remaining = req->content_len;
+  while (remaining > 0) {
+    const int received = httpd_req_recv(req, buffer, std::min(remaining, sizeof(buffer)));
+    if (received <= 0 || fwrite(buffer, 1, received, file) != static_cast<size_t>(received)) {
+      fclose(file);
+      unlink("/sdcard/PROMPT.TMP");
+      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "upload failed");
+      return ESP_OK;
+    }
+    remaining -= received;
+  }
+  bool ok = fflush(file) == 0;
+  ok = fsync(fileno(file)) == 0 && ok;
+  ok = fclose(file) == 0 && ok;
+  unlink("/sdcard/PROMPT.WAV");
+  if (!ok || rename("/sdcard/PROMPT.TMP", "/sdcard/PROMPT.WAV") != 0) {
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "finalize failed");
+    return ESP_OK;
+  }
+  ESP_LOGI(TAG, "Received a new greeting of %u bytes", static_cast<unsigned>(req->content_len));
+  httpd_resp_send(req, "ok", HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
 }
 
 esp_err_t WM8960AudioTest::handle_message_list_(httpd_req_t *req) {
@@ -153,10 +272,19 @@ void WM8960AudioTest::loop() {
       if (millis() - this->state_started_at_ >= LIFT_TO_BEEP_DELAY_MS)
         this->begin_recorder_();
       break;
+    case RecorderState::PLAYING_PROMPT:
+      // Feed a few blocks per loop pass so the greeting cannot starve the task watchdog.
+      for (int block = 0; block < 3 && this->state_ == RecorderState::PLAYING_PROMPT; block++) {
+        if (!this->play_prompt_block_()) {
+          this->finish_prompt_and_beep_();
+          break;
+        }
+      }
+      break;
     case RecorderState::WAITING_TO_RECORD:
-      if (millis() - this->state_started_at_ >= 250) {
+      if (millis() - this->state_started_at_ >= this->record_start_delay_ms_) {
         std::array<int16_t, FRAMES_PER_BLOCK * 2> discarded_audio{};
-        for (size_t block = 0; block < 8; block++) {
+        for (size_t block = 0; block < 32; block++) {
           size_t bytes_read = 0;
           if (i2s_channel_read(this->rx_handle_, discarded_audio.data(), sizeof(discarded_audio), &bytes_read, 0) !=
                   ESP_OK ||
@@ -211,6 +339,9 @@ void WM8960AudioTest::start_cycle_() {
   if (this->state_ != RecorderState::IDLE || this->is_failed())
     return;
   this->reset_cycle_metrics_();
+  // Wi-Fi transmit bursts spike the supply and couple into the microphone line;
+  // minimum transmit power shrinks them roughly tenfold while staying connected.
+  esp_wifi_set_max_tx_power(8);
   this->state_started_at_ = millis();
   this->state_ = RecorderState::WAIT_BEFORE_BEEP;
   ESP_LOGI(TAG, "Handset lifted; beep in %.1f seconds", LIFT_TO_BEEP_DELAY_MS / 1000.0f);
@@ -224,18 +355,28 @@ void WM8960AudioTest::stop_cycle_() {
       this->finalize_recording_(true);
       this->shutdown_();
       break;
+    case RecorderState::PLAYING_PROMPT:
+      if (this->prompt_file_ != nullptr) {
+        fclose(this->prompt_file_);
+        this->prompt_file_ = nullptr;
+      }
+      this->finalize_recording_(false);
+      this->shutdown_();
+      ESP_LOGI(TAG, "Handset replaced during the greeting; nothing saved");
+      break;
     case RecorderState::WAITING_TO_RECORD:
       this->finalize_recording_(false);
       this->shutdown_();
       ESP_LOGI(TAG, "Handset replaced before recording started; nothing saved");
       break;
     case RecorderState::WAIT_BEFORE_BEEP:
-      ESP_LOGI(TAG, "Handset replaced before the beep; nothing saved");
+      ESP_LOGI(TAG, "Handset replaced before the greeting; nothing saved");
       break;
     case RecorderState::WAITING_FOR_HANGUP:
       break;
   }
   this->state_ = RecorderState::IDLE;
+  esp_wifi_set_max_tx_power(80);  // Restore full transmit power between messages.
   ESP_LOGI(TAG, "Ready for the next message");
 }
 
@@ -257,11 +398,51 @@ void WM8960AudioTest::begin_recorder_() {
     this->fail_cycle_("Could not create the message file on the card");
     return;
   }
-  if (!this->play_tone_()) {
+  this->prompt_file_ = fopen("/sdcard/PROMPT.WAV", "rb");
+  if (this->prompt_file_ != nullptr && fseek(this->prompt_file_, WAV_HEADER_BYTES, SEEK_SET) == 0) {
+    ESP_LOGI(TAG, "Playing the greeting");
+    this->state_ = RecorderState::PLAYING_PROMPT;
+    return;
+  }
+  if (this->prompt_file_ != nullptr) {
+    fclose(this->prompt_file_);
+    this->prompt_file_ = nullptr;
+  }
+  this->finish_prompt_and_beep_();
+}
+
+bool WM8960AudioTest::play_prompt_block_() {
+  if (this->prompt_file_ == nullptr)
+    return false;
+  std::array<int16_t, FRAMES_PER_BLOCK> mono{};
+  const size_t frames = fread(mono.data(), sizeof(int16_t), FRAMES_PER_BLOCK, this->prompt_file_);
+  if (frames == 0)
+    return false;
+  std::array<int16_t, FRAMES_PER_BLOCK * 2> stereo{};
+  for (size_t index = 0; index < frames; index++) {
+    stereo[index * 2] = mono[index];
+    stereo[index * 2 + 1] = mono[index];
+  }
+  size_t written = 0;
+  if (i2s_channel_write(this->tx_handle_, stereo.data(), frames * 2 * sizeof(int16_t), &written, 1000) != ESP_OK)
+    return false;
+  return frames == FRAMES_PER_BLOCK;
+}
+
+void WM8960AudioTest::finish_prompt_and_beep_() {
+  const bool prompt_played = this->prompt_file_ != nullptr;
+  if (prompt_played) {
+    fclose(this->prompt_file_);
+    this->prompt_file_ = nullptr;
+  }
+  // The greeting file carries its own beep; the generated tone is only the no-greeting fallback.
+  if (!prompt_played && !this->play_tone_()) {
     this->finalize_recording_(false);
     this->fail_cycle_("Could not play the beep");
     return;
   }
+  // After a greeting, wait out the buffered playback tail so recording starts after the beep.
+  this->record_start_delay_ms_ = prompt_played ? 500 : 250;
   this->state_started_at_ = millis();
   this->state_ = RecorderState::WAITING_TO_RECORD;
 }
@@ -324,56 +505,126 @@ bool WM8960AudioTest::write_wav_header_(uint32_t data_bytes) {
   return fwrite(header, 1, sizeof(header), this->file_) == sizeof(header);
 }
 
+// Telephone-band Butterworth biquads at 16 kHz in Q13 fixed point: the ESP32-C6 has no FPU.
+static constexpr int32_t FILTER_SHIFT = 13;
+static constexpr int32_t HIGH_PASS_300HZ[5] = {7537, -15074, 7537, -15022, 6935};
+static constexpr int32_t LOW_PASS_3800HZ[5] = {2214, 4428, 2214, -754, 1418};
+
+// Gain 0..32 for one duck window with 2 ms linear fades at both edges.
+static int32_t duck_window_gain(size_t sample, size_t from, size_t to) {
+  if (to <= from || sample < from || sample >= to)
+    return 32;
+  const size_t into = sample - from;
+  const size_t left = to - sample;
+  int32_t gain = 0;
+  if (into < 32)
+    gain = 32 - static_cast<int32_t>(into);
+  if (left <= 32)
+    gain = std::max(gain, 32 - static_cast<int32_t>(left));
+  return gain;
+}
+
+static int32_t run_biquad(const int32_t (&coeff)[5], int32_t (&state)[4], int32_t input) {
+  const int64_t accumulator = static_cast<int64_t>(coeff[0]) * input + static_cast<int64_t>(coeff[1]) * state[0] +
+                              static_cast<int64_t>(coeff[2]) * state[1] - static_cast<int64_t>(coeff[3]) * state[2] -
+                              static_cast<int64_t>(coeff[4]) * state[3];
+  const auto output = static_cast<int32_t>(accumulator >> FILTER_SHIFT);
+  state[1] = state[0];
+  state[0] = input;
+  state[3] = state[2];
+  state[2] = output;
+  return output;
+}
+
 bool WM8960AudioTest::record_audio_block_() {
-  // A gentle 100 Hz high-pass rejects hum without thinning normal telephone speech.
-  static constexpr float HIGH_PASS_ALPHA = 0.96221f;
-  std::array<int16_t, FRAMES_PER_BLOCK * 2> silence{};
-  size_t bytes_written = 0;
-  esp_err_t error = i2s_channel_write(this->tx_handle_, silence.data(), sizeof(silence), &bytes_written, 1000);
-  if (error != ESP_OK) {
-    ESP_LOGE(TAG, "I2S silence write failed: %s", esp_err_to_name(error));
-    return false;
-  }
-
+  // Drain every buffered microphone block first so a slow card write cannot drop audio.
   std::array<int16_t, FRAMES_PER_BLOCK * 2> stereo{};
-  size_t bytes_read = 0;
-  error = i2s_channel_read(this->rx_handle_, stereo.data(), sizeof(stereo), &bytes_read, 1000);
-  if (error != ESP_OK) {
-    ESP_LOGE(TAG, "I2S microphone read failed: %s", esp_err_to_name(error));
-    return false;
-  }
-
-  std::array<int16_t, FRAMES_PER_BLOCK> mono{};
-  const size_t frames_read = bytes_read / (2 * sizeof(int16_t));
-  const size_t frames_to_keep = std::min(frames_read, MAX_RECORD_SAMPLES - this->captured_samples_);
-  for (size_t index = 0; index < frames_to_keep; index++) {
-    const int16_t slot_1 = stereo[index * 2 + 1];
-    if (!this->high_pass_initialized_) {
-      this->high_pass_previous_input_ = slot_1;
-      this->high_pass_initialized_ = true;
-    }
-    const float filtered = HIGH_PASS_ALPHA *
-                           (this->high_pass_previous_output_ + slot_1 - this->high_pass_previous_input_);
-    this->high_pass_previous_input_ = slot_1;
-    this->high_pass_previous_output_ = filtered;
-    const int16_t sample = static_cast<int16_t>(std::clamp<int32_t>(std::lround(filtered), -32768, 32767));
-    mono[index] = sample;
-    this->raw_peak_ = std::max(this->raw_peak_, std::abs(static_cast<int32_t>(slot_1)));
-    this->filtered_peak_ = std::max(this->filtered_peak_, std::abs(static_cast<int32_t>(sample)));
-    this->raw_sum_squares_ += static_cast<int64_t>(slot_1) * slot_1;
-  }
-  if (frames_to_keep > 0 &&
-      fwrite(mono.data(), sizeof(int16_t), frames_to_keep, this->file_) != frames_to_keep) {
-    ESP_LOGE(TAG, "microSD write failed at sample %u", this->captured_samples_);
-    return false;
-  }
-  this->captured_samples_ += frames_to_keep;
-  if (++this->blocks_since_sync_ >= BLOCKS_PER_SYNC) {
-    this->blocks_since_sync_ = 0;
-    if (fflush(this->file_) != 0 || fsync(fileno(this->file_)) != 0) {
-      ESP_LOGE(TAG, "microSD flush failed at sample %u", this->captured_samples_);
+  for (int burst = 0; burst < 32; burst++) {
+    size_t bytes_read = 0;
+    const esp_err_t error =
+        i2s_channel_read(this->rx_handle_, stereo.data(), sizeof(stereo), &bytes_read, burst == 0 ? 50 : 0);
+    if (error != ESP_OK && error != ESP_ERR_TIMEOUT) {
+      ESP_LOGE(TAG, "I2S microphone read failed: %s", esp_err_to_name(error));
       return false;
     }
+    if (bytes_read == 0)
+      break;
+    // Partial reads carry real audio: discarding them cuts a click into the recording.
+    const size_t frames_read = bytes_read / (2 * sizeof(int16_t));
+    const size_t frames_to_keep = std::min(frames_read, MAX_RECORD_SAMPLES - this->captured_samples_);
+    for (size_t index = 0; index < frames_to_keep; index++) {
+      const int16_t slot_1 = stereo[index * 2 + 1];
+      const int32_t band_limited = run_biquad(
+          LOW_PASS_3800HZ, this->band_pass_state_[1],
+          run_biquad(HIGH_PASS_300HZ, this->band_pass_state_[0], slot_1));
+      int32_t amplified = band_limited * 5 / 2;  // 2.5x makeup gain after filtering.
+      // The card ticks the analog path at each write's start and end; two 12 ms micro-mutes,
+      // targeted by continuous sample index, remove them without eating the speech between.
+      const size_t global_index = this->captured_samples_ + index;
+      const int32_t duck_gain =
+          std::min(duck_window_gain(global_index, this->duck_a_from_, this->duck_a_to_),
+                   duck_window_gain(global_index, this->duck_b_from_, this->duck_b_to_));
+      if (duck_gain < 32)
+        amplified = amplified * duck_gain / 32;
+      const int16_t sample = static_cast<int16_t>(std::clamp<int32_t>(amplified, -32767, 32767));
+      if (this->ring_count_ == RING_CAPACITY) {
+        // Sacrifice the oldest audio rather than corrupting the stream; log once per message.
+        this->ring_tail_ = (this->ring_tail_ + 1) & RING_MASK;
+        this->ring_count_--;
+        if (!this->ring_overflowed_) {
+          this->ring_overflowed_ = true;
+          ESP_LOGW(TAG, "Recording ring overflowed; the card is stalling badly");
+        }
+      }
+      this->ring_[this->ring_head_] = sample;
+      this->ring_head_ = (this->ring_head_ + 1) & RING_MASK;
+      this->ring_count_++;
+      this->raw_peak_ = std::max(this->raw_peak_, std::abs(static_cast<int32_t>(slot_1)));
+      this->filtered_peak_ = std::max(this->filtered_peak_, std::abs(static_cast<int32_t>(sample)));
+      this->raw_sum_squares_ += static_cast<int64_t>(slot_1) * slot_1;
+    }
+    this->captured_samples_ += frames_to_keep;
+    if (bytes_read < sizeof(stereo))
+      break;  // Everything currently buffered has been drained.
+  }
+
+  // One large chunk per pass: rare bursts, each with two matching micro-mutes in the audio.
+  if (this->ring_count_ >= WRITE_CHUNK_SAMPLES) {
+    static constexpr size_t EDGE_SAMPLES = 12 * (SAMPLE_RATE / 1000);  // 12 ms per transient.
+    const size_t base = this->captured_samples_;
+    const uint32_t write_started_ms = millis();
+    if (!this->write_ring_to_file_(WRITE_CHUNK_SAMPLES))
+      return false;
+    if (this->samples_since_sync_ >= SAMPLES_PER_SYNC) {
+      this->samples_since_sync_ = 0;
+      if (fflush(this->file_) != 0 || fsync(fileno(this->file_)) != 0) {
+        ESP_LOGE(TAG, "microSD flush failed at sample %u", this->samples_written_to_file_);
+        return false;
+      }
+    }
+    const uint32_t write_ms = millis() - write_started_ms;
+    const size_t span = static_cast<size_t>(write_ms + 10) * (SAMPLE_RATE / 1000);
+    this->duck_a_from_ = base;
+    this->duck_a_to_ = base + EDGE_SAMPLES;  // Current step as the write begins.
+    this->duck_b_to_ = base + span;          // Trailing transient as the card finishes.
+    this->duck_b_from_ = span > EDGE_SAMPLES ? base + span - EDGE_SAMPLES : base;
+  }
+  return true;
+}
+
+bool WM8960AudioTest::write_ring_to_file_(size_t max_samples) {
+  size_t to_write = std::min(this->ring_count_, max_samples);
+  while (to_write > 0) {
+    const size_t linear = std::min(to_write, RING_CAPACITY - this->ring_tail_);
+    if (fwrite(&this->ring_[this->ring_tail_], sizeof(int16_t), linear, this->file_) != linear) {
+      ESP_LOGE(TAG, "microSD write failed at sample %u", this->samples_written_to_file_);
+      return false;
+    }
+    this->ring_tail_ = (this->ring_tail_ + linear) & RING_MASK;
+    this->ring_count_ -= linear;
+    this->samples_written_to_file_ += linear;
+    this->samples_since_sync_ += linear;
+    to_write -= linear;
   }
   return true;
 }
@@ -381,9 +632,10 @@ bool WM8960AudioTest::record_audio_block_() {
 bool WM8960AudioTest::finalize_recording_(bool keep_file) {
   if (this->file_ == nullptr)
     return true;
-  const bool keep = keep_file && this->captured_samples_ >= MIN_KEEP_SAMPLES;
-  const uint32_t data_bytes = static_cast<uint32_t>(this->captured_samples_) * 2;
-  bool ok = this->write_wav_header_(data_bytes);
+  bool ok = this->write_ring_to_file_(this->ring_count_);  // Drain everything still buffered.
+  const bool keep = keep_file && this->samples_written_to_file_ >= MIN_KEEP_SAMPLES;
+  const uint32_t data_bytes = static_cast<uint32_t>(this->samples_written_to_file_) * 2;
+  ok = this->write_wav_header_(data_bytes) && ok;
   ok = fflush(this->file_) == 0 && ok;
   ok = fsync(fileno(this->file_)) == 0 && ok;
   ok = fclose(this->file_) == 0 && ok;
@@ -402,7 +654,7 @@ bool WM8960AudioTest::finalize_recording_(bool keep_file) {
     ESP_LOGE(TAG, "Could not rename %s to %s", this->temp_path_, this->final_path_);
     return false;
   }
-  const float seconds = static_cast<float>(this->captured_samples_) / SAMPLE_RATE;
+  const float seconds = static_cast<float>(this->samples_written_to_file_) / SAMPLE_RATE;
   const float rms = std::sqrt(static_cast<float>(this->raw_sum_squares_) /
                               std::max<size_t>(this->captured_samples_, 1));
   ESP_LOGI(TAG, "SAVED %s: %.1f s, raw peak %" PRIi32 ", RMS %.1f, filtered peak %" PRIi32,
@@ -415,8 +667,10 @@ bool WM8960AudioTest::finalize_recording_(bool keep_file) {
 
 bool WM8960AudioTest::initialize_i2s_() {
   i2s_chan_config_t channel_config = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-  channel_config.dma_desc_num = 8;
+  channel_config.dma_desc_num = 24;  // Roughly 384 ms of hardware buffering to ride out card stalls.
   channel_config.dma_frame_num = FRAMES_PER_BLOCK;
+  // Without this, a transmit underflow endlessly replays the last buffered audio instead of going silent.
+  channel_config.auto_clear = true;
 
   esp_err_t error = i2s_new_channel(&channel_config, &this->tx_handle_, &this->rx_handle_);
   if (error != ESP_OK) {
@@ -481,11 +735,13 @@ bool WM8960AudioTest::initialize_codec_() {
       {0x07, 0x002, 0},   // Peripheral mode, Philips I2S, 16-bit samples.
       {0x06, 0x008, 0},   // Gradual DAC soft-unmute.
       {0x00, 0x027, 0},   // Left input PGA +12 dB.
-      {0x01, 0x137, 0},   // Right handset input PGA +24 dB; update both.
+      {0x01, 0x13F, 0},   // Right handset input PGA +30 dB; update both.
       {0x20, 0x138, 0},   // Left input boost path.
-      {0x21, 0x138, 0},   // Right handset input boost +29 dB.
+      {0x21, 0x128, 0},   // Right handset input boost +20 dB: the boost mixer is the noisiest stage.
       {0x22, 0x150, 0},   // Left DAC to output mixer.
       {0x25, 0x150, 0},   // Right DAC to output mixer.
+      // Sidetone (0x2E right-boost bypass) stays OFF: at +50 dB front-end gain it feeds back
+      // through the handset acoustically. Revisit after the MAX4466 lowers the codec gain.
       {0x02, 0x073, 0},   // Left headphone PGA -6 dB.
       {0x03, 0x173, 0},   // Right headphone PGA -6 dB; update both.
       {0x28, 0x073, 0},   // Left speaker PGA -6 dB.
@@ -588,13 +844,20 @@ void WM8960AudioTest::shutdown_() {
 
 void WM8960AudioTest::reset_cycle_metrics_() {
   this->captured_samples_ = 0;
-  this->blocks_since_sync_ = 0;
+  this->samples_written_to_file_ = 0;
+  this->samples_since_sync_ = 0;
+  this->ring_head_ = 0;
+  this->ring_tail_ = 0;
+  this->ring_count_ = 0;
+  this->ring_overflowed_ = false;
+  this->duck_a_from_ = 0;
+  this->duck_a_to_ = 0;
+  this->duck_b_from_ = 0;
+  this->duck_b_to_ = 0;
   this->raw_peak_ = 0;
   this->filtered_peak_ = 0;
   this->raw_sum_squares_ = 0;
-  this->high_pass_initialized_ = false;
-  this->high_pass_previous_input_ = 0.0f;
-  this->high_pass_previous_output_ = 0.0f;
+  memset(this->band_pass_state_, 0, sizeof(this->band_pass_state_));
 }
 
 void WM8960AudioTest::dump_config() {

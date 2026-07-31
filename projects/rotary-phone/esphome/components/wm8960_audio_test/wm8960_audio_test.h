@@ -31,6 +31,7 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   enum class RecorderState : uint8_t {
     IDLE,
     WAIT_BEFORE_BEEP,
+    PLAYING_PROMPT,
     WAITING_TO_RECORD,
     RECORDING,
     WAITING_FOR_HANGUP,
@@ -45,6 +46,7 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   bool open_message_file_();
   bool write_wav_header_(uint32_t data_bytes);
   bool record_audio_block_();
+  bool write_ring_to_file_(size_t max_samples);
   bool finalize_recording_(bool keep_file);
   bool initialize_i2s_();
   bool initialize_codec_();
@@ -52,10 +54,14 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   bool play_tone_();
   void shutdown_();
   void reset_cycle_metrics_();
+  bool play_prompt_block_();
+  void finish_prompt_and_beep_();
   void start_http_server_();
   bool http_busy_() const;
+  static esp_err_t handle_index_(httpd_req_t *req);
   static esp_err_t handle_message_list_(httpd_req_t *req);
   static esp_err_t handle_message_file_(httpd_req_t *req);
+  static esp_err_t handle_prompt_upload_(httpd_req_t *req);
 
   uint8_t bclk_pin_{};
   uint8_t lrclk_pin_{};
@@ -65,6 +71,7 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   i2s_chan_handle_t tx_handle_{nullptr};
   i2s_chan_handle_t rx_handle_{nullptr};
   FILE *file_{nullptr};
+  FILE *prompt_file_{nullptr};
   char temp_path_[32]{};
   char final_path_[32]{};
   uint32_t next_message_index_{1};
@@ -74,14 +81,23 @@ class WM8960AudioTest : public Component, public i2c::I2CDevice {
   uint32_t http_last_attempt_{0};
   std::string last_saved_file_{};
   size_t captured_samples_{0};
-  size_t blocks_since_sync_{0};
+  size_t samples_written_to_file_{0};
+  size_t samples_since_sync_{0};
+  int16_t *ring_{nullptr};
+  size_t ring_head_{0};
+  size_t ring_tail_{0};
+  size_t ring_count_{0};
+  bool ring_overflowed_{false};
   int32_t raw_peak_{0};
   int32_t filtered_peak_{0};
   int64_t raw_sum_squares_{0};
-  bool high_pass_initialized_{false};
-  float high_pass_previous_input_{0.0f};
-  float high_pass_previous_output_{0.0f};
+  int32_t band_pass_state_[2][4]{};
+  size_t duck_a_from_{0};
+  size_t duck_a_to_{0};
+  size_t duck_b_from_{0};
+  size_t duck_b_to_{0};
   uint32_t state_started_at_{0};
+  uint32_t record_start_delay_ms_{250};
   uint32_t hook_raw_changed_at_{0};
   bool hook_initialized_{false};
   bool hook_raw_lifted_{false};
