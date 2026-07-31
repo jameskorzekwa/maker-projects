@@ -511,6 +511,158 @@ Complete these tests before relying on the phone at the wedding:
 Do not deploy the phone until every completed normal call creates exactly one
 playable WAV file and previously completed files survive power interruption.
 
+## 12. Investigation Log: Recorded Tick, Gain Staging, and the Watchdog Crash
+
+This section records measured results from a full debugging session so the same
+ground is not covered twice. Several conclusions here contradict reasonable
+first guesses, including a few made during the session itself.
+
+### 12.1 Interrupt watchdog reboot after saving a message
+
+The device rebooted roughly a minute after finalising a recording. The file
+survived on the card, but `sensor.rotary_phone_guestbook_last_message` is a
+template sensor that does not restore across a boot, so it reverted to
+`unknown`, the download automation never fired, and the message never reached
+Home Assistant. The failure is silent: audio is safe, notification is lost.
+
+The stored crash report identified it:
+
+```text
+*** CRASH DETECTED ON PREVIOUS BOOT ***
+  Reason: Interrupt wdt
+  BT0: temp_sensor_get_raw_value at sar_periph_ctrl_common.c:121
+  BT1: tsens_temp_read_new
+  BT2: phy_close_rf_
+  BT3: esp_phy_disable at phy_init.c:439
+  BT4: pm_sleep
+```
+
+The radio attempts a modem sleep, `esp_phy_disable` reads the internal
+temperature sensor for calibration inside a critical section, and the stall
+trips the interrupt watchdog. Heavy microSD and I2S activity make it more
+likely by keeping the CPU busy, which is why it appeared after recordings.
+
+Fix: `wifi: power_save_mode: none`. Real-time audio gains nothing from modem
+sleep. This is required, not an optimisation.
+
+### 12.2 Microphone gain staging
+
+The original configuration stacked input PGA `+30 dB`, input boost `+20 dB`,
+and a further `2.5x` digital makeup gain after filtering. With an Adafruit
+MAX4466 preamp added ahead of it, this drove the ADC far past full scale.
+
+| Stage | Before | After |
+| --- | --- | --- |
+| Right input PGA (`0x01`) | `0x13F` (+30 dB) | `0x103` (-15 dB) |
+| Right input boost (`0x21`) | `0x128` (+20 dB) | `0x108` (0 dB) |
+| Digital makeup | `x2.5` | none |
+
+Measured effect on recordings:
+
+| | Raw peak | RMS | Clipped samples |
+| --- | --- | --- | --- |
+| Before | 32768 (railed) | 25256 | 41.3% |
+| After | 7448 | 4501 | 0% |
+
+`INVOL` counts 0.75 dB steps from -17.25 dB at 0, so 23 is 0 dB.
+
+Judge audio only on unclipped recordings. Clipping is harsh and crackly and is
+easily mistaken for interference; several hours were spent evaluating
+"interference" on recordings that were clipping 41% of their samples. Check
+the `raw peak` and `RMS` values on the `SAVED` log line before drawing any
+conclusion about noise.
+
+Attenuating at the codec is the wrong place in principle: it wastes headroom
+rather than never overdriving the input. The MAX4466 trimmer is the correct
+adjustment and remains outstanding.
+
+### 12.3 The microSD write tick
+
+A loud tick appears in recordings, synchronised with card writes. This was
+confirmed visually: the breakout's activity LED blinks in time with the tick
+heard on playback.
+
+Tests performed and what each eliminated:
+
+<!-- markdownlint-disable MD013 -->
+
+| Test | Result | Conclusion |
+| --- | --- | --- |
+| MAX4466 preamp replacing the high-impedance mic node with a driven low-impedance output | unchanged | Not pickup at the mic node |
+| Preamp powered from an isolated battery instead of MICBIAS | unchanged | Not conducted through the preamp supply |
+| Preamp ground moved from header pin 14 to codec analog ground at `C10` | unchanged | Not the preamp ground reference |
+| microSD board physically moved as far from the analog wiring as leads allow | unchanged | Not dominated by radiated pickup at that distance |
+| Removing roughly 58 dB of codec and digital gain | tick/speech ratio unchanged | Enters at the same point as the speech |
+| Grounding the codec input pad (`L3`) | silent | See caution below |
+
+<!-- markdownlint-enable MD013 -->
+
+
+Caution on the last row. Grounding the input pad was initially read as proof
+that the codec and its rails were clean and the noise therefore arrived from
+upstream. It proves less than it appears: shorting that node also shorts out
+any noise induced on the interconnect, and a purely digital artefact would
+also be silent because a discontinuity in a stream of zeros is still zeros.
+Several subsequent experiments were designed inside that false conclusion.
+
+The mechanism is the card's write current surge, documented at up to 200 mA,
+coupling into the analog front end. Software cannot remove it.
+
+### 12.4 Mute window tuning and its limits
+
+Firmware knows exactly when it issues each write, so the recorded audio is
+muted across that window with 2 ms fades.
+
+| Configuration | Tick | Cost |
+| --- | --- | --- |
+| No muting | loud | none |
+| Two 20 ms edges only | returns | still audible as chopping |
+| Full write window | suppressed | ~120 ms gap per write |
+
+Edge-only muting was tried twice, including once after gain staging was
+corrected so that clipping could not confuse the verdict. It failed both
+times. The reasoning that coupling follows `dI/dt` and therefore concentrates
+at the current steps is sound in isolation, but the card performs many
+internal sector writes across one burst, each with its own step, so the
+disturbance spans the whole window.
+
+Measured write durations and the tuning that followed:
+
+| Configuration | Write | Interval | Audio blanked |
+| --- | --- | --- | --- |
+| 8 MHz, 24576-sample chunk | 84-95 ms | 1.536 s | ~7% |
+| 20 MHz, 49152-sample chunk | 93-107 ms | 3.072 s | ~3.4% |
+
+Doubling the chunk requires doubling `RING_CAPACITY` to 65536 samples, which
+must remain a power of two. Raising SDSPI to 20 MHz was verified stable on
+jumper wires: the card mounts, and no flush failures or ring overflows
+appeared under sustained recording.
+
+Note that each write carries roughly 39 ms of fixed card latency regardless of
+size, so fewer larger writes cost less in total than more smaller ones.
+Lowering the SPI clock is counterproductive: it lengthens each write and
+therefore each mute, while the card's internal programming current is
+unchanged.
+
+### 12.5 Remaining hardware mitigations
+
+These target the surge itself and were not attempted. Ranked by expected
+effect, drawn from a Teensy audio guestbook investigation of the same symptom
+(see References).
+
+1. Star-power the microSD module directly from the controller's 3V3 and GND,
+   not through the audio board, with supply and return twisted together.
+2. 100 uF low-ESR plus 100 nF ceramic across the module's VCC and GND, leads
+   under 5 mm, at the module rather than on a shared rail.
+3. Twisted pair or shielded cable for the analog run, shield grounded at the
+   codec end only, routed away from the SPI jumpers.
+4. 33 ohm series resistors on SCK and MOSI at the controller end.
+5. A different microSD card. Write-current profiles vary widely, and this is
+   the cheapest test available.
+
+Removing the breakout's activity LED is not worth attempting: the card draws
+roughly 100 times the LED's current.
+
 ## Build Worksheet
 
 The controller and GPIO entries below are confirmed from the board photographs
@@ -562,3 +714,6 @@ and Seeed's official pin map. The handset capsule measurements remain open.
 - [Adafruit product 254 wiring guide](https://learn.adafruit.com/adafruit-micro-sd-breakout-board-card-tutorial/arduino-wiring)
 - [Waveshare WM8960 Audio HAT](https://www.waveshare.com/wiki/WM8960_Audio_HAT)
 - [Waveshare WM8960 Audio HAT schematic](https://files.waveshare.com/upload/f/fa/WM8960_Audio_HAT_Schematic.pdf)
+- [Adafruit MAX4466 electret microphone amplifier](https://www.adafruit.com/product/1063)
+- [Teensy audio guestbook thread: microSD write noise diagnosis](https://forum.pjrc.com/index.php?threads/teensy-4-0-based-audio-guestbook.70553/post-325149)
+- [Teensy audio guestbook thread: starred power rails resolve the noise](https://forum.pjrc.com/index.php?threads/teensy-4-0-based-audio-guestbook.70553/post-325182)
