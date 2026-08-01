@@ -29,6 +29,18 @@ share of the difficulty in that build comes from running Pi hardware on
 something that is not a Pi. On a Pi it seats on the header and the kernel
 already has a driver for it.
 
+## The HAT is still the wrong board
+
+Moving to a Pi fixed the recording architecture but not the analog front end.
+The WM8960 HAT has no external microphone input, and its Linux driver
+structurally cannot power microphone bias, so the handset microphone was
+attached through a modification the board was never designed for.
+
+Every comparable project uses a cheap USB audio adapter instead. See
+[AUDIO-FRONTEND.md](AUDIO-FRONTEND.md) for the evidence, the microphone
+options, and the bias measurement that explains most of the trouble this build
+had.
+
 ## Target board and its cost
 
 A Raspberry Pi Zero W v1.1: single-core ARM1176 on **ARMv6**, 512 MB RAM,
@@ -56,8 +68,8 @@ starved audio callback means a dropout in someone's message.
 | --- | --- | --- |
 | 0 | Preserve and document the ESP32 build | Done |
 | 1 | OS, HAT, mixer, and the tick gate test | Done, gate passed |
-| 2 | Handset wiring: earpiece, microphone, hook switch | Hook switch done |
-| 3 | Recorder application and state machine | |
+| 2 | Handset wiring: earpiece, microphone, hook switch | Hook switch done; microphone unresolved, see AUDIO-FRONTEND.md |
+| 3 | Recorder application and state machine | Done |
 | 4 | Robustness: read-only root, service supervision | |
 | 5 | Home Assistant integration over MQTT | |
 | 6 | Local web access to messages | |
