@@ -1,0 +1,34 @@
+[Unit]
+Description=Rotary phone guestbook recorder
+# sound.target so the WM8960 card exists before capture is attempted. The
+# service does not need the network: a guest leaving a message must never
+# depend on Wi-Fi being up.
+After=sound.target
+Wants=sound.target
+
+# Never give up restarting. The default start limit disables a unit after a
+# handful of rapid failures, which on a rented device means a phone that
+# silently stops working halfway through an event. This key belongs in [Unit],
+# not [Service], where systemd ignores it with only a log line to say so.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=james
+Group=james
+# audio for the ALSA device, gpio for the cradle switch on GPIO 17.
+SupplementaryGroups=audio gpio
+ExecStart=/usr/bin/python3 /home/james/guestbook.py
+WorkingDirectory=/home/james
+
+# A crash between calls must not leave the phone dead for the rest of an
+# event. Restart always, and quickly.
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=guestbook
+
+[Install]
+WantedBy=multi-user.target
