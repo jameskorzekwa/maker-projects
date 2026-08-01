@@ -27,6 +27,7 @@ Design notes:
   a busy device or a dead speaker still results in a saved message.
 """
 
+import array
 import errno
 import math
 import os
@@ -171,7 +172,13 @@ def play(path, hook):
         return False
     try:
         process = subprocess.Popen(
-            ["aplay", "-D", PLAYBACK_DEVICE, "-q", path],
+            # Cap how much audio can sit queued in the ALSA buffer. Killing
+            # aplay does not flush what is already queued, so with the default
+            # buffer the greeting kept sounding for a noticeable moment after
+            # the handset was replaced. 100 ms bounds that tail to something
+            # inaudible without risking underruns on a slow core.
+            ["aplay", "-D", PLAYBACK_DEVICE, "-q",
+             "--buffer-time=100000", "--period-time=25000", path],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
@@ -181,13 +188,15 @@ def play(path, hook):
 
     while process.poll() is None:
         if not hook.lifted:
-            process.terminate()
+            # SIGKILL, not SIGTERM: aplay handles TERM by draining what it has
+            # already written, which is exactly the tail being cut short here.
+            process.kill()
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                process.kill()
+                pass
             return False
-        time.sleep(0.05)
+        time.sleep(0.02)
 
     if process.returncode != 0:
         stderr = process.stderr.read().decode("utf-8", "replace").strip()
@@ -274,13 +283,26 @@ def save(raw_stereo, directory):
         log("discarded %.2f s, below the %.1f s minimum" % (seconds, MIN_MESSAGE_SECONDS))
         return None
 
-    samples = struct.unpack("<%dh" % (frames * CAPTURE_CHANNELS), raw_stereo[:frames * FRAME_BYTES])
-    right = samples[1::CAPTURE_CHANNELS]
+    # array rather than struct.unpack: the unpack built a 2-million-element
+    # tuple and the per-sample Python loops that followed took ten seconds to
+    # save a 75 s recording on a 1 GHz ARMv6 core, during which the phone was
+    # unresponsive. array.frombytes and the strided slice both run in C.
+    interleaved = array.array("h")
+    interleaved.frombytes(raw_stereo[:frames * FRAME_BYTES])
+    if sys.byteorder == "big":
+        interleaved.byteswap()  # capture is little-endian regardless of host
+    right = interleaved[1::CAPTURE_CHANNELS]
 
-    peak = max((abs(value) for value in right), default=0)
-    total = sum(value * value for value in right)
-    rms = math.sqrt(total / len(right)) if right else 0.0
+    # max/min over an array iterate in C. abs() of the min catches a negative
+    # peak, which a positive-only scan would miss on an asymmetric waveform.
+    peak = max(max(right), -min(right)) if right else 0
     clipped = sum(1 for value in right if abs(value) >= 32700)
+
+    # RMS from every 16th sample. Exact RMS needs a Python-level loop over
+    # every sample, which is the expensive part; a 16x decimation is well
+    # within a decibel for a level indicator and costs a sixteenth of the time.
+    probe = right[::16]
+    rms = math.sqrt(sum(v * v for v in probe) / len(probe)) if probe else 0.0
 
     final_path = next_message_path(directory)
     # Write to a temporary name and rename into place. A rename within one
@@ -292,7 +314,9 @@ def save(raw_stereo, directory):
             handle.setnchannels(1)
             handle.setsampwidth(2)
             handle.setframerate(SAMPLE_RATE)
-            handle.writeframes(struct.pack("<%dh" % len(right), *right))
+            if sys.byteorder == "big":
+                right.byteswap()  # WAV data is little-endian
+            handle.writeframes(right.tobytes())
         with open(temp_path, "rb+") as handle:
             handle.flush()
             os.fsync(handle.fileno())

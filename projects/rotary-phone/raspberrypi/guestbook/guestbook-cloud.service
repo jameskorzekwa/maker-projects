@@ -1,0 +1,31 @@
+[Unit]
+Description=Rotary phone guestbook cloud client
+# Deliberately separate from guestbook.service. Recording must never be
+# blocked, delayed or crashed by network code, so the two run as independent
+# units and this one can fail without the phone losing its ability to record.
+After=network-online.target
+Wants=network-online.target
+
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=james
+Group=james
+ExecStart=/usr/bin/python3 /home/james/cloud.py
+WorkingDirectory=/home/james
+
+Restart=always
+RestartSec=15
+
+# Lower priority than the recorder. On a single-core Pi Zero W, hashing and
+# uploading must yield to audio capture.
+Nice=10
+IOSchedulingClass=idle
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=guestbook-cloud
+
+[Install]
+WantedBy=multi-user.target
