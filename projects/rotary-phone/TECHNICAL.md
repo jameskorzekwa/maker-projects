@@ -4,6 +4,10 @@ This document records the electrical details, measurements, and complete test
 plan. It is not the starting point. Follow the plain-language
 [build guide](BUILD.md) one checkpoint at a time.
 
+This document is the final ESP32 investigation record. Production Raspberry Pi
+hardware, imaging, and acceptance instructions live in the
+[Heirloom Hotline hardware guide](https://github.com/jameskorzekwa/heirloom-hotline/blob/main/docs/hardware/README.md).
+
 The repository contains diagnostic ESPHome firmware for I2C, stock audio, and
 hook-switch bring-up. The live Device Builder component has continued to evolve
 during handset testing; live experimental changes are documented below but are
