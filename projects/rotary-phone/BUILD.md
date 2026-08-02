@@ -391,12 +391,17 @@ playable.
 
 Repeat the complete lift, record, and hang-up test after closing the case.
 
-## Current Next Action
+## Archived Outcome
 
 The guestbook recorder works end-to-end on the bench: lifting the handset
 plays a beep after a two-second settling delay, streams handset audio to the
 card, and finalizes a numbered `MSG#####.WAV` on hang-up. The first real
 message, `MSG00001.WAV`, saved successfully at 5.5 seconds and is playable
-from Home Assistant's Media browser under `rotary-phone`. Next: record one
-more bench message to confirm the automatic download automation fires, then
-install the MAX4466 handset microphone when it is delivered.
+from Home Assistant's Media browser under `rotary-phone`.
+
+The MAX4466 was later tested and rejected, and full-window muting proved the
+best possible firmware workaround for card-write noise at a permanent cost of
+roughly 3.4 percent of each recording. Production continued on Raspberry Pi.
+See the
+[Heirloom Hotline hardware guide](https://github.com/jameskorzekwa/heirloom-hotline/blob/main/docs/hardware/README.md)
+for the current build.

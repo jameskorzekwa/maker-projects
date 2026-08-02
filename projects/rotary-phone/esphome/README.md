@@ -88,11 +88,15 @@ notification that deep-links there.
 ## Known limitations
 
 - The original handset microphone is quiet and power-noise sensitive; battery
-  power with supply decoupling is the quietest tested source. A MAX4466
-  amplified module will replace it inside the handset.
+  power with supply decoupling was the quietest tested source.
 - Card-write current still couples an audible tick into the analog microphone
-  path. Software micro-mutes at each write's start and end are installed but
-  not yet validated; the structural fix is the MAX4466's low-impedance line.
-- Analog sidetone (right-boost bypass `0x2E`) is disabled: at +50 dB front-end
-  gain it feeds back acoustically through the handset. Re-enable after the
-  MAX4466 lowers the codec gain.
+  path. Full-window muting suppresses it but removes roughly 3.4 percent of the
+  recording.
+- The MAX4466 experiment was rejected because its minimum gain was excessive
+  and the module oscillated intermittently without local decoupling.
+- Analog sidetone remains disabled because the high-gain handset path feeds
+  back acoustically.
+
+No further production development happens in this firmware. See
+[`jameskorzekwa/heirloom-hotline`](https://github.com/jameskorzekwa/heirloom-hotline)
+for the Raspberry Pi implementation.

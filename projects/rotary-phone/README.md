@@ -5,6 +5,14 @@ guest lifts the handset, the phone plays prerecorded instructions and a beep.
 It then records the guest's message until the handset is replaced. Every
 message is saved to microSD, with optional background upload to cloud storage.
 
+This is the preserved **ESP32 reference implementation**. Production moved to
+Raspberry Pi and its source of truth is
+[`jameskorzekwa/heirloom-hotline`](https://github.com/jameskorzekwa/heirloom-hotline),
+including the current
+[hardware and imaging guide](https://github.com/jameskorzekwa/heirloom-hotline/blob/main/docs/hardware/README.md).
+Keep the ESPHome code and measurements here; do not add Raspberry Pi firmware
+or operating procedures to this project.
+
 Follow the plain-language [step-by-step build guide](BUILD.md) one checkpoint at
 a time. Component-level explanations, measurements, and the complete test plan
 are kept separately in [TECHNICAL.md](TECHNICAL.md). Do not skip a stop point:
@@ -13,30 +21,19 @@ modifications.
 
 ## Project Status
 
-Hardware characterization and bench bring-up. The controller, GPIO table, hook
-switch, handset pairs, 129.3 ohm earpiece, and microphone polarity are confirmed.
-The XIAO detects the WM8960 Audio HAT at `0x1A`; stock I2S recording/playback,
-the original handset earpiece, and the `S2-S4` hook-switch pair have passed bench
-tests. The right `MIC1` input has been isolated and adapted for the original
-handset microphone, but that capsule remains too quiet and sensitive to power
-noise. A MAX4466 amplified microphone module is planned for the handset.
+Bench implementation complete and archived. Hook detection, WM8960 I2S,
+handset playback/capture, crash-safe FAT storage, repeated calls, Home Assistant
+copy/notification, greeting upload, OTA, and captive-portal Wi-Fi provisioning
+all worked. The final firmware corrects a watchdog reboot and severe gain
+stacking, then suppresses the microSD write tick by muting the whole write
+window. That workaround permanently removes roughly 3.4 percent of each
+recording, which is why the architecture moved to Raspberry Pi rather than
+continuing this build.
 
-The live ESPHome configuration has encrypted Wi-Fi API access and
-password-protected OTA. The Adafruit microSD board is wired and verified: the
-`sd_card_test` component mounts the FAT card over SPI, writes a test file with
-`fsync`, and reads it back byte-for-byte. The guestbook recorder works on the
-bench: every handset lift beeps after a two-second delay and streams handset
-audio to a numbered, crash-safe `MSG#####.WAV`, finalized on hang-up. The first
-real message saved successfully on 2026-07-30. Saved messages are playable
-from Home Assistant's Media browser: the phone serves recordings over HTTP, a
-`Last Message` sensor announces each new file, and HA automations copy it into
-`/media/rotary-phone` and send a tap-to-listen phone notification. The phone
-now also provisions itself like the planned rental product: with no stored
-network it broadcasts a setup AP with a branded captive portal, joined by
-scanning a printed QR code — the full flow passed end-to-end on 2026-07-31.
-An ElevenLabs greeting with an embedded beep plays before each recording.
-Known issues: card-write ticking in recordings (software micro-mutes under
-test) and low original-microphone level; the MAX4466 install is next.
+The MAX4466 experiment was rejected. Its minimum gain was excessive and the
+bench module oscillated intermittently on 5 V without local decoupling. The
+production hardware analysis and replacement audio frontend are documented in
+Heirloom Hotline, not here.
 
 ## Current Bench Findings
 
@@ -52,16 +49,14 @@ test) and low original-microphone level; the MAX4466 install is next.
   Laptop USB produces severe buzz, a dedicated wall supply is better, and a
   battery is substantially quieter. Added 5 V bulk/ceramic decoupling also
   improved the result. Final power must match the battery-quality baseline.
-- The latest physically measured laptop-powered capture reported raw peak 4584
-  and RMS 945.0; a two-stage 180 Hz filter reduced it to peak 1661 and RMS 61.8,
-  showing that most interference was low-frequency power noise. That filter
-  sounded too thin. The next compiled build instead uses a gentle single-stage
-  100 Hz high-pass, +24 dB right input PGA, +29 dB boost, and -6 dB headphone
-  output; this exact combination remains unverified on hardware.
-- A six-pack MAX4466 module (Amazon ASIN `B08N4FNFTR`) was selected for the
-  handset upgrade. The approximately 20.8 x 13.8 x 7.5 mm board operates from
-  2.4 to 5.5 V and has adjustable 25x to 125x gain. It will replace the current
-  passive MICBIAS circuit after it arrives and is measured against the handset.
+- Corrected gain staging moved measured capture from a railed peak of 32768,
+  RMS 25256, and 41.3 percent clipped samples to peak 7448, RMS 4501, and zero
+  full-scale clipping.
+- Full-window card-write muting suppressed the tick. Larger writes at 20 MHz
+  reduced the muted portion from roughly 7 percent to 3.4 percent but could
+  not eliminate it.
+- The MAX4466 was tested and rejected because its minimum gain was excessive
+  and it oscillated intermittently without local supply decoupling.
 
 ## Selected Hardware
 

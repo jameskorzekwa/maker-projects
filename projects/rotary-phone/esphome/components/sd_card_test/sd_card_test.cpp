@@ -24,7 +24,10 @@ void SDCardTest::setup() {
   this->status_ = "initializing";
 
   sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-  host.max_freq_khz = 8000;  // Faster transfers shorten each write's interference window.
+  // 20 MHz: at 8 MHz roughly 98 ms of each 96 KB write was raw transfer, and shortening the
+  // burst shortens the mute that hides it. The card is on jumper wires, so this is the ceiling
+  // worth trying; if mounts fail or reads corrupt, drop straight back to 8000.
+  host.max_freq_khz = 20000;
   const auto spi_host = static_cast<spi_host_device_t>(host.slot);
 
   spi_bus_config_t bus_config{};
