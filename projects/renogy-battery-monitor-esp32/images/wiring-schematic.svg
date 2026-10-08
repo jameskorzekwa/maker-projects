@@ -1,11 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" role="img" aria-labelledby="title desc">
-  <title id="title">Optocoupler wiring between the RBM500 display and the XIAO ESP32-S3</title>
-  <desc id="desc">Display header V+ connects through resistor R1 to PC817 pin 1, the LED anode. PC817 pin 2, the LED cathode, connects to the display header Tx hole. The display header G hole is not connected to anything on the XIAO side. PC817 pin 4, the collector, connects to XIAO D7 (GPIO44) and through a 4.7 kilohm pull-up resistor R2 to the XIAO 3V3 pin. PC817 pin 3, the emitter, connects to XIAO GND. The XIAO is powered by USB-C from a 12 volt USB adapter. A dashed isolation barrier runs through the PC817 between the LED and transistor sides.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="780" viewBox="0 0 1100 780" role="img" aria-labelledby="title desc">
+  <title id="title">Wiring inside the RBM500 display housing</title>
+  <desc id="desc">The B plus and B minus pins of the display's shunt connector feed a 470 microfarad capacitor and the input of a 12 to 5 volt buck regulator. The regulator's 5 volt output goes to the XIAO ESP32-S3 5V pin and its ground to XIAO GND. The display's Tx hole connects to XIAO D7, GPIO44, through one of two options: a 1 kilohm series resistor if the display's V plus measures 3.3 volts, or a 10 kilohm and 20 kilohm divider if V plus measures 5 volts. The display's V plus and G holes are not wired; G is only used as a meter reference.</desc>
   <defs>
     <style>
       .batt{fill:#fff3c4;stroke:#b44d12;stroke-width:3}
       .esp{fill:#e3f8ff;stroke:#186faf;stroke-width:3}
-      .chip{fill:#f0f4f8;stroke:#243b53;stroke-width:3}
+      .reg{fill:#fde8e8;stroke:#c53030;stroke-width:3}
+      .opt{fill:#f9f5ff;stroke:#7b2cbf;stroke-width:2;stroke-dasharray:8 6}
       .t{font:600 20px system-ui,sans-serif;fill:#102a43}
       .s{font:15px system-ui,sans-serif;fill:#334e68}
       .sb{font:600 15px system-ui,sans-serif;fill:#102a43}
@@ -14,86 +15,79 @@
       .w{fill:none;stroke-width:4}
       .vp{stroke:#c53030}
       .tx{stroke:#7b2cbf}
-      .rx{stroke:#186faf}
-      .g3{stroke:#2f855a}
       .gnd{stroke:#334e68}
-      .barrier{stroke:#7b2cbf;stroke-width:3;stroke-dasharray:9 7}
       .res{fill:#fff;stroke:#243b53;stroke-width:3}
-      .sym{fill:none;stroke:#243b53;stroke-width:2}
     </style>
   </defs>
-  <rect width="1100" height="640" rx="24" fill="#fff"/>
+  <rect width="1100" height="780" rx="24" fill="#fff"/>
+  <text class="t" x="40" y="44">Inside the RBM500 display housing (one shared ground)</text>
 
-  <text class="t" x="40" y="44">Battery side (display)</text>
-  <text class="t" x="1060" y="44" text-anchor="end">Trailer side (XIAO)</text>
+  <!-- Display board -->
+  <rect class="batt" x="40" y="80" width="250" height="520" rx="16"/>
+  <text class="t" x="165" y="116" text-anchor="middle">RBM500 board</text>
+  <text class="s" x="165" y="146" text-anchor="middle">shunt connector pins</text>
+  <text class="nc" x="60" y="185">Rs- (not used)</text><circle cx="260" cy="180" r="9" fill="#9fb3c8"/>
+  <text class="nc" x="60" y="225">Rs+ (not used)</text><circle cx="260" cy="220" r="9" fill="#9fb3c8"/>
+  <text class="sb" x="60" y="265">B- (battery neg.)</text><circle cx="260" cy="260" r="11" fill="#334e68"/>
+  <text class="sb" x="60" y="305">B+ (battery pos.)</text><circle cx="260" cy="300" r="11" fill="#c53030"/>
+  <line x1="55" y1="340" x2="275" y2="340" stroke="#d9a066" stroke-width="2"/>
+  <text class="s" x="165" y="370" text-anchor="middle">6-hole row beside MK1</text>
+  <text class="nc" x="60" y="405">Out, Rx (not used)</text>
+  <text class="sb" x="60" y="445">Tx</text><circle cx="260" cy="440" r="11" fill="#7b2cbf"/>
+  <text class="nc" x="60" y="485">TEN (not used)</text>
+  <text class="s" x="60" y="525">G (meter reference only)</text><circle cx="260" cy="520" r="9" fill="#9fb3c8"/>
+  <text class="s" x="60" y="565">V+ (measure only)</text><circle cx="260" cy="560" r="9" fill="#9fb3c8"/>
 
-  <!-- Display header: labels left, holes on the right edge -->
-  <rect class="batt" x="40" y="80" width="230" height="380" rx="16"/>
-  <text class="t" x="155" y="116" text-anchor="middle">RBM500 board</text>
-  <text class="s" x="155" y="140" text-anchor="middle">6-hole row beside MK1</text>
-  <text class="nc" x="60" y="190">Out (not used)</text><circle cx="240" cy="185" r="9" fill="#9fb3c8"/>
-  <text class="nc" x="60" y="235">Rx (not used)</text><circle cx="240" cy="230" r="9" fill="#9fb3c8"/>
-  <text class="sb" x="60" y="280">Tx</text><circle cx="240" cy="275" r="11" fill="#7b2cbf"/>
-  <text class="nc" x="60" y="325">TEN (not used)</text><circle cx="240" cy="320" r="9" fill="#9fb3c8"/>
-  <text class="sb" x="60" y="370">G (board ground)</text><circle cx="240" cy="365" r="11" fill="#334e68"/>
-  <text class="sb" x="60" y="415">V+ (logic supply)</text><circle cx="240" cy="410" r="11" fill="#c53030"/>
-  <text class="warn" x="40" y="495">G is the meter reference for the bench test only.</text>
-  <text class="warn" x="40" y="517">Never connect display G to the XIAO GND.</text>
+  <!-- Power -->
+  <path class="w vp" d="M260 300 H380 V200 H560"/>
+  <path class="w gnd" d="M260 260 H350 V250 H560"/>
+  <circle cx="430" cy="200" r="6" fill="#c53030"/><circle cx="470" cy="250" r="6" fill="#334e68"/>
+  <path class="w vp" d="M430 200 V155"/><path class="w gnd" d="M470 250 V155"/>
+  <rect x="415" y="110" width="70" height="45" rx="8" fill="#fff" stroke="#243b53" stroke-width="3"/>
+  <text class="sb" x="450" y="138" text-anchor="middle">C1</text>
+  <text class="s" x="450" y="98" text-anchor="middle">470 uF, 25 V (+ to B+)</text>
 
-  <!-- V+ to R1 to anode (pin 1) -->
-  <path class="w vp" d="M240 410 H310 V170 H350"/>
-  <rect class="res" x="350" y="150" width="90" height="40" rx="6"/>
-  <text class="sb" x="395" y="176" text-anchor="middle">R1</text>
-  <text class="s" x="395" y="138" text-anchor="middle">330-470 ohm if 3.3 V</text>
-  <text class="s" x="395" y="214" text-anchor="middle">680 ohm-1 k if 5 V</text>
-  <path class="w vp" d="M440 170 H480 V260 H520"/>
-  <text class="s" x="472" y="250" text-anchor="end">anode</text>
+  <rect class="reg" x="560" y="170" width="190" height="110" rx="14"/>
+  <text class="t" x="655" y="160" text-anchor="middle">Buck 12 V to 5 V</text>
+  <text class="sb" x="575" y="205">VIN</text><text class="sb" x="575" y="255">GND</text>
+  <text class="sb" x="735" y="205" text-anchor="end">5V OUT</text><text class="sb" x="735" y="255" text-anchor="end">GND</text>
+  <text class="s" x="655" y="305" text-anchor="middle">e.g. Pololu D24V5F5</text>
 
-  <!-- Tx to cathode (pin 2), hopping over the V+ wire -->
-  <path class="w tx" d="M240 275 H280 V360 H300 A10 10 0 0 1 320 360 H520"/>
-  <text class="s" x="472" y="350" text-anchor="end">cathode</text>
+  <path class="w vp" d="M750 200 H880"/>
+  <path class="w gnd" d="M750 250 H880"/>
 
-  <!-- PC817 -->
-  <rect class="chip" x="520" y="220" width="160" height="180" rx="10"/>
-  <circle cx="538" cy="238" r="6" fill="#243b53"/>
-  <text class="t" x="600" y="205" text-anchor="middle">PC817</text>
-  <text class="sb" x="530" y="282">1</text>
-  <text class="sb" x="530" y="388">2</text>
-  <text class="sb" x="660" y="282">4</text>
-  <text class="sb" x="660" y="388">3</text>
-  <path class="sym" d="M520 260 H570 V290 M570 317 V360 H520"/>
-  <polygon points="556,290 584,290 570,315" fill="#7b2cbf"/>
-  <line x1="555" y1="317" x2="585" y2="317" stroke="#7b2cbf" stroke-width="3"/>
-  <path d="M590 296 l12 -7 m-12 17 l12 -7" stroke="#7b2cbf" stroke-width="2" fill="none"/>
-  <line x1="622" y1="282" x2="622" y2="338" stroke="#243b53" stroke-width="4"/>
-  <path class="sym" d="M680 260 H645 V290 L622 300 M622 320 L645 330 V360 H680"/>
-  <polygon points="636,326 648,331 640,320" fill="#243b53"/>
-  <line class="barrier" x1="604" y1="70" x2="604" y2="600"/>
-  <text class="s" x="604" y="628" text-anchor="middle">isolation barrier: no copper crosses this line</text>
+  <!-- Data: two options -->
+  <path class="w tx" d="M260 440 H420"/>
+  <rect class="opt" x="420" y="360" width="400" height="120" rx="12"/>
+  <text class="sb" x="440" y="388">Option A: V+ measures about 3.3 V</text>
+  <rect class="res" x="560" y="418" width="90" height="36" rx="6"/>
+  <text class="sb" x="605" y="442" text-anchor="middle">1 k</text>
+  <path class="w tx" d="M420 436 H560 M650 436 H820"/>
 
-  <!-- collector (pin 4) to D7 with pull-up R2 -->
-  <path class="w rx" d="M680 260 H900"/>
-  <text class="s" x="700" y="250">collector</text>
-  <circle cx="800" cy="260" r="6" fill="#186faf"/>
-  <path class="w g3" d="M800 260 V215"/>
-  <rect class="res" x="780" y="135" width="40" height="80" rx="6"/>
-  <text class="sb" x="832" y="170">R2</text>
-  <text class="s" x="832" y="192">4.7 k</text>
-  <path class="w g3" d="M800 135 V100 H900"/>
+  <rect class="opt" x="420" y="500" width="400" height="170" rx="12"/>
+  <text class="sb" x="440" y="528">Option B: V+ measures about 5 V</text>
+  <rect class="res" x="500" y="556" width="90" height="36" rx="6"/>
+  <text class="sb" x="545" y="580" text-anchor="middle">10 k</text>
+  <path class="w tx" d="M420 574 H500 M590 574 H820"/>
+  <circle cx="680" cy="574" r="6" fill="#7b2cbf"/>
+  <rect class="res" x="662" y="595" width="36" height="50" rx="6"/>
+  <text class="sb" x="712" y="625">20 k to GND</text>
+  <path class="w tx" d="M680 574 V595"/>
+  <path class="w tx" d="M300 440 V574 H420" stroke-dasharray="3 6"/>
 
-  <!-- emitter (pin 3) to GND -->
-  <path class="w gnd" d="M680 360 H900"/>
-  <text class="s" x="700" y="384">emitter</text>
+  <path class="w tx" d="M820 436 V420 H880 M820 574 V420"/>
 
   <!-- XIAO -->
-  <rect class="esp" x="900" y="80" width="160" height="400" rx="16"/>
-  <circle cx="900" cy="100" r="8" fill="#2f855a"/><text class="sb" x="915" y="105">3V3</text>
-  <circle cx="900" cy="260" r="8" fill="#186faf"/><text class="sb" x="915" y="265">D7 / GPIO44</text>
-  <text class="s" x="915" y="287">(silkscreen RX)</text>
-  <circle cx="900" cy="360" r="8" fill="#334e68"/><text class="sb" x="915" y="365">GND</text>
-  <text class="t" x="980" y="425" text-anchor="middle">XIAO</text>
-  <text class="t" x="980" y="451" text-anchor="middle">ESP32-S3</text>
-  <rect x="955" y="480" width="50" height="22" rx="6" fill="#cbd5e1" stroke="#243b53" stroke-width="2"/>
-  <text class="s" x="980" y="530" text-anchor="middle">USB-C power from a</text>
-  <text class="s" x="980" y="552" text-anchor="middle">12 V USB adapter</text>
+  <rect class="esp" x="880" y="150" width="180" height="330" rx="16"/>
+  <circle cx="880" cy="200" r="8" fill="#c53030"/><text class="sb" x="895" y="205">5V</text>
+  <circle cx="880" cy="250" r="8" fill="#334e68"/><text class="sb" x="895" y="255">GND</text>
+  <circle cx="880" cy="420" r="8" fill="#7b2cbf"/><text class="sb" x="895" y="415">D7 / GPIO44</text>
+  <text class="s" x="895" y="437">(silkscreen RX)</text>
+  <text class="t" x="970" y="320" text-anchor="middle">XIAO</text>
+  <text class="t" x="970" y="346" text-anchor="middle">ESP32-S3</text>
+  <text class="s" x="970" y="505" text-anchor="middle">U.FL antenna inside</text>
+  <text class="s" x="970" y="525" text-anchor="middle">the plastic housing</text>
+
+  <text class="warn" x="40" y="712">Build only ONE data option. Never plug USB into the XIAO while the shunt cable is connected.</text>
+  <text class="s" x="40" y="738">The 20 k resistor's ground end goes to XIAO GND. Display G, B- and XIAO GND are the same node in this design.</text>
 </svg>

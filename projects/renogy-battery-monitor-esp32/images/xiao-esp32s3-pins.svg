@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="560" viewBox="0 0 760 560" role="img" aria-labelledby="title desc">
   <title id="title">Seeed Studio XIAO ESP32-S3 pins used by this project</title>
-  <desc id="desc">Top view of the XIAO ESP32-S3 with the USB-C connector at the top. Left column from top: D0 GPIO1, D1 GPIO2, D2 GPIO3, D3 GPIO4, D4 GPIO5, D5 GPIO6, D6 GPIO43. Right column from top: 5V, GND, 3V3, D10 GPIO9, D9 GPIO8, D8 GPIO7, D7 GPIO44. The project uses GND, 3V3 and D7 GPIO44; power comes through USB-C.</desc>
+  <desc id="desc">Top view of the XIAO ESP32-S3 with the USB-C connector at the top. Left column from top: D0 GPIO1, D1 GPIO2, D2 GPIO3, D3 GPIO4, D4 GPIO5, D5 GPIO6, D6 GPIO43. Right column from top: 5V, GND, 3V3, D10 GPIO9, D9 GPIO8, D8 GPIO7, D7 GPIO44. The project uses 5V and GND for power from the buck regulator, and D7 GPIO44 for data. USB-C is used only for the first flash on the bench.</desc>
   <defs>
     <style>
       .t{font:600 20px system-ui,sans-serif;fill:#102a43}
@@ -28,13 +28,13 @@
     <circle class="pin" cx="290" cy="450" r="10"/><text class="p" x="250" y="455" text-anchor="end">D6 TX</text><text class="g" x="170" y="455" text-anchor="end">GPIO43</text>
   </g>
   <g>
-    <circle class="pin" cx="470" cy="150" r="10"/><text class="p" x="510" y="155">5V</text><text class="g" x="560" y="155">not used</text>
-    <circle class="pin use" cx="470" cy="200" r="12"/><text class="p" x="510" y="205">GND</text><text class="g" x="560" y="205">PC817 pin 3</text>
-    <circle class="pin use" cx="470" cy="250" r="12"/><text class="p" x="510" y="255">3V3</text><text class="g" x="560" y="255">R2 4.7 k pull-up</text>
+    <circle class="pin use" cx="470" cy="150" r="12"/><text class="p" x="510" y="155">5V</text><text class="g" x="560" y="155">buck 5V OUT</text>
+    <circle class="pin use" cx="470" cy="200" r="12"/><text class="p" x="510" y="205">GND</text><text class="g" x="560" y="205">buck GND</text>
+    <circle class="pin" cx="470" cy="250" r="10"/><text class="p" x="510" y="255">3V3</text><text class="g" x="560" y="255">not used</text>
     <circle class="pin" cx="470" cy="300" r="10"/><text class="p" x="510" y="305">D10</text><text class="g" x="570" y="305">GPIO9</text>
     <circle class="pin" cx="470" cy="350" r="10"/><text class="p" x="510" y="355">D9</text><text class="g" x="570" y="355">GPIO8</text>
     <circle class="pin" cx="470" cy="400" r="10"/><text class="p" x="510" y="405">D8</text><text class="g" x="570" y="405">GPIO7</text>
-    <circle class="pin use" cx="470" cy="450" r="12"/><text class="p" x="510" y="455">D7 RX</text><text class="g" x="585" y="455">GPIO44: PC817 pin 4</text>
+    <circle class="pin use" cx="470" cy="450" r="12"/><text class="p" x="510" y="455">D7 RX</text><text class="g" x="585" y="455">GPIO44: display Tx</text>
   </g>
-  <text class="g" x="380" y="545" text-anchor="middle">Highlighted pins are the only ones wired. Power the board through USB-C.</text>
+  <text class="g" x="380" y="545" text-anchor="middle">Highlighted pins are the only ones wired. USB-C is for the first bench flash only.</text>
 </svg>

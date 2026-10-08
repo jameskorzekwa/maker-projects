@@ -1,8 +1,9 @@
 # Casita battery monitor bridge
 #
-# Seeed Studio XIAO ESP32-S3 that listens to the Renogy RBM500 (Baiway TF03H)
-# battery monitor display's TTL serial output through an optocoupler and
-# publishes the readings to Home Assistant. See ../README.md for wiring.
+# Seeed Studio XIAO ESP32-S3 mounted inside the Renogy RBM500 (Baiway TF03H)
+# battery monitor display housing. It is powered from the display's B+/B-
+# through a 12 V to 5 V buck regulator, reads the display's TTL serial output
+# on D7, and publishes the readings to Home Assistant. See ../README.md.
 #
 # Entity names omit the device name; Home Assistant prefixes them with the
 # friendly name, e.g. sensor.casita_battery_monitor_state_of_charge.
@@ -10,7 +11,8 @@
 substitutions:
   name: casita-battery-monitor
   friendly_name: Casita Battery Monitor
-  # XIAO pin D7 (silkscreen RX) = GPIO44. Wired to the optocoupler collector.
+  # XIAO pin D7 (silkscreen RX) = GPIO44. Wired to the display's Tx hole
+  # through a 1 kohm resistor (3.3 V logic) or a 10k/20k divider (5 V logic).
   uart_rx_pin: GPIO44
   refresh_interval: 5s
 
@@ -41,6 +43,10 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  # The XIAO draws its power through the thin shunt cable. Lower transmit
+  # power (default 20 dB) to reduce current spikes on that cable. Raise it if
+  # the signal is weak where the display is mounted.
+  output_power: 15dB
   ap:
     ssid: "Casita Battery Fallback"
     password: !secret fallback_ap_password
