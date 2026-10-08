@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560" role="img" aria-labelledby="title desc">
+  <title id="title">Renogy battery monitor to Home Assistant system overview</title>
+  <desc id="desc">The battery bank's negative passes through the 500 A shunt. A shielded cable carries the shunt sense signals and battery voltage, B plus and B minus, to the Renogy RBM500 display. Inside the display housing, a small buck regulator takes B plus and B minus and makes 5 volts for a Seeed XIAO ESP32-S3. The display's serial transmit line connects to the XIAO's D7 pin. The XIAO sends readings over Wi-Fi to Home Assistant and to a local web page on a phone. Everything inside the housing is on the battery side of the shunt.</desc>
+  <defs>
+    <style>
+      .box{fill:#f5f7fa;stroke:#243b53;stroke-width:3}
+      .batt{fill:#fff3c4;stroke:#b44d12;stroke-width:3}
+      .housing{fill:#fffaf0;stroke:#b44d12;stroke-width:3;stroke-dasharray:12 8}
+      .esp{fill:#e3f8ff;stroke:#186faf;stroke-width:3}
+      .reg{fill:#fde8e8;stroke:#c53030;stroke-width:3}
+      .ha{fill:#e6fffa;stroke:#0f766e;stroke-width:3}
+      .t{font:600 20px system-ui,sans-serif;fill:#102a43}
+      .s{font:15px system-ui,sans-serif;fill:#334e68}
+      .w{fill:none;stroke-width:4}
+      .analog{stroke:#b44d12}
+      .data{stroke:#7b2cbf}
+      .pwr{stroke:#c53030}
+      .rf{stroke:#0f766e;stroke-dasharray:10 7}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#334e68"/></marker>
+  </defs>
+  <rect width="1100" height="560" rx="24" fill="#fff"/>
+
+  <rect class="batt" x="30" y="60" width="190" height="130" rx="16"/>
+  <text class="t" x="125" y="110" text-anchor="middle">600 Ah bank</text>
+  <text class="s" x="125" y="138" text-anchor="middle">2 x Renogy 300 Ah</text>
+  <text class="s" x="125" y="162" text-anchor="middle">LiFePO4, 12.8 V</text>
+
+  <rect class="batt" x="30" y="300" width="190" height="110" rx="16"/>
+  <text class="t" x="125" y="345" text-anchor="middle">500 A shunt</text>
+  <text class="s" x="125" y="372" text-anchor="middle">battery negative</text>
+  <path class="w analog" d="M125 190 V300" marker-end="url(#arrow)"/>
+  <text class="s" x="140" y="250">B+ wire (fused)</text>
+
+  <rect class="housing" x="290" y="200" width="460" height="300" rx="20"/>
+  <text class="t" x="520" y="232" text-anchor="middle">RBM500 display housing</text>
+
+  <rect class="batt" x="310" y="260" width="200" height="210" rx="16"/>
+  <text class="t" x="410" y="298" text-anchor="middle">Display board</text>
+  <text class="s" x="410" y="324" text-anchor="middle">Baiway TF03H V35</text>
+  <text class="s" x="410" y="350" text-anchor="middle">computes SoC, V, A, Ah</text>
+  <text class="s" x="410" y="376" text-anchor="middle">serial: 9600 8N1</text>
+  <text class="s" x="410" y="402" text-anchor="middle">16-byte frame / second</text>
+  <path class="w analog" d="M220 355 H310" marker-end="url(#arrow)"/>
+  <text class="s" x="265" y="340" text-anchor="middle">Rs+ Rs-</text>
+  <text class="s" x="265" y="385" text-anchor="middle">B+ B-</text>
+
+  <rect class="reg" x="560" y="260" width="170" height="80" rx="14"/>
+  <text class="t" x="645" y="295" text-anchor="middle">Buck 12 V</text>
+  <text class="s" x="645" y="320" text-anchor="middle">to 5 V, 500 mA</text>
+  <path class="w pwr" d="M510 310 H560" marker-end="url(#arrow)"/>
+  <text class="s" x="535" y="285" text-anchor="middle">B+/B-</text>
+
+  <rect class="esp" x="560" y="370" width="170" height="110" rx="14"/>
+  <text class="t" x="645" y="400" text-anchor="middle">XIAO</text>
+  <text class="t" x="645" y="424" text-anchor="middle">ESP32-S3</text>
+  <text class="s" x="645" y="450" text-anchor="middle">ESPHome</text>
+  <path class="w pwr" d="M645 340 V370" marker-end="url(#arrow)"/>
+  <path class="w data" d="M510 440 H560" marker-end="url(#arrow)"/>
+  <text class="s" x="535" y="465" text-anchor="middle">Tx</text>
+
+  <rect class="ha" x="790" y="60" width="280" height="150" rx="16"/>
+  <text class="t" x="930" y="100" text-anchor="middle">Home Assistant</text>
+  <text class="s" x="930" y="128" text-anchor="middle">ESPHome integration</text>
+  <text class="s" x="930" y="152" text-anchor="middle">SoC, voltage, current, power,</text>
+  <text class="s" x="930" y="174" text-anchor="middle">Ah, time remaining, alerts</text>
+
+  <rect class="box" x="860" y="330" width="190" height="110" rx="16"/>
+  <text class="t" x="955" y="370" text-anchor="middle">Phone</text>
+  <text class="s" x="955" y="398" text-anchor="middle">local web page</text>
+  <text class="s" x="955" y="420" text-anchor="middle">on trailer Wi-Fi</text>
+
+  <path class="w rf" d="M730 400 L860 180" marker-end="url(#arrow)"/>
+  <path class="w rf" d="M730 430 H860" marker-end="url(#arrow)"/>
+  <text class="s" x="800" y="290">Wi-Fi</text>
+
+  <text class="s" x="520" y="530" text-anchor="middle">Everything inside the housing is on the battery side of the shunt and shares the display's ground.</text>
+</svg>

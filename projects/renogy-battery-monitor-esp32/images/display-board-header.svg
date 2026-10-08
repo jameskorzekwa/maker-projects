@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" role="img" aria-labelledby="title desc">
+  <title id="title">Where to connect on the RBM500 display board</title>
+  <desc id="desc">Back of the Baiway TF03H V35 board inside the Renogy RBM500 display, oriented with the white shunt connector on the left edge. Power for the XIAO is taken from the back of the B- and B+ pins of the white shunt connector. The empty MK1 isolator footprint is at the lower left. Immediately to its right is a vertical row of six holes labeled from top to bottom Out, Rx, Tx, TEN, G and V+. Only Tx is wired; G and V+ are used only to measure the logic voltage. The Rs pins, the slot labeled Out-, Out+, VCC, GND, TXD and RXD, the MK2 footprint and the PROG pads are not touched.</desc>
+  <defs>
+    <style>
+      .pcb{fill:#1e3a8a;stroke:#0b1f4d;stroke-width:4}
+      .silk{font:600 16px ui-monospace,monospace;fill:#f8fafc}
+      .silks{font:13px ui-monospace,monospace;fill:#cbd5e1}
+      .t{font:600 20px system-ui,sans-serif;fill:#102a43}
+      .s{font:15px system-ui,sans-serif;fill:#334e68}
+      .call{fill:none;stroke:#f59e0b;stroke-width:3}
+      .dont{fill:none;stroke:#ef4444;stroke-width:3;stroke-dasharray:8 6}
+      .outline{fill:none;stroke:#e2e8f0;stroke-width:2}
+    </style>
+  </defs>
+  <rect width="1100" height="640" rx="24" fill="#fff"/>
+  <text class="t" x="40" y="40">RBM500 display, back cover removed (orientation as in the photo)</text>
+
+  <rect class="pcb" x="40" y="60" width="760" height="520" rx="22"/>
+
+  <!-- shunt connector -->
+  <rect x="40" y="150" width="60" height="170" rx="6" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
+  <text class="silks" x="110" y="180">Rs-</text><text class="silks" x="110" y="220">Rs+</text>
+  <text class="silk" x="110" y="262">B-</text><text class="silk" x="110" y="302">B+</text>
+  <rect class="dont" x="34" y="160" width="120" height="76" rx="8"/>
+  <rect class="call" x="34" y="240" width="120" height="76" rx="8"/>
+
+  <!-- MK1 area -->
+  <rect class="outline" x="80" y="370" width="290" height="190" rx="6"/>
+  <text class="silks" x="355" y="388" text-anchor="end">MK1</text>
+  <rect x="190" y="390" width="140" height="120" rx="8" fill="#5eead4" opacity="0.55"/>
+  <rect x="88" y="390" width="12" height="150" rx="6" fill="#0b1f4d"/>
+  <text class="silks" x="108" y="410">Out-</text><text class="silks" x="108" y="432">Out+</text>
+  <text class="silks" x="108" y="454">VCC</text><text class="silks" x="108" y="476">GND</text>
+  <text class="silks" x="108" y="498">TXD</text><text class="silks" x="108" y="520">RXD</text>
+  <rect class="dont" x="82" y="384" width="88" height="152" rx="6"/>
+
+  <!-- the six-hole row -->
+  <g>
+    <circle cx="400" cy="392" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="398">Out</text>
+    <circle cx="400" cy="420" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="426">Rx</text>
+    <circle cx="400" cy="448" r="9" fill="#0f172a" stroke="#f59e0b" stroke-width="4"/><text class="silk" x="418" y="454">Tx</text>
+    <circle cx="400" cy="476" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="482">TEN</text>
+    <circle cx="400" cy="504" r="9" fill="#0f172a" stroke="#38bdf8" stroke-width="4"/><text class="silk" x="418" y="510">G</text>
+    <circle cx="400" cy="532" r="9" fill="#0f172a" stroke="#38bdf8" stroke-width="4"/><text class="silk" x="418" y="538">V+</text>
+  </g>
+  <rect class="call" x="384" y="378" width="80" height="170" rx="10"/>
+
+  <!-- MK2 -->
+  <rect class="outline" x="480" y="380" width="250" height="185" rx="6"/>
+  <text class="silks" x="490" y="560">MK2</text>
+  <rect x="520" y="400" width="110" height="90" rx="8" fill="#5eead4" opacity="0.55"/>
+  <text class="silks" x="690" y="410">G</text><text class="silks" x="690" y="434">CS</text><text class="silks" x="690" y="458">S</text>
+  <text class="silks" x="690" y="482">T</text><text class="silks" x="690" y="506">R</text><text class="silks" x="690" y="530">V</text>
+  <rect class="dont" x="476" y="376" width="258" height="193" rx="8"/>
+
+  <!-- PROG -->
+  <rect x="470" y="300" width="90" height="26" rx="4" fill="#d4a017"/>
+  <text class="silks" x="440" y="318" text-anchor="end">PROG</text>
+  <rect class="dont" x="464" y="294" width="102" height="38" rx="6"/>
+
+  <!-- MCU + label -->
+  <rect x="560" y="200" width="110" height="110" rx="6" fill="#0f172a"/>
+  <text class="silks" x="615" y="330" text-anchor="middle">MCU</text>
+  <text class="silk" x="760" y="110" text-anchor="end">Baiway TF03H V35</text>
+  <rect x="320" y="90" width="220" height="70" rx="6" fill="#cbd5e1" opacity="0.5"/>
+  <text class="silks" x="430" y="130" text-anchor="middle">LCD ribbon</text>
+
+  <!-- legend -->
+  <rect x="830" y="70" width="240" height="510" rx="16" fill="#f5f7fa" stroke="#243b53" stroke-width="2"/>
+  <text class="t" x="850" y="104">Connect</text>
+  <rect class="call" x="850" y="118" width="26" height="18" rx="4"/>
+  <text class="s" x="886" y="133">B-, B+ and Tx</text>
+  <text class="s" x="850" y="164">B+/B- pin backs -> buck in</text>
+  <text class="s" x="850" y="188">Tx -> 1 k (or divider) -> D7</text>
+  <rect x="850" y="202" width="26" height="18" rx="4" fill="none" stroke="#38bdf8" stroke-width="3"/>
+  <text class="s" x="886" y="217">G, V+: measure only</text>
+  <text class="t" x="850" y="262">Do not touch</text>
+  <rect class="dont" x="850" y="276" width="26" height="18" rx="4"/>
+  <text class="s" x="886" y="291">red dashed areas</text>
+  <text class="s" x="850" y="326">Rs-, Rs+: shunt sense</text>
+  <text class="s" x="850" y="346">signals</text>
+  <text class="s" x="850" y="376">MK1 slot labels: outer</text>
+  <text class="s" x="850" y="396">side of the missing</text>
+  <text class="s" x="850" y="416">isolator module</text>
+  <text class="s" x="850" y="446">MK2: unknown add-on</text>
+  <text class="s" x="850" y="466">module footprint</text>
+  <text class="s" x="850" y="496">PROG: factory MCU</text>
+  <text class="s" x="850" y="516">programming pads</text>
+  <text class="s" x="850" y="556">Drawing is not to scale.</text>
+</svg>
