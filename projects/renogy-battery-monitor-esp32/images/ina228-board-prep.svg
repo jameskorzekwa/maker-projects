@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560" role="img" aria-labelledby="title desc">
+  <title id="title">Preparing the INA228 breakout for an external shunt</title>
+  <desc id="desc">On the Adafruit INA228 breakout (product 5832), the onboard 15 milliohm shunt resistor R1, a large 2512 part between the chip and the three-pin terminal block, connects directly across VIN plus and VIN minus. It must be desoldered. Afterwards the resistance from VIN plus to VIN minus should be tens of kilohms, not near zero. On the back, the VBUS jumper SJ1 must stay open so VBUS can be wired to battery positive separately, and the A0 and A1 address jumpers stay open for address 0x40. Generic INA228 modules also carry an onboard shunt, often marked R002, R010 or R100, which must be removed the same way.</desc>
+  <defs>
+    <style>
+      .pcb{fill:#1e3a8a;stroke:#0b1f4d;stroke-width:4}
+      .silk{font:600 15px ui-monospace,monospace;fill:#f8fafc}
+      .silks{font:13px ui-monospace,monospace;fill:#cbd5e1}
+      .t{font:600 20px system-ui,sans-serif;fill:#102a43}
+      .s{font:15px system-ui,sans-serif;fill:#334e68}
+      .warn{font:600 15px system-ui,sans-serif;fill:#b91c1c}
+      .x{stroke:#ef4444;stroke-width:6}
+      .ok{fill:none;stroke:#16a34a;stroke-width:3;stroke-dasharray:6 5}
+    </style>
+  </defs>
+  <rect width="1100" height="560" rx="24" fill="#fff"/>
+
+  <text class="t" x="40" y="44">Front (Adafruit 5832 shown)</text>
+  <rect class="pcb" x="40" y="70" width="440" height="330" rx="18"/>
+  <rect x="80" y="110" width="90" height="70" rx="6" fill="#0f172a"/>
+  <text class="silks" x="125" y="200" text-anchor="middle">INA228 (IC1)</text>
+  <rect x="210" y="125" width="110" height="45" rx="4" fill="#111827" stroke="#9ca3af" stroke-width="2"/>
+  <text class="silk" x="265" y="153" text-anchor="middle">R015</text>
+  <line class="x" x1="200" y1="115" x2="330" y2="180"/><line class="x" x1="330" y1="115" x2="200" y2="180"/>
+  <text class="silks" x="265" y="200" text-anchor="middle">R1 15 mOhm shunt</text>
+  <rect x="360" y="100" width="90" height="120" rx="6" fill="#16a34a" opacity="0.85"/>
+  <text class="silks" x="405" y="130" text-anchor="middle">VIN-</text>
+  <text class="silks" x="405" y="165" text-anchor="middle">VBUS</text>
+  <text class="silks" x="405" y="200" text-anchor="middle">VIN+</text>
+  <text class="silks" x="405" y="240" text-anchor="middle">terminal block</text>
+  <g>
+    <rect x="70" y="330" width="380" height="40" rx="6" fill="#0b1f4d"/>
+    <text class="silks" x="260" y="355" text-anchor="middle">header: VIN GND SCL SDA ALRT VIN- VBUS VIN+</text>
+    <text class="silks" x="260" y="390" text-anchor="middle">(check your board's silkscreen for the order)</text>
+  </g>
+
+  <text class="t" x="560" y="44">Back</text>
+  <rect class="pcb" x="560" y="70" width="300" height="230" rx="18"/>
+  <rect x="610" y="120" width="40" height="22" rx="4" fill="#d4a017"/><rect x="660" y="120" width="40" height="22" rx="4" fill="#d4a017"/>
+  <text class="silk" x="655" y="170" text-anchor="middle">A0  A1</text>
+  <rect class="ok" x="600" y="110" width="110" height="42" rx="6"/>
+  <rect x="760" y="200" width="40" height="22" rx="4" fill="#d4a017"/>
+  <text class="silk" x="780" y="250" text-anchor="middle">VBUS (SJ1)</text>
+  <rect class="ok" x="750" y="190" width="60" height="42" rx="6"/>
+
+  <text class="t" x="560" y="350">Checklist</text>
+  <text class="warn" x="560" y="382">1. Desolder R1 (the onboard shunt).</text>
+  <text class="s" x="580" y="406">Then VIN+ to VIN- must read tens of kOhm, not near 0.</text>
+  <text class="s" x="560" y="440">2. Leave VBUS jumper SJ1 open (default).</text>
+  <text class="s" x="580" y="464">VBUS to VIN+ must read open.</text>
+  <text class="s" x="560" y="498">3. Leave A0/A1 open: I2C address 0x40.</text>
+  <text class="s" x="40" y="440">Generic modules: the shunt is usually a large resistor marked</text>
+  <text class="s" x="40" y="462">R002, R010 or R100 between the screw terminals. Remove it</text>
+  <text class="s" x="40" y="484">and confirm the chip is marked INA228 (some clones are INA226).</text>
+  <text class="s" x="40" y="530">Drawing is schematic, not to scale.</text>
+</svg>

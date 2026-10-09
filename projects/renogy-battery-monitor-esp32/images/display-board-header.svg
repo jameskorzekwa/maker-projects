@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" role="img" aria-labelledby="title desc">
   <title id="title">Where to connect on the RBM500 display board</title>
-  <desc id="desc">Back of the Baiway TF03H V35 board inside the Renogy RBM500 display, oriented with the white shunt connector on the left edge. Power for the XIAO is taken from the back of the B- and B+ pins of the white shunt connector. The empty MK1 isolator footprint is at the lower left. Immediately to its right is a vertical row of six holes labeled from top to bottom Out, Rx, Tx, TEN, G and V+. Only Tx is wired; G and V+ are used only to measure the logic voltage. The Rs pins, the slot labeled Out-, Out+, VCC, GND, TXD and RXD, the MK2 footprint and the PROG pads are not touched.</desc>
+  <desc id="desc">Back of the Baiway TF03H V35 board inside the Renogy RBM500 display, oriented with the white shunt connector on the left edge. All four used connections are on the backs of the white shunt connector pins: Rs minus, Rs plus, B minus and B plus. The six-hole row beside the empty MK1 footprint (Out, Rx, Tx, TEN, G, V+), the MK1 slot labels, the MK2 footprint and the PROG pads are not used.</desc>
   <defs>
     <style>
       .pcb{fill:#1e3a8a;stroke:#0b1f4d;stroke-width:4}
@@ -20,10 +20,9 @@
 
   <!-- shunt connector -->
   <rect x="40" y="150" width="60" height="170" rx="6" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
-  <text class="silks" x="110" y="180">Rs-</text><text class="silks" x="110" y="220">Rs+</text>
+  <text class="silk" x="110" y="182">Rs-</text><text class="silk" x="110" y="222">Rs+</text>
   <text class="silk" x="110" y="262">B-</text><text class="silk" x="110" y="302">B+</text>
-  <rect class="dont" x="34" y="160" width="120" height="76" rx="8"/>
-  <rect class="call" x="34" y="240" width="120" height="76" rx="8"/>
+  <rect class="call" x="34" y="160" width="120" height="156" rx="8"/>
 
   <!-- MK1 area -->
   <rect class="outline" x="80" y="370" width="290" height="190" rx="6"/>
@@ -39,12 +38,12 @@
   <g>
     <circle cx="400" cy="392" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="398">Out</text>
     <circle cx="400" cy="420" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="426">Rx</text>
-    <circle cx="400" cy="448" r="9" fill="#0f172a" stroke="#f59e0b" stroke-width="4"/><text class="silk" x="418" y="454">Tx</text>
+    <circle cx="400" cy="448" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="454">Tx</text>
     <circle cx="400" cy="476" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="482">TEN</text>
-    <circle cx="400" cy="504" r="9" fill="#0f172a" stroke="#38bdf8" stroke-width="4"/><text class="silk" x="418" y="510">G</text>
-    <circle cx="400" cy="532" r="9" fill="#0f172a" stroke="#38bdf8" stroke-width="4"/><text class="silk" x="418" y="538">V+</text>
+    <circle cx="400" cy="504" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="510">G</text>
+    <circle cx="400" cy="532" r="9" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/><text class="silk" x="418" y="538">V+</text>
   </g>
-  <rect class="call" x="384" y="378" width="80" height="170" rx="10"/>
+  <rect class="dont" x="384" y="378" width="80" height="170" rx="10"/>
 
   <!-- MK2 -->
   <rect class="outline" x="480" y="380" width="250" height="185" rx="6"/>
@@ -70,16 +69,15 @@
   <rect x="830" y="70" width="240" height="510" rx="16" fill="#f5f7fa" stroke="#243b53" stroke-width="2"/>
   <text class="t" x="850" y="104">Connect</text>
   <rect class="call" x="850" y="118" width="26" height="18" rx="4"/>
-  <text class="s" x="886" y="133">B-, B+ and Tx</text>
-  <text class="s" x="850" y="164">B+/B- pin backs -> buck in</text>
-  <text class="s" x="850" y="188">Tx -> 1 k (or divider) -> D7</text>
-  <rect x="850" y="202" width="26" height="18" rx="4" fill="none" stroke="#38bdf8" stroke-width="3"/>
-  <text class="s" x="886" y="217">G, V+: measure only</text>
+  <text class="s" x="886" y="133">4 connector pin backs</text>
+  <text class="s" x="850" y="164">B+ -> buck VIN, INA VBUS</text>
+  <text class="s" x="850" y="188">B- -> buck GND (= GND)</text>
+  <text class="s" x="850" y="212">Rs+/Rs- -> INA VIN+/VIN-</text>
   <text class="t" x="850" y="262">Do not touch</text>
   <rect class="dont" x="850" y="276" width="26" height="18" rx="4"/>
   <text class="s" x="886" y="291">red dashed areas</text>
-  <text class="s" x="850" y="326">Rs-, Rs+: shunt sense</text>
-  <text class="s" x="850" y="346">signals</text>
+  <text class="s" x="850" y="326">6-hole row: serial tap</text>
+  <text class="s" x="850" y="346">does not work; unused</text>
   <text class="s" x="850" y="376">MK1 slot labels: outer</text>
   <text class="s" x="850" y="396">side of the missing</text>
   <text class="s" x="850" y="416">isolator module</text>

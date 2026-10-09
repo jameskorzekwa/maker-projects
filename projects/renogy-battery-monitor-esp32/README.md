@@ -1,97 +1,94 @@
-# Renogy Battery Monitor to Home Assistant (XIAO ESP32-S3)
+# Renogy Battery Monitor to Home Assistant (XIAO ESP32-S3 + INA228)
 
-A Seeed Studio XIAO ESP32-S3 mounted inside the display housing of the Renogy 500 A Battery Monitor with Shunt (RBM500) in the Casita travel trailer. It reads the display's serial output and publishes state of charge, voltage, current, power, remaining amp-hours and time remaining to Home Assistant. It also serves a small local web page so a phone on the trailer's Wi-Fi can check the battery without Home Assistant.
+A Seeed Studio XIAO ESP32-S3 and a TI INA228 current/voltage monitor, built into the display housing of the Renogy 500 A Battery Monitor with Shunt (RBM500) in the Casita travel trailer. The INA228 measures the existing 500 A shunt and the battery voltage. The ESP32 counts amp-hours to track state of charge, then publishes voltage, current, power, state of charge, remaining amp-hours, time to empty or full, and daily charged/discharged energy to Home Assistant. It also serves a local web page so a phone on the trailer's Wi-Fi can check the battery without Home Assistant.
 
-The RBM500 has no Bluetooth or data port, and Renogy sells no add-on for it. Inside, its display is a Baiway TF03H V35 board. Baiway's TF03 meters can be built with an optional TTL serial output; on this unit the isolator module for that output (`MK1`) is not fitted, but the board's serial transmit line is exposed on a row of holes beside the empty footprint. This project taps that line directly and powers the XIAO from the display's own battery feed through a small buck regulator, so the whole build fits inside the display housing with no extra cables.
+The Renogy display keeps working exactly as before. The INA228 reads the same shunt in parallel through the display cable's sense wires, so you end up with two independent monitors.
 
 ![System overview](images/system-overview.svg)
 
 > [!IMPORTANT]
-> **Status: design documented, not yet built.** The ESPHome configuration validates and compiles (ESPHome 2026.9.1), but no hardware has been assembled. The design assumes this display's firmware transmits frames on the `Tx` hole even though the isolator module is missing. [Step 1](#step-1-confirm-the-display-transmits-bench-test) confirms that with a $5 USB-serial adapter before you solder anything permanent. If no frames appear, stop: this approach will not work on your unit.
+> **Status: design documented, not yet built.** The ESPHome configuration validates and compiles with ESPHome 2026.9.1. The XIAO, buck regulator and power wiring are already installed and working in the display housing (from the earlier serial-tap attempt); the INA228 has not been wired or run yet. Step 2 checks that the display cable's sense wires carry the raw shunt voltage before anything is connected to them.
 
 ## How It Works
 
-1. The 500 A shunt sends analog sense signals (`Rs+`, `Rs-`) and battery voltage (`B+`, `B-`) to the display over the shielded cable. That cable carries no data.
-2. The display's microcontroller computes the readings and, about once per second, sends a 16-byte frame out of its serial transmit pin: 9600 baud, 8 data bits, no parity, 1 stop bit.
-3. A 12 V to 5 V buck regulator, fed from the backs of the display's `B+` and `B-` connector pins, powers the XIAO.
-4. The display's `Tx` line connects to the XIAO's `D7` (GPIO44), through a 1 kohm resistor if the display uses 3.3 V logic or a voltage divider if it uses 5 V logic.
-5. ESPHome decodes each frame with the open-source [`tf03k_shunt` component](https://github.com/edillmann/esphome-tf03k-smart-shunt) and publishes the values over Wi-Fi.
+1. The 500 A shunt sits in the battery negative. The display's shielded cable carries battery positive and negative (`B+`, `B-`) and the shunt's sense pair (`Rs+`, `Rs-`) to the display board.
+2. A 12 V to 5 V buck regulator, fed from the backs of the display connector's `B+` and `B-` pins, powers the XIAO. The XIAO's 3.3 V pin powers the INA228.
+3. The INA228's differential inputs (`VIN+`, `VIN-`) connect to the `Rs+`/`Rs-` pins through 10 ohm resistors, with a 0.1 uF capacitor across them. It measures the millivolts across the shunt with 20-bit resolution and its own hardware charge accumulator.
+4. The INA228's `VBUS` pin connects to `B+` and measures battery voltage against its ground (`B-`).
+5. Every second, ESPHome reads the INA228 over I2C. The change in the INA228's charge accumulator is added to a stored "remaining amp-hours" value, which becomes the state of charge.
+6. When the bank reaches full charge (high voltage with tapering charge current), state of charge resets to 100%, which cancels any accumulated drift.
 
-### Why no optocoupler is needed
+Everything inside the housing shares one ground: the display's `B-`, which is the battery side of the shunt. The XIAO has no other wired connection, so nothing creates a second current path around the shunt.
 
-The display's ground is the battery negative on the **battery side** of the shunt. The XIAO here is powered only from the display's `B+` and `B-`, so it shares that ground and has no other wired connection to anything; its only link to the outside is Wi-Fi.
+## Why Not the Display's Serial Port
 
-That changes if the XIAO is ever also connected to the trailer's 12 V system or its negative, for example by powering it from a USB socket. The XIAO's ground would then be on the **load side** of the shunt, and the data wire would become a second path around the shunt: readings would be wrong, and if the main negative cable came loose the trailer's load current would try to flow through that thin wire. If you ever power it that way, isolate the data line with an optocoupler.
+The first version of this project tried to read the display's own serial output. It does not work on this unit, and the files are kept in [`esphome/archive/`](esphome/archive/) for reference.
 
-### Frame format
+The display board is a Baiway TF03H V35. Baiway's TF03 meters can output a 9600-baud serial frame, but only on "customized" models fitted with an isolator module at `MK1`; this one is not. Tests run on 2026-10-09 with diagnostic firmware that logged every UART byte and counted every signal edge:
 
-| Bytes | Content | Units |
-| --- | --- | --- |
-| 1 | Header `0xA5` | |
-| 2 | State of charge | % |
-| 3-4 | Battery voltage | 10 mV |
-| 5-8 | Remaining capacity | mAh |
-| 9-12 | Current, signed (negative = discharging) | mA |
-| 13-15 | Time remaining | seconds |
-| 16 | Checksum: 8-bit sum of bytes 1-15 | |
+| Pad tested (with display awake) | Result |
+| --- | --- |
+| `Tx` (6-hole row) | Idle at 3.0 V, zero edges for 20+ minutes |
+| `Tx` with a 10 kohm pull-up from `TEN` to `V+` | Zero edges |
+| `Rx`, `TEN`, `MK2 T`, `MK2 R` | Zero edges |
 
-All multi-byte values are big-endian. Source: Baiway's TF03K communication specification, as reproduced in the component repository.
+Baiway's documentation describes serial output as a customized model option, the display menu has no communication setting, and no one online has reported enabling it on a standard unit. The conclusion is that serial output is disabled in this display's firmware. Measuring the shunt directly with an INA228 avoids the problem entirely.
 
-### Known limitations
+## Known Limitations
 
-- **The display only transmits while it is awake.** Renogy's manual says the monitor enters a low-power sleep and turns off its backlight when battery current is low, and Baiway's specification says frames are sent only while the meter is working (backlight on). While the display sleeps, the `Monitor Online` entity turns off after 60 seconds and Home Assistant keeps the last values. Pressing any button wakes the display for about 10 seconds. With the trailer's 12 V fridge cycling, the display will usually be awake, but expect gaps when the trailer is idle.
-- **The shunt does not see the XIAO's draw.** The XIAO takes power from the battery side, ahead of the shunt, so its consumption (roughly 0.5 W, about 1 Ah per day at 12.8 V) is not counted. The displayed state of charge slowly reads high by that amount. Set **Full V** in the display's user settings so the monitor resets to 100% at every full charge.
+- **The XIAO's own power is not metered.** It is taken from the battery side of the shunt, so neither the INA228 nor the Renogy display sees it (roughly 0.5 W, about 1 Ah per day, plus the display's own 10-15 mA). State of charge slowly reads high by that amount until the next full-charge resync.
+- **Coulomb counting drifts.** Calibration errors accumulate over days. The full-charge resync corrects it, so the bank needs to reach full occasionally: at or above `full_voltage` (default 14.0 V) with the charge current tapered to `full_tail_current` (default 6 A) for 2 minutes. If your charger never exceeds about 13.8 V, the resync will not trigger; use the **Mark Battery Full** button after a known full charge.
 - **It is always on.** `B+` comes straight from the battery, so the XIAO runs even when the trailer's battery disconnect switch is off: about 1 Ah per day in storage.
-- **Measurement offset risk.** The XIAO's current, including Wi-Fi transmit spikes, flows through the thin conductors of the 20 ft shunt cable. The shunt signal is tiny (75 mV at 500 A, so 0.15 mV per amp). If the display measures `Rs+`/`Rs-` against its own ground rather than differentially, voltage drop on the cable's `B-` conductor could add a current offset or noise. The separate `Rs-` and `B-` pins suggest a differential measurement, but this is unverified. [Step 5](#step-5-check-the-current-reading-for-offset) tests for it.
+- **State of charge is saved to flash every 10 minutes.** After an unexpected power loss, up to 10 minutes of counting can be lost.
 - **Remote reading away from home needs a network path.** See [Reading the battery away from home](#reading-the-battery-away-from-home).
 
 ## Parts
 
 | Component | Quantity | Notes | Purchase link |
 | --- | ---: | --- | --- |
-| Seeed Studio XIAO ESP32-S3 | 1 | Already owned. 21 x 17.5 mm. Uses an external U.FL antenna (included with the board) | [Seeed](https://www.seeedstudio.com/XIAO-ESP32S3-p-5627.html) |
-| 12 V to 5 V buck regulator | 1 | Fixed 5 V output, at least 500 mA, input rating of at least 16 V to cover a charging LiFePO4 bank (14.6 V) with margin. Example: Pololu D24V5F5, 5 V 500 mA, about 10 x 13 mm | [Pololu](https://www.pololu.com/product/2843) |
-| C1: electrolytic capacitor | 1 | 470 uF, 25 V or higher, low-ESR. Smooths the XIAO's Wi-Fi current spikes on the shunt cable | |
-| Data resistor(s) | 1-2 | **Option A** (`V+` about 3.3 V): one 1 kohm. **Option B** (`V+` about 5 V): one 10 kohm and one 20 kohm. 1/4 W or 0805 | |
-| Thin stranded hookup wire | About 0.5 m | 26-28 AWG silicone wire; red, black and one signal color | |
-| Inline fuse holder and 1 A fuse | 1 | On the RBM500's `B+` wire, close to the battery, if it is not already fused | |
+| Seeed Studio XIAO ESP32-S3 | 1 | Already installed. Uses an external U.FL antenna | [Seeed](https://www.seeedstudio.com/XIAO-ESP32S3-p-5627.html) |
+| 12 V to 5 V buck regulator and C1 (470 uF, 25 V) | 1 each | Already installed. Example: Pololu D24V5F5 | [Pololu](https://www.pololu.com/product/2843) |
+| INA228 breakout | 1 | Already owned. Adafruit 5832 or a module with a genuine INA228 chip. **The onboard shunt must be removed** | [Adafruit](https://www.adafruit.com/product/5832) |
+| 10 ohm resistors | 2 | 1/4 W or 0805; input filter and protection | |
+| C2: 0.1 uF ceramic capacitor | 1 | X7R or C0G, 25 V or higher; across `VIN+`/`VIN-` | |
+| Thin stranded hookup wire | About 0.5 m | 26-28 AWG silicone; use a twisted pair for `Rs+`/`Rs-` | |
+| Inline fuse holder and 1 A fuse | 1 | On the RBM500's `B+` wire, close to the battery, if not already fused | |
 | Kapton tape, heat-shrink, hot glue | As needed | Insulation and mounting inside the housing | |
-| USB-to-TTL serial adapter | 1 | Bench test only. 3.3 V logic (CP2102, CH340 or FTDI) | |
 
-Measure the free depth behind the display board before buying. The XIAO and regulator together need roughly 25 x 35 x 8 mm, plus the capacitor.
+Check that the INA228 breakout fits inside the housing next to the XIAO and regulator (the Adafruit board is about 25 x 23 mm). If it does not, mount everything in a small enclosure directly behind the display and run the same wires to it.
 
 ## Tools and Supplies
 
-- Fine-tip soldering iron, solder, flux and solder wick or a desoldering pump
-- Multimeter with DC voltage, DC current (mA) and continuity
-- Small screwdrivers
-- Laptop running on its battery for the bench test (not plugged into a charger)
+- Fine-tip soldering iron, solder, flux and solder wick; hot air helps to remove the breakout's onboard shunt
+- Multimeter with DC millivolts, resistance and continuity
+- DC clamp meter (optional, for the most accurate calibration)
+
+## Prepare the INA228 Breakout
+
+![Preparing the INA228 breakout](images/ina228-board-prep.svg)
+
+INA228 breakouts are built to measure current through their own small shunt. **That shunt must come off.** If it stays, it sits directly across the display cable's `Rs+`/`Rs-` sense wires, forming a parallel path to the 500 A shunt: the sense wires would carry part of the trailer's load current, both monitors would read wrong, and the thin wires could overheat.
+
+1. **Remove the onboard shunt.** On the Adafruit 5832 it is R1, a large 2512 resistor marked `R015` (15 mohm) between the INA228 chip and the 3-pin terminal block. On generic modules it is usually marked `R002`, `R010` or `R100`. Desolder it with hot air or two irons.
+2. **Check:** resistance from `VIN+` to `VIN-` must now read tens of kilohms (the chip's input), not near zero.
+3. **VBUS jumper:** on the Adafruit board, leave SJ1 (on the back, near `VBUS`) open, which is the default. Check that `VBUS` to `VIN+` reads open.
+4. **Address:** leave A0 and A1 open for I2C address 0x40.
+5. **Chip check:** confirm the chip is marked INA228. Some low-cost "INA228" modules carry an INA226, which this configuration does not support.
 
 ## Where to Connect on the Display Board
 
 ![RBM500 display board connection points](images/display-board-header.svg)
 
-With the back cover removed and the white shunt plug on the left edge:
+All four connections are made to the backs of the white shunt connector's pins on the display board:
 
-| Point | Use |
+| Pin | Goes to |
 | --- | --- |
-| `B+` pin of the shunt connector | Battery positive. Solder to the back of the pin on the board. Feeds the regulator `VIN` |
-| `B-` pin of the shunt connector | Battery negative (battery side of the shunt). Solder to the back of the pin. Feeds the regulator `GND` |
-| `Tx` hole (6-hole row beside `MK1`) | Microcontroller serial transmit. Goes to XIAO `D7` through the data resistor(s) |
-| `V+` hole | Board logic supply. **Measure only**, to choose Option A or B |
-| `G` hole | Board ground. Meter reference for measurements and the bench test |
-| `Out`, `Rx`, `TEN` holes | Not used |
+| `B+` | Buck regulator `VIN` (already connected) and INA228 `VBUS` |
+| `B-` | Buck regulator `GND` (already connected). This is the ground for everything |
+| `Rs+` | 10 ohm resistor, then INA228 `VIN+` |
+| `Rs-` | 10 ohm resistor, then INA228 `VIN-` |
 
-Do not touch:
-
-- **`Rs-` and `Rs+`** on the shunt connector. These carry the millivolt shunt signal.
-- **The slot labels `Out-`, `Out+`, `VCC`, `GND`, `TXD`, `RXD`.** These are the outer side of the missing isolator module.
-- **`MK2`** (pads `G`, `CS`, `S`, `T`, `R`, `V`). An unpopulated footprint for an unknown add-on module.
-- **`PROG`.** Factory programming pads for the microcontroller.
-
-Do not power the XIAO from `V+`. It is the display's internal logic supply and cannot deliver the 300-500 mA bursts the XIAO draws when Wi-Fi transmits.
-
-Photograph the board before modifying it and save the photo as `photos/rbm500-board-back.jpg`.
+Which way round `Rs+`/`Rs-` go only sets the sign of the reading; `current_sign` in the YAML corrects it. Do not use anything in the six-hole row, `MK1`, `MK2` or `PROG`.
 
 ## Wiring
 
@@ -99,141 +96,161 @@ Photograph the board before modifying it and save the photo as `photos/rbm500-bo
 
 | From | To | Notes |
 | --- | --- | --- |
-| Display `B+` pin (back) | Regulator `VIN` and C1 `+` | |
-| Display `B-` pin (back) | Regulator `GND` and C1 `-` | Observe C1's polarity stripe |
-| Regulator `5V OUT` | XIAO `5V` | |
-| Regulator `GND` | XIAO `GND` | |
-| Display `Tx` | Option A: 1 kohm, then XIAO `D7` | `V+` measured about 3.3 V |
-| Display `Tx` | Option B: 10 kohm, then XIAO `D7`; 20 kohm from `D7` to XIAO `GND` | `V+` measured about 5 V. Keeps `D7` at about 3.3 V |
-
-Build only one data option. In Option B, the divider gives 5 V x 20 / (10 + 20) = 3.33 V at `D7`.
+| Display `B+` pin (back) | Buck `VIN`, C1 `+`, INA228 `VBUS` | Buck and C1 already installed |
+| Display `B-` pin (back) | Buck `GND`, C1 `-` | Already installed |
+| Buck `VOUT` (5 V) | XIAO `5V` | Already installed |
+| Buck `GND` | XIAO `GND`, INA228 `GND` | |
+| XIAO `3V3` | INA228 `VIN` / `VS` (the breakout's power pin) | Not to be confused with `VIN+`/`VIN-` |
+| XIAO `D4` (GPIO5) | INA228 `SDA` | The Adafruit board has 10 kohm pull-ups |
+| XIAO `D5` (GPIO6) | INA228 `SCL` | |
+| Display `Rs+` | 10 ohm, then INA228 `VIN+` | Twist with the `Rs-` wire |
+| Display `Rs-` | 10 ohm, then INA228 `VIN-` | |
+| C2, 0.1 uF | Across INA228 `VIN+` and `VIN-` | At the breakout, after the 10 ohm resistors |
 
 ### XIAO ESP32-S3 pins
 
 ![XIAO ESP32-S3 pins used](images/xiao-esp32s3-pins.svg)
 
-Only `5V`, `GND` and `D7` (GPIO44) are wired. Logging stays on the native USB port (`USB_SERIAL_JTAG`), so the UART pins are free.
-
 > [!WARNING]
-> Never plug USB into the XIAO while the shunt cable is connected to the display. The regulator's 5 V would meet the USB 5 V, and the XIAO's ground would be tied to whatever the USB host is connected to. Flash over USB once on the bench, then use wireless updates.
+> Never plug USB into the XIAO while the shunt cable is connected to the display. Use wireless updates once the XIAO is installed.
 
 ## Build
 
-### Step 1: Confirm the display transmits (bench test)
+### Step 1: Remove the serial-tap test wiring
 
-Do this before buying parts or modifying the display permanently.
+Unplug the shunt cable from the display, then remove:
 
-1. Unplug the shunt cable from the display to power it down. Remove the back cover.
-2. Clear the solder from the `Tx`, `G` and `V+` holes with wick or a pump, or plan to tack wires onto the top of the pads.
-3. Solder a short temporary wire to each of `Tx`, `G` and `V+`. Insulate the ends.
-4. Reconnect the shunt cable so the display powers up. Measure DC voltage from `G` to `V+` and write it down. About 3.3 V means Option A; about 5 V means Option B.
-5. Set the USB-to-TTL adapter to 3.3 V logic. If `V+` is 5 V, check that the adapter's RX input is 5 V-tolerant, or put the Option B divider in line for the test.
-6. Unplug the laptop from its charger.
-7. Connect only adapter `GND` to display `G` and adapter `RX` to display `Tx`. Leave the adapter's `TX` and power pins unconnected.
-8. Open a serial terminal in hex mode at 9600 baud, 8N1. Press a display button to wake it.
-9. You should see a 16-byte frame starting with `A5` about once per second. Check one frame: bytes 3-4 as a number, divided by 100, should equal the voltage on the display.
-10. Disconnect the adapter and unplug the shunt cable. Remove the temporary `G` and `V+` wires; keep `Tx`.
+- the `Tx` wire and its 1 kohm resistor to XIAO `D7`
+- the probe wires from `Rx`, `TEN`, `MK2 T` and `MK2 R` to XIAO `D0`, `D1`, `D3` and `D4`, with their 1 kohm resistors
+- the 10 kohm resistor between `TEN` and `V+`
 
-If no frames appear, wake the display again and confirm the voltage on `Tx` toggles. If there is still nothing, the firmware does not transmit without the isolator module. Stop here and use a shunt with built-in Bluetooth instead.
+Leave the buck regulator, C1 and the XIAO's `5V`/`GND` power wiring in place. Clean any solder bridges on the six-hole row.
 
-### Step 2: Fuse and prepare
+### Step 2: Confirm the sense pair is passive
 
-1. Check the RBM500's `B+` wire between the battery and the shunt board. If it has no fuse, add an inline 1 A fuse as close to the battery positive as practical.
-2. With the shunt cable unplugged, plan the layout inside the housing: regulator and C1 near the shunt connector, XIAO with its antenna toward the side of the housing that faces the trailer interior.
-3. Flash the XIAO over USB on the bench now (see [Flash the XIAO](#2-flash-the-xiao-over-usb-first-time-only)), before it is wired into the display.
+This confirms that `Rs+`/`Rs-` carry the raw shunt voltage and not an amplified signal.
 
-### Step 3: Wire power
+1. Plug the shunt cable back in. Turn on a steady load of at least 20 A (for example the A/C on the inverter), or charge at a known current.
+2. Measure DC millivolts between the `Rs+` and `Rs-` pin backs. Expect current x 0.10-0.15 mohm, for example 2-3 mV at 20 A.
+3. Measure each of `Rs+` and `Rs-` against `B-`. Both should be within a few millivolts of zero.
 
-1. Solder a red wire to the back of the `B+` connector pin and a black wire to the back of the `B-` pin. Keep the joints small and do not bridge to the neighboring `Rs` pins.
-2. Solder C1 across the regulator's `VIN` and `GND`, positive lead to `VIN`.
-3. Connect the red wire to `VIN` and the black wire to `GND`.
-4. Before connecting the XIAO: plug in the shunt cable and measure the regulator output. It should read 4.9-5.1 V. Unplug the shunt cable again.
-5. Wire regulator `5V OUT` to XIAO `5V` and regulator `GND` to XIAO `GND`.
+If the reading is hundreds of millivolts or more, or either pin sits at a bias voltage against `B-`, the sense pair is not a plain shunt connection. Stop: the INA228 cannot be connected there.
 
-### Step 4: Wire data
+### Step 3: Prepare the INA228
 
-1. Build Option A or Option B from the [Wiring](#wiring) table between the `Tx` wire and XIAO `D7`. For Option B, the 20 kohm resistor goes from `D7` to XIAO `GND`.
-2. Cover every resistor lead and joint with heat-shrink.
-3. Attach the U.FL antenna to the XIAO and stick the flexible antenna to the inside of the plastic housing, away from the display board's copper.
-4. Secure the XIAO and regulator with Kapton tape or a dab of hot glue so nothing can short against the display board, and close the housing.
+Follow [Prepare the INA228 breakout](#prepare-the-ina228-breakout). Do not skip the check that `VIN+` to `VIN-` no longer reads near zero.
 
-### Step 5: Check the current reading for offset
+### Step 4: Wire the INA228
 
-1. With the shunt cable unplugged from the display, temporarily disconnect the regulator's red `VIN` wire (or leave it unsoldered until this test).
-2. Turn off every DC load you can so battery current is near zero. Plug in the shunt cable and note the current shown on the display after it settles.
-3. Unplug the shunt cable, connect the regulator, plug the cable back in, and let the XIAO boot and join Wi-Fi.
-4. Compare the displayed current. It should not change, because the XIAO's power is drawn ahead of the shunt.
-5. If the reading shifts by more than about 0.1 A or becomes noticeably noisy, try in order: lower `wifi: output_power` further (for example `11dB`); add a second 470 uF capacitor at the regulator input; or run a separate pair of power wires from the battery side for the regulator instead of using the shunt cable.
+1. Unplug the shunt cable from the display.
+2. Solder a 10 ohm resistor in series with each of two thin wires, then twist the wires together. Connect one end to the `Rs+` and `Rs-` pin backs, without bridging to the neighboring `B-` pin.
+3. At the breakout, connect the resistor ends to `VIN+` and `VIN-` and solder C2 directly across those two pins.
+4. Connect `VBUS` to the `B+` pin back (or to the buck's `VIN` joint).
+5. Connect breakout power (`VIN`/`VS`) to XIAO `3V3`, `GND` to the shared ground, `SDA` to `D4` and `SCL` to `D5`.
+6. Insulate every joint, secure the breakout with Kapton tape or hot glue so nothing can touch the display board, and keep the U.FL antenna against the housing wall.
+
+### Step 5: Check before power
+
+With the shunt cable still unplugged:
+
+- INA228 `VIN+` to `VIN-`: tens of kilohms, not near zero
+- INA228 `GND` to display `B-`: continuity
+- INA228 `VBUS` to display `B+`: continuity
+- display `B+` to `B-`: not a short
+
+### Step 6: Flash the new firmware
+
+The XIAO is already installed and online, so this is a wireless update from the ESPHome Device Builder.
+
+1. Open `casita-battery-monitor.yaml` in the Device Builder.
+2. Keep your existing `api:`, `ota:`, `wifi:` and `web_server:` credentials. Replace everything else with the contents of [`esphome/casita-battery-monitor.yaml`](esphome/casita-battery-monitor.yaml), or move those credentials into `secrets.yaml` and use the file as-is.
+3. Delete any leftover diagnostic configuration (`casita-battery-monitor-diag.yaml`) from the Device Builder.
+4. Plug the shunt cable back into the display and wait for the XIAO to join Wi-Fi.
+5. Select **Install**, then **Wirelessly**.
+6. Open **Logs**. The I2C scan should report a device at `0x40`, and the INA228 component should log `Supported device found: INA228`.
+
+### Step 7: Calibrate
+
+The configuration assumes a 500 A / 75 mV shunt (0.00015 ohm). Renogy does not publish the rating, so measure it.
+
+1. **Sign.** Turn on a known discharge load. **Current** should be negative. If it is positive, change `current_sign` from `"-1"` to `"1"` and reinstall.
+2. **Shunt resistance.** With a steady load of at least 20 A, note the diagnostic **Shunt Voltage** (mV) and the true current: a DC clamp meter on the battery cable is best; the Renogy display (rated about 1%) is a reasonable reference. Calculate:
+
+   `shunt_resistance = Shunt Voltage (mV) / 1000 / true current (A)`
+
+   For example, 3.00 mV at 20.0 A gives 0.000150 ohm. About 0.00015 means a 75 mV shunt; about 0.0001 means a 50 mV shunt. Enter the value with the `ohm` unit, for example `shunt_resistance: 0.000150 ohm`, and reinstall. Check that **Current** now matches the reference within 1%.
+3. **Voltage.** Compare **Voltage** with a multimeter across the battery terminals. They should agree within about 0.05 V.
+4. **Zero.** With the trailer's loads off, **Current** should read close to 0 A (within about 0.05 A). Anything still powered behind the shunt, such as the fridge or monitors, will show up here as real current.
+
+### Step 8: Set the starting state of charge
+
+The state of charge starts at 100% the first time the firmware runs. Either:
+
+- charge the bank fully and let the automatic resync set 100% (or press **Mark Battery Full** at the end of a full charge), or
+- enter the Renogy display's percentage into **Set State of Charge**.
 
 ## ESPHome Configuration
 
-The configuration is [`esphome/casita-battery-monitor.yaml`](esphome/casita-battery-monitor.yaml). It pulls the `tf03k_shunt` component from [edillmann/esphome-tf03k-smart-shunt](https://github.com/edillmann/esphome-tf03k-smart-shunt) (Apache-2.0), pinned to commit `f248cd1f3e2ffa26eef3c8892f57fae07a0c58f9`, the 2026-09-08 "fix for esphome 2026.8" commit. Pinning prevents an upstream change from altering the firmware unexpectedly.
+The configuration is [`esphome/casita-battery-monitor.yaml`](esphome/casita-battery-monitor.yaml). It uses ESPHome's built-in `ina2xx_i2c` component, so there are no third-party components.
 
-| Setting | Value |
-| --- | --- |
-| Board | `seeed_xiao_esp32s3`, ESP-IDF framework |
-| UART | RX on GPIO44 (`D7`), 9600 baud, 8N1, internal pull-up enabled |
-| Wi-Fi transmit power | 15 dB (default is 20 dB), to reduce current spikes on the shunt cable |
-| Publish interval | 5 s (`refresh_interval` substitution) |
-| Offline timeout | 60 s without a valid frame |
-| Daily energy counters | `restore: false`, so they reset on reboot but do not wear the flash |
-| Logger | USB, level `INFO` |
-| Local web page | Port 80, password-protected (`web_username`, `web_password` secrets) |
+| Substitution | Default | Meaning |
+| --- | --- | --- |
+| `shunt_resistance` | `0.00015 ohm` | Measured shunt resistance (Step 7) |
+| `current_sign` | `"-1"` | Makes charging positive and discharging negative |
+| `battery_capacity_ah` | `"600"` | Usable bank capacity: two 300 Ah batteries |
+| `charge_efficiency` | `"0.99"` | Fraction of charging amp-hours counted as stored |
+| `full_voltage` | `"14.0"` | Voltage at or above which the bank can be declared full |
+| `full_tail_current` | `"6.0"` | Charge current (A) at or below which charging has tapered |
+| `full_hold_seconds` | `"120"` | How long both must hold before SoC resets to 100% |
+| `empty_voltage` | `"11.8"` | Low-voltage floor; `"0"` disables it |
+| `empty_max_current` | `"20.0"` | Floor applies only under a light discharge load (A) |
+| `empty_soc` | `"5.0"` | SoC (%) the floor caps to |
+| `sda_pin`, `scl_pin` | `GPIO5`, `GPIO6` | XIAO `D4`, `D5` |
+| `ina228_address` | `"0x40"` | Default with A0/A1 open |
 
-Validation on bee2 with ESPHome 2026.9.1 on 2026-10-08: `esphome config` passed and `esphome compile` succeeded (RAM 30.0%, flash 47.4%). This proves only that the configuration builds. It has not run on hardware.
+INA228 settings: `adc_range: 0` (plus or minus 163.84 mV, enough for a 500 A shunt at 75 mV or 50 mV), 64-sample averaging, and 1 s updates. Raw 1 s readings stay internal; published voltage and current are 5 s averages.
+
+How state of charge is calculated:
+
+1. The INA228 integrates current into its charge accumulator on every conversion, so short spikes between readings are still counted.
+2. Each second, the change in that accumulator (multiplied by `current_sign`) is added to `remaining_ah`. Charging amp-hours are multiplied by `charge_efficiency`. The value is clamped between 0 and `battery_capacity_ah`.
+3. `remaining_ah` is saved to flash at most every 10 minutes (`preferences: flash_write_interval: 10min`) and restored after a reboot.
+4. Full-charge resync and the low-voltage floor run every 5 seconds.
+
+Validation on bee2 with ESPHome 2026.9.1 on 2026-10-09: `esphome config` passed and `esphome compile` succeeded (RAM 30.4%, flash 48.6%). This proves only that the configuration builds. It has not run on hardware.
 
 ### Secrets
 
-Copy [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml) into ESPHome's `secrets.yaml` and replace every placeholder. Generate the API key with `openssl rand -base64 32`. ESPHome 2026.9 rejects the all-zeros placeholder key used in older examples.
+The configuration references `api_encryption_key`, `ota_password`, `wifi_ssid`, `wifi_password`, `fallback_ap_password`, `web_username` and `web_password`. Copy [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml) into ESPHome's `secrets.yaml` and replace every placeholder, or keep your existing inline values as described in Step 6. Generate a new API key with `openssl rand -base64 32`.
 
 ## Home Assistant Setup
 
-### 1. Add the configuration to ESPHome Device Builder
+The device is already adopted in Home Assistant as **Casita Battery Monitor**. After the wireless update, the new entities appear on the same device.
 
-1. In Home Assistant, open **ESPHome Builder**.
-2. Open **Secrets** and add the keys from `secrets.example.yaml` with real values.
-3. Select **+ New Device**, choose **Continue**, name it `casita-battery-monitor`, and skip the board-specific setup.
-4. Open the new device's **Edit** view, replace its contents with `casita-battery-monitor.yaml`, and **Save**.
-5. Select **Validate**. It downloads the pinned component from GitHub, so Home Assistant needs internet access.
+### Remove the old entities
 
-### 2. Flash the XIAO over USB (first time only)
+The serial-tap firmware's **Monitor Online** and **Time Remaining** entities no longer exist. On the device page, open each one and delete it.
 
-Do this on the bench, before the XIAO is wired to the display.
-
-1. Connect the XIAO to your laptop with a USB-C data cable.
-2. In Device Builder choose **Install**, then **Plug into this computer**. Use Chrome or Edge.
-3. If the port does not appear, hold the XIAO's **BOOT** button, tap **RESET**, release **BOOT**, and try again.
-4. Wait for the install to finish, then open **Logs** to confirm it joins Wi-Fi.
-5. Unplug USB. All later updates install wirelessly with **Install** then **Wirelessly**.
-
-### 3. Adopt the device in Home Assistant
-
-1. Once the XIAO is installed in the display and powered, go to **Settings > Devices & services**. Home Assistant should show a discovered **ESPHome** device named **Casita Battery Monitor**.
-2. Select **Configure** and paste the `api_encryption_key` from your secrets when asked.
-3. Assign it to an area, such as "Casita".
-
-If it is not discovered, select **Add Integration > ESPHome** and enter `casita-battery-monitor.local` or the device's IP address.
-
-### 4. Check the entities
+### Entities
 
 | Entity name | Likely entity ID | Unit |
 | --- | --- | --- |
 | State of Charge | `sensor.casita_battery_monitor_state_of_charge` | % |
 | Voltage | `sensor.casita_battery_monitor_voltage` | V |
 | Current | `sensor.casita_battery_monitor_current` | A (negative = discharging) |
-| Power | `sensor.casita_battery_monitor_power` | W |
+| Power | `sensor.casita_battery_monitor_power` | W (negative = discharging) |
 | Remaining Capacity | `sensor.casita_battery_monitor_remaining_capacity` | Ah |
-| Time Remaining | `sensor.casita_battery_monitor_time_remaining` | duration |
+| Time to Empty | `sensor.casita_battery_monitor_time_to_empty` | h (unknown unless discharging) |
+| Time to Full | `sensor.casita_battery_monitor_time_to_full` | h (unknown unless charging) |
 | Daily Charged Energy | `sensor.casita_battery_monitor_daily_charged_energy` | kWh |
 | Daily Discharged Energy | `sensor.casita_battery_monitor_daily_discharged_energy` | kWh |
-| Monitor Online | `binary_sensor.casita_battery_monitor_monitor_online` | on/off |
-| Wi-Fi Signal, Uptime, Restart | diagnostic and config entities | |
+| Set State of Charge | `number.casita_battery_monitor_set_state_of_charge` | % (configuration) |
+| Mark Battery Full | `button.casita_battery_monitor_mark_battery_full` | (configuration) |
+| Shunt Voltage, INA228 Temperature, Wi-Fi Signal, Uptime | diagnostic entities | |
 
 Home Assistant generates entity IDs from the device and entity names. Confirm the actual IDs on the device page and adjust the examples below if they differ.
 
-Wake the display and confirm that **Monitor Online** turns on and that state of charge, voltage and current match the display. If a value looks wrong, set `logger: level: DEBUG`, reinstall wirelessly, and watch the logs: the component prints every parsed frame and any checksum failures.
-
-### 5. Dashboard card
+### Dashboard card
 
 ```yaml
 type: vertical-stack
@@ -253,11 +270,11 @@ cards:
       - entity: sensor.casita_battery_monitor_current
       - entity: sensor.casita_battery_monitor_power
       - entity: sensor.casita_battery_monitor_remaining_capacity
-      - entity: sensor.casita_battery_monitor_time_remaining
-      - entity: binary_sensor.casita_battery_monitor_monitor_online
+      - entity: sensor.casita_battery_monitor_time_to_empty
+      - entity: sensor.casita_battery_monitor_time_to_full
 ```
 
-### 6. Low-battery alert (optional)
+### Low-battery alert (optional)
 
 Replace `notify.mobile_app_your_phone` with your phone's notify service.
 
@@ -278,9 +295,9 @@ actions:
 mode: single
 ```
 
-### 7. Local web page
+### Local web page
 
-On the trailer's Wi-Fi, open `http://casita-battery-monitor.local` (or the device's IP address) and log in with `web_username` and `web_password`. This works without Home Assistant.
+On the trailer's Wi-Fi, open `http://casita-battery-monitor.local` (or the device's IP address) and log in with the `web_server` username and password. It shows every entity and the **Set State of Charge** and **Mark Battery Full** controls, without Home Assistant.
 
 ## Reading the Battery Away From Home
 
@@ -288,40 +305,43 @@ ESPHome's Home Assistant connection is opened **by Home Assistant** to the devic
 
 Options, not yet built or tested:
 
-1. **Travel router with a VPN subnet route.** A router in the trailer, such as a GL.iNet running Tailscale, advertises the trailer's network as a subnet route, and the Home Assistant host accepts that route. Home Assistant then reaches the XIAO as if it were local. Give the XIAO a DHCP reservation so its address does not change.
-2. **MQTT.** Add ESPHome's `mqtt:` component and publish to a broker reachable from both places. This works through any internet connection but needs a broker exposed securely.
+1. **Travel router with a VPN subnet route.** A router in the trailer, such as a GL.iNet running Tailscale, advertises the trailer's network as a subnet route, and the Home Assistant host accepts that route. Give the XIAO a DHCP reservation so its address does not change.
+2. **MQTT.** Add ESPHome's `mqtt:` component and publish to a broker reachable from both places.
 3. **Local only.** Use the local web page at the campsite and let Home Assistant catch up when the trailer returns home.
 
 ## Testing Checklist
 
-1. Bench test shows valid `A5` frames whose voltage matches the display.
-2. Regulator output measures 4.9-5.1 V before the XIAO is connected.
-3. With everything installed, the XIAO joins Wi-Fi and **Monitor Online** turns on within a few seconds of waking the display.
-4. Voltage, current and state of charge in Home Assistant match the display within rounding.
-5. The current-offset check in Step 5 shows no meaningful change.
-6. Turn on a known load, such as a light, and confirm current and power change in the right direction (negative while discharging).
-7. Let the display sleep. **Monitor Online** turns off after about 60 seconds and turns back on after a button press.
-8. Logs show no repeated checksum warnings.
-9. After an hour, the housing and regulator are no more than slightly warm.
+1. Step 2 shows a few millivolts between `Rs+` and `Rs-` under load, with no bias voltage.
+2. `VIN+` to `VIN-` on the breakout reads tens of kilohms before wiring.
+3. Logs show the INA228 found at `0x40` with no I2C errors.
+4. **Voltage** matches a multimeter within about 0.05 V.
+5. **Current** has the right sign and matches a clamp meter or the Renogy display within 1% at 20 A or more.
+6. **State of Charge** falls steadily under a known load: for example, 10 A for 1 hour should remove about 10 Ah (about 1.7% of 600 Ah).
+7. After a full charge, the log shows `Full charge detected` and SoC reads 100%.
+8. The Renogy display's current reading is the same as before the INA228 was added.
+9. After an hour, the housing, regulator and breakout are no more than slightly warm.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| No data, `Monitor Online` stays off | Display asleep, wrong hole, or divider built for the wrong voltage | Press a display button; recheck `Tx` wiring and the Option A/B choice against the measured `V+` |
-| XIAO resets or drops Wi-Fi | Supply sags during Wi-Fi bursts | Check the regulator rating and C1; measure 5 V while transmitting |
-| Weak Wi-Fi signal | Antenna placement or reduced transmit power | Move the antenna to the housing wall facing the trailer interior; raise `output_power` toward 17-20 dB if Step 5 allows |
-| Displayed current shifted after installing | Voltage drop on the shunt cable's `B-` conductor | See Step 5 |
-| Checksum warnings in the logs | Marginal signal edges | Use the 1 kohm option only at 3.3 V; shorten the data wire |
-| Values frozen in Home Assistant | Display sleeping at low current | Expected. See Known limitations |
-| State of charge drifts high over days | XIAO draw is not metered | Set **Full V** in the display's settings so it resyncs at full charge |
-| Device not discovered | mDNS blocked between networks | Add the ESPHome integration manually by IP |
+| No device at `0x40` in the I2C scan | SDA/SCL swapped, no power to the breakout, or address jumpers closed | Check `D4`=SDA, `D5`=SCL, 3.3 V at the breakout, A0/A1 open |
+| Logs say the device is not an INA228 | Clone module with an INA226 | Use a genuine INA228 breakout |
+| Current reads about 0 A under load | Sense wires not connected, or a filter resistor open | Check continuity from `Rs+`/`Rs-` to `VIN+`/`VIN-` through the 10 ohm resistors |
+| Current is far too small and the Renogy display changed too | The breakout's onboard shunt is still fitted | Remove it (see Prepare the INA228) |
+| Current sign is backwards | `Rs+`/`Rs-` order | Flip `current_sign` |
+| Current off by a fixed percentage | `shunt_resistance` not calibrated | Repeat Step 7 |
+| Voltage reads 0 or very low | `VBUS` not connected to `B+` | Wire `VBUS` to the `B+` pin back |
+| SoC never returns to 100% | Charger never meets the full-charge conditions | Lower `full_voltage` to just below your charger's absorption voltage, or press **Mark Battery Full** after a full charge |
+| SoC drifts high over days | XIAO and display draw are not metered | Expected; the full-charge resync corrects it |
+| XIAO resets or drops Wi-Fi | Supply sags during Wi-Fi bursts | Check the regulator and C1 |
 
 ## Safety Notes
 
 - Always unplug the shunt cable from the display before soldering inside it. The display is powered from the battery through `B+`, which should be fused close to the battery.
-- Do not bridge the `B+`/`B-` solder joints to the neighboring `Rs` pins.
-- Never connect the XIAO, regulator or display ground to the trailer's 12 V negative or to a USB device while installed. In this design, the shunt cable is the XIAO's only wired connection.
+- Never connect the sense wires to an INA228 that still has its onboard shunt.
+- Do not bridge the solder joints on the connector pin backs; `Rs+`, `Rs-` and `B-` sit next to each other.
+- Never connect anything inside the housing to the trailer's 12 V negative or to a USB device while installed. The shunt cable is the only wired connection.
 - Insulate every joint. A short from `B+` inside the housing is limited only by the `B+` fuse.
 - Opening the display almost certainly voids Renogy's warranty on it.
 
@@ -330,18 +350,22 @@ Options, not yet built or tested:
 Add photos to `photos/` as the build progresses:
 
 - `rbm500-board-back.jpg`: the display board before modification
-- `inside-housing.jpg`: the XIAO, regulator and wiring inside the housing
+- `ina228-shunt-removed.jpg`: the breakout with its onboard shunt removed
+- `inside-housing.jpg`: the XIAO, regulator, INA228 and wiring inside the housing
 - `installed.jpg`: the finished display installed in the trailer
 
 ## References
 
+- [TI INA228 datasheet](https://www.ti.com/lit/ds/symlink/ina228.pdf): input range, filtering (10 ohm series resistors, 0.1-1 uF capacitor), VBUS and address table
+- [Adafruit INA228 guide](https://learn.adafruit.com/adafruit-ina228-i2c-power-monitor): onboard 15 mohm shunt, VBUS jumper, pinout
+- [ESPHome INA2xx component](https://esphome.io/components/sensor/ina2xx/)
 - [Renogy RBM500 product page](https://www.renogy.com/products/500a-battery-monitor-with-shunt) and [G3 manual](https://cdn.shopify.com/s/files/1/0631/0137/0483/files/RBM500-G3-Manual_26f37388-12d7-442a-99e6-77ee6e79f8bf.pdf)
-- [edillmann/esphome-tf03k-smart-shunt](https://github.com/edillmann/esphome-tf03k-smart-shunt): ESPHome component and TF03K protocol notes
-- [patrickwasp/tf03k](https://github.com/patrickwasp/tf03k): protocol diagram and notes that most TF03K units ship without the serial option
+- [edillmann/esphome-tf03k-smart-shunt](https://github.com/edillmann/esphome-tf03k-smart-shunt): TF03K serial protocol (for meters that have it). [Issue #1](https://github.com/edillmann/esphome-tf03k-smart-shunt/issues/1) shows the same TF03H V35 board without the module, unanswered
 - [Seeed Studio XIAO ESP32-S3 wiki](https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/)
 
 ## Revisions
 
 | Date | Change |
 | --- | --- |
-| 2026-10-08 | Initial design: XIAO inside the display housing, powered from the display's `B+`/`B-` through a buck regulator, with Home Assistant setup (not yet built) |
+| 2026-10-08 | Serial-tap design: XIAO inside the display housing reading the display's serial output (built; did not work) |
+| 2026-10-09 | Serial output proven absent on the TF03H V35. Redesigned around an INA228 measuring the shunt sense pair, with software state-of-charge tracking (not yet built) |
