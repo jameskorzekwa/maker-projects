@@ -5,8 +5,8 @@ confirmed availability, not that fit, electrical ratings or condition were teste
 
 | # | Component | Spec / acceptable substitute | Qty | Status | Source / option | Order ref | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | ESP32 board | Seeed Studio XIAO ESP32-S3 | 1 | have | Owner confirmed | — | Exact spare-board identity and existing firmware to check |
-| 2 | USB data cable | XIAO USB-C, data-capable | 1 | have | Owner confirmed | — | Bench upload and logging |
+| 1 | ESP32 board | NiceMCU ESP32-C5 | 1 | have | Owner confirmed | — | Exact model unverified; do not assume the NiceMCU 2.8IPS model. 4 MB build allocation; verify actual flash ≥4 MB before flashing |
+| 2 | USB data cable | Cable matching board's data-capable USB socket | 1 | have | Owner confirmed | — | Data link unverified; macOS ioreg 2026-11-06 returned controllers only, no USB serial port; not a cable-failure diagnosis |
 | 3 | USB supply | Reputable regulated 5 V supply sized to board specification | 1 | have | Owner confirmed | — | USB power only; never connect 5 V to IFC |
 | 4 | IFC pigtail | JST XH 2.5 mm, XHP-4-compatible housing and crimped leads | 1 | have | Owner confirmed | — | Verify actual IFC fit and each pin; colors are not evidence |
 | 5 | Wire/connectors | Insulated low-voltage signal leads and secure board terminations | 1 set | have | Owner confirmed | — | Gauge, temperature rating and final length pending mounting plan |
@@ -16,7 +16,7 @@ confirmed availability, not that fit, electrical ratings or condition were teste
 | 9 | Assembly tools | Wire stripper/cutter; soldering iron/solder or appropriate crimps as chosen | 1 set | need | Confirm exact termination method and tools | — | No soldering/crimping purchase until harness design verified |
 | 10 | Mock UART interface | USB-UART adapter with verified 3.3 V TX/RX logic | 1 | to-buy | Amazon candidates below | — | Owner did not select UART test equipment; not required for USB-only test |
 | 11 | Logic analyzer | 3.3 V-compatible input, UART decode ≥9600 baud | 1 | need | Optional if mock adapter captures suffice | — | Defer purchase pending test design |
-| 12 | Host computer | USB-capable computer for flashing and mock tests | 1 | need | Confirm which computer will be used | — | bee2 cannot flash laptop-attached USB directly |
+| 12 | Host computer | USB-capable computer for flashing and mock tests | 1 | have | Owner confirmed | — | bee2 cannot flash laptop-attached USB directly |
 | 13 | OEM dongle and handheld remote | Existing matched system | 1 set | need | Existing installation; retain and identify | — | Model labels and rollback check pending |
 
 ## Purchase-history check
@@ -45,5 +45,11 @@ not an instruction to connect them to the IFC.
 Immediate USB-only preparation: **$0 additional parts if confirmed items are
 suitable**. Later mock-interface allowance: $7.39–$9.99 before tax/shipping,
 excluding any still-unconfirmed tools. No final connected-build cost yet.
-No purchases made. Before buying, confirm rows 9, 11 and 12 and verify the
+No purchases made. Before buying, confirm rows 9 and 11 and verify the
 adapter's logic levels. Reconcile future orders from 2026-11-06 onward.
+
+## C5 reference docs
+
+- [ESPHome ESP32 component init (2026.10.2)](https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/esp32/__init__.py)
+- [ESPHome logger component (2026.10.2)](https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/logger/__init__.py)
+- [ESP-IDF v5.5.6 ESP32-C5 USB Serial JTAG Console](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32c5/api-guides/usb-serial-jtag-console.html)

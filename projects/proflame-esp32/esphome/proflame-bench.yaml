@@ -6,12 +6,16 @@ esphome:
   min_version: 2026.10.2
 
 esp32:
-  board: seeed_xiao_esp32s3
+  # Generic chip target; exact NiceMCU PCB/USB routing still unverified.
+  variant: esp32c5
+  # Build allocation only: verify actual flash >= 4 MB before flashing.
+  flash_size: 4MB
   framework:
     type: esp-idf
 
 logger:
   hardware_uart: USB_SERIAL_JTAG
+  baud_rate: 115200
   level: INFO
 
 interval:
