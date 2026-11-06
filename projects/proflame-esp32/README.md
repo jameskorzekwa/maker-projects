@@ -11,7 +11,7 @@ been deployed there. The existing OEM dongle and HA integration stay unchanged.
 Replace the OEM Wi-Fi dongle with locally maintained ESPHome firmware, retaining
 the original Proflame IFC and all appliance safety controls. James confirmed:
 
-- Available board: **Seeed Studio XIAO ESP32-S3**.
+- Available board: **NiceMCU ESP32-C5**.
 - **Normal handheld-remote operation must remain available.** Do not unpair it.
 - USB cable/supply, JST XH four-pin pigtail, multimeter, wiring/insulation and
   enclosure/strain relief are already available; see [components.md](components.md).
@@ -21,10 +21,20 @@ This would replace the OEM Wi-Fi integration for this fireplace, not run two
 UART masters in parallel. There is no claim of OEM feature parity, confirmed
 burner feedback, or automatic shutdown when connectivity is lost.
 
-## Start now: USB-only board test
+## USB-only bench preparation
+
+The firmware uses a generic `esp32c5` target, not a verified NiceMCU board
+definition. `flash_size: 4MB` is a conservative build allocation, **not a measured
+capacity**. Compile now, but **stop before flashing** until the board's C5 chip,
+at least 4 MB of flash and native USB connection have been confirmed. The exact
+NiceMCU model/revision and USB routing remain unknown. Laptop inspection on
+2026-11-06 returned USB controllers only and no USB serial port. James reports
+the board attached, but it did not enumerate during that inspection. Reconnect
+with a known data cable before attempting identification; cable failure has not
+been diagnosed.
 
 1. Leave the fireplace, OEM dongle and remote exactly as they are. Disconnect
-   **every external GPIO lead** from the XIAO; only its USB cable is connected.
+   **every external GPIO lead** from the C5; only its USB cable is connected.
    Flashing replaces whatever firmware is on this board: use a spare board or
    preserve its previous source/firmware first.
 2. Use ESPHome **2026.10.2** on the computer physically connected to the board.
@@ -35,6 +45,7 @@ burner feedback, or automatic shutdown when connectivity is lost.
    esphome version
    esphome config esphome/proflame-bench.yaml
    esphome compile esphome/proflame-bench.yaml
+   # STOP: the hardware/USB identification gate above must pass first.
    # Replace PORT with the actual port on the USB-connected computer.
    esphome upload esphome/proflame-bench.yaml --device PORT
    esphome logs esphome/proflame-bench.yaml --device PORT
@@ -75,17 +86,22 @@ IFC and its manual before fabricating or plugging in a harness.
 
 | Candidate connection, NOT installation authorization | Purpose |
 | --- | --- |
-| XIAO D6 / GPIO43 TX → verified IFC RX | 3.3 V UART, 9600 baud, 8-N-1 |
-| XIAO D7 / GPIO44 RX ← verified IFC TX | 3.3 V UART receive |
-| XIAO GND ↔ verified IFC GND | Only after confirming the interface grounding is suitable |
+| C5 USB (GPIO13 D− / GPIO14 D+) | Native USB; exact NiceMCU PCB routing to be confirmed |
+| C5 UART TX/RX | Unassigned; verify the exact PCB before choosing pins |
+| C5 GND ↔ verified IFC GND | Only after confirming the interface grounding is suitable |
 | IFC 3V3 | Leave disconnected and individually insulated |
-| XIAO USB | Separate regulated USB power; no 5 V lead to IFC |
+| Board USB power | Separate regulated USB power; no 5 V lead to IFC |
 
-D6/D7 are candidate XIAO pins, unused by the bench firmware. Confirm against
-the exact board pinout before firmware work. Do not connect RS232, RS485 or 5 V
-TTL to this interface. Never parallel the OEM dongle and ESP32 TX lines. Do not
-power the ESP32 from the IFC accessory output: its available current has not
-been verified. Connector colors and premade Grove adapters are not pinout evidence.
+TX/RX pins for UART IFC remain TBD pending the exact NiceMCU C5 PCB pinout; do
+not assume USB connector routes to the native USB pins or any other board pinout.
+Reserve GPIO13/14 for native USB; do not assign either to IFC UART. A USB-to-UART
+bridge may allow flashing but will not carry native `USB_SERIAL_JTAG` logs.
+Historical note: the prior XIAO ESP32-S3 bench used D6 / GPIO43 and D7 / GPIO44
+as candidate UART pins—these do not apply to the C5. Do not connect RS232, RS485
+or 5 V TTL to this interface. Never parallel the OEM dongle and ESP32 TX lines.
+Do not power the ESP32 from the IFC accessory output: its available current has
+not been verified. Connector colors and premade Grove adapters are not pinout
+evidence.
 
 ## Implementation gates
 
@@ -133,4 +149,5 @@ and cables outside hot areas in accordance with the appliance instructions.
 
 | Date | Change |
 | --- | --- |
+| 2026-11-06 | Switched board from XIAO ESP32-S3 to NiceMCU ESP32-C5; removed S3 pin recommendations; C5 flash/USB unverified; USB detection attempted no device. |
 | 2026-11-06 | Initial project, owner-confirmed inventory, USB-only bench firmware, upstream risk review and gated implementation plan. No live deployment. |

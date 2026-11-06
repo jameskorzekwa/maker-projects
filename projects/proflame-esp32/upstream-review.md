@@ -12,7 +12,7 @@ Sources:
 - [Light feedback](https://github.com/kaechele/esphome-proflame2/blob/bb67453c8782385e2b895274d482e60eb4808934/components/proflame2/light/proflame2_lights.cpp)
 - [Original packet captures](https://bonaparte.readthedocs.io/en/latest/system_information.html)
 - [ESPHome ESP32 platform](https://esphome.io/components/esp32/)
-- [XIAO ESP32-S3 hardware reference](https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/)
+- [ESP32-C5 chip-level USB reference (not a NiceMCU PCB pinout)](https://docs.espressif.com/projects/esp-idf/en/v5.5.6/esp32c5/api-guides/usb-serial-jtag-console.html)
 
 ## Findings to resolve before adapting for a real fireplace
 
