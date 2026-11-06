@@ -1,5 +1,11 @@
 # Verification record
 
+> **Electrical correction:** owner measured **+6.26 V DC white-to-yellow with
+> OEM dongle connected**. Earlier 3.3 V supply assumption is false for this unit.
+> Direct hookup/diagram withdrawn; firmware tests below do not establish signal
+> levels or safe electrical compatibility. No live reflash or IFC query was made
+> for this correction. See [electrical findings](electrical-findings.md).
+
 2026-11-06 preparation, executed on bee2 unless stated otherwise.
 
 | Check | Result |

@@ -1,36 +1,40 @@
 # X0A wiring and manual link check
 
+> **WITHDRAWN: do not use the earlier direct-wiring recommendation.** Owner
+> measured +6.26 V DC white-to-yellow with OEM dongle connected. The old 3.3 V
+> assumption is false for this unit; signal levels and isolation remain unknown.
+> Keep all X0A wires disconnected from the C5. See [findings](electrical-findings.md).
+
 ![X0A to C5 wiring](wiring.svg)
 
 [Open/download the SVG](wiring.svg).
 
 ## Connections
 
-Use **GPIO numbers**, not header-position numbers or unverified D4/D5 aliases.
-The drawing intentionally is not a physical NiceMCU header layout: exact PCB
-header locations and onboard connections have not been inspected. Only use
-GPIO4/IO4 and GPIO5/IO5 if those pins are exposed and otherwise unused on your board.
+GPIO4/5 are **firmware assignments only**, not approved X0A connections or
+header-position numbers. Exact PCB header locations and onboard connections
+have not been inspected. The replacement SVG is a withdrawal notice, not wiring.
 
 Looking at the installed X0A connector from the wire-entry side as in James's
 close-up, with the red SW1 button on the right:
 
-| Position left → right | Existing wire | IFC function | ESP32-C5 destination |
+| Position left → right | Existing wire | Current evidence | ESP32-C5 destination |
 | --- | --- | --- | --- |
-| 1 | White | 3.3 V output | **Not connected; individually insulate** |
-| 2 | Green | TX (IFC output) | **GPIO4 / IO4**, UART RX |
-| 3 | Brown | RX (IFC input) | **GPIO5 / IO5**, UART TX |
-| 4, filled-dot end | Yellow | Ground | **GND** |
+| 1 | White | +6.26 V relative to yellow, OEM connected | **Do not connect** |
+| 2 | Green | Older source says IFC TX; exact-unit electrical interface unverified | **Do not connect** |
+| 3 | Brown | Older source says IFC RX; exact-unit electrical interface unverified | **Do not connect** |
+| 4, filled-dot end | Yellow | Measured supply reference; grounding/isolation unverified | **Do not connect** |
 
 Fireplace connector housing: **JST XH four-position XHP-4**, nominal 2.5 mm
 pitch. Do not substitute a PH/Grove cable or assume replacement wire colors
 match. The disconnected plug's mating-face view is mirrored. Do not change
 the cavity order based on an unlabelled photo of the opposite end of the cable.
 
-Shut down and isolate fireplace mains and backup batteries according to the
-appliance manual, and disconnect ESP USB power before wiring. Remove the OEM
-dongle from X0A; never parallel two transmitters. Power the ESP separately by
-USB; no ESP 5 V/VIN/3V3 pin connects to X0A. Do not press SW1 or unpair the remote.
-Keep electronics outside hot areas and retain the original dongle for rollback.
+Keep all X0A wires disconnected from the C5 and preserve the OEM installation.
+If experimental wiring has already been added, shut down and isolate fireplace
+mains and backup batteries according to the manual, and disconnect ESP USB
+power before removing it. Do not press SW1 or unpair the remote. No new
+fireplace-to-C5 connection is recommended by this document.
 
 ## Evidence and limits
 
@@ -43,8 +47,8 @@ rightmost filled dot. Wire colors above are from James's photographs.
 - [ESPHome Proflame component hardware instructions](https://github.com/kaechele/esphome-proflame2#hardware-setup): XHP-4 and direct crossed UART. Same author as Bonaparte, not independent measurement.
 - [Espressif ESP32-C5 datasheet](https://documentation.espressif.com/esp32-c5_datasheet_en.html): GPIO4/5 permit GPIO-matrix UART routing; they are also external JTAG MTCK/MTDO. Do not simultaneously use pad JTAG. Native USB uses GPIO13/14.
 
-This is **source-derived wiring, not an electrically measured pinout on this
-exact IFC**. Manufacturer sources establish OEM compatibility, not approval of
+The former direct wiring was **source-derived and is now withdrawn**. The loaded
+supply measurement contradicts its 3.3 V assumption. Manufacturer sources establish OEM compatibility, not approval of
 this DIY interface. Exact signal levels, grounding/isolation requirements and
 NiceMCU header assignments have not been measured. The OEM dongle's ISO1/ISO2
 markings are consistent with ACPL-074L optocouplers, but that alone neither proves

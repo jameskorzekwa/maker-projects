@@ -1,5 +1,14 @@
 # Proflame ESP32 dongle replacement
 
+> **WIRING CORRECTION — direct hookup withdrawn.** James measured **+6.26 V DC
+> from white to yellow with the OEM dongle connected** (red probe white, black
+> yellow). The earlier 3.3 V power label does not apply to this unit. Do not
+> connect any X0A wire to the C5 until the electrical interface is established.
+> The installed manual UART query firmware is not electrical validation; do not
+> press Check IFC Link with the unverified interface connected. See
+> [electrical findings](electrical-findings.md). No live firmware was changed by
+> this documentation correction.
+
 Status: **UART commissioning firmware deployed (Wi-Fi + encrypted API + manual
 read-only query). No fireplace control. Appliance electrical compatibility and
 physical NiceMCU header locations remain unverified.**
@@ -23,23 +32,22 @@ This would replace the OEM Wi-Fi integration for this fireplace, not run two
 UART masters in parallel. There is no claim of OEM feature parity, confirmed
 burner feedback, or automatic shutdown when connectivity is lost.
 
-## Wiring: three connections, fourth wire insulated
+## Wiring: previous direct connection withdrawn
 
 **[Open the SVG wiring diagram](wiring.svg)** · **[Detailed wiring and sources](wiring.md)**
 
-| Existing X0A wire | C5 connection |
+| Existing X0A wire | Current finding / C5 connection |
 | --- | --- |
-| Green, IFC TX | **GPIO4 / IO4 — RX** |
-| Brown, IFC RX | **GPIO5 / IO5 — TX** |
-| Yellow, GND | **GND** |
-| White, IFC 3.3 V output | **Not connected; insulate** |
+| Green | Suspected signal; direction/voltage unverified — **do not connect** |
+| Brown | Suspected signal; direction/voltage unverified — **do not connect** |
+| Yellow | Reference for white-to-yellow measurement; isolation unverified — **do not connect** |
+| White | **+6.26 V measured relative to yellow under OEM load; do not connect** |
 
-These are logical GPIO labels, not header positions or D4/D5 aliases. Confirm
-GPIO4/5 are exposed and unused on the actual PCB. Source-derived X0A mapping
-uses the installed wire-entry view with SW1 to the right; the mating face is
-mirrored. Isolate mains and battery backup before wiring and unplug ESP USB.
-Use separate USB power; never connect ESP power pins to X0A or parallel the OEM
-dongle's transmitter. Exact unit electrical levels/grounding have not been measured.
+GPIO4/5 remain logical firmware assignments, not approved electrical connections.
+The older source-derived pinout is contradicted at least for supply voltage.
+Colors refer to the photographed harness, not a standard. Keep the C5 USB-powered
+and disconnected from X0A. Isolate mains and battery backup before disconnecting
+any existing experimental wiring. Retain the OEM dongle.
 
 The **Check IFC Link** HA button sends one GET-status request, with no SET or
 ownership acquisition. There is no automatic boot/reconnect traffic or retry.
@@ -152,9 +160,9 @@ IFC and its manual before fabricating or plugging in a harness.
 | Candidate connection, NOT installation authorization | Purpose |
 | --- | --- |
 | C5 USB (GPIO13 D− / GPIO14 D+) | Native USB; C5rev1.0 confirmed, exact PCB routing unverified |
-| C5 UART RX GPIO4 / TX GPIO5 | Green IFC TX → GPIO4; brown IFC RX ← GPIO5 |
-| C5 GND ↔ verified IFC GND | Only after confirming the interface grounding is suitable |
-| IFC 3V3 | Leave disconnected and individually insulated |
+| C5 UART RX GPIO4 / TX GPIO5 | Firmware allocation only; direct X0A hookup withdrawn |
+| C5 GND / IFC return | No connection until grounding/isolation established |
+| IFC white supply | +6.26 V measured to yellow under OEM load; leave disconnected |
 | Board USB power | Separate regulated USB power; no 5 V lead to IFC |
 
 UART GPIO4/5 are firmware assignments, not confirmation of the exact NiceMCU
@@ -222,6 +230,7 @@ and cables outside hot areas in accordance with the appliance instructions.
 
 | Date | Change |
 | --- | --- |
+| 2026-11-06 | Owner's loaded +6.26 V measurement contradicts earlier supply label. Withdrew direct wiring/diagram; recorded manufacturer-document and component-search limits. No live reflash or IFC query. |
 | 2026-11-06 | Added SVG wiring, RX GPIO4/TX GPIO5 and manual read-only IFC query. Compiled, parser-tested, independently reviewed and flashed app-only; saved credentials survived. No IFC query issued by agent. |
 | 2026-11-06 | Earlier network-bench firmware deployed: WiFi via USB Improv, encrypted API, three HA diagnostics. C5rev1.0 4MB nativeUSB confirmed. |
 | 2026-11-06 | Switched board from XIAO ESP32-S3 to NiceMCU ESP32-C5; removed S3 pin recommendations; C5 flash/USB unverified; USB detection attempted no device. |
