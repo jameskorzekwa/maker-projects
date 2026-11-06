@@ -1,7 +1,8 @@
 # Proflame ESP32 dongle replacement
 
-Status: **Network-bench firmware deployed and working (WiFi + encrypted API).
-NOT ready to connect to the fireplace IFC.**
+Status: **UART commissioning firmware deployed (Wi-Fi + encrypted API + manual
+read-only query). No fireplace control. Appliance electrical compatibility and
+physical NiceMCU header locations remain unverified.**
 Created 2026-11-06 for James's home Home Assistant server (not the Casita).
 This directory is the maintained project record. The network-bench configuration
 is installed in the home server's `/config/esphome/`, and the firmware is running
@@ -22,13 +23,36 @@ This would replace the OEM Wi-Fi integration for this fireplace, not run two
 UART masters in parallel. There is no claim of OEM feature parity, confirmed
 burner feedback, or automatic shutdown when connectivity is lost.
 
-## Firmware files
+## Wiring: three connections, fourth wire insulated
+
+**[Open the SVG wiring diagram](wiring.svg)** · **[Detailed wiring and sources](wiring.md)**
+
+| Existing X0A wire | C5 connection |
+| --- | --- |
+| Green, IFC TX | **GPIO4 / IO4 — RX** |
+| Brown, IFC RX | **GPIO5 / IO5 — TX** |
+| Yellow, GND | **GND** |
+| White, IFC 3.3 V output | **Not connected; insulate** |
+
+These are logical GPIO labels, not header positions or D4/D5 aliases. Confirm
+GPIO4/5 are exposed and unused on the actual PCB. Source-derived X0A mapping
+uses the installed wire-entry view with SW1 to the right; the mating face is
+mirrored. Isolate mains and battery backup before wiring and unplug ESP USB.
+Use separate USB power; never connect ESP power pins to X0A or parallel the OEM
+dongle's transmitter. Exact unit electrical levels/grounding have not been measured.
+
+The **Check IFC Link** HA button sends one GET-status request, with no SET or
+ownership acquisition. There is no automatic boot/reconnect traffic or retry.
+**Last IFC Query Result** is historical query feedback, not current burner state.
+The agent has **not pressed this button** or performed an IFC-connected test.
+
+## Firmware files and rollback
 
 Two ESPHome configs exist in this project:
 
 | File | Purpose | Network | API | OTA |
 | --- | --- | --- | --- | --- |
-| [proflame-bench.yaml](esphome/proflame-bench.yaml) | **Current network-bench image** — WiFi via USB Improv runtime, encrypted native API, diagnostic sensors. Deployed. | WiFi (Improv over USB) | Encrypted (`api.encryption: {}` — zero-key bootstrap, unique key must be provisioned) | No |
+| [proflame-bench.yaml](esphome/proflame-bench.yaml) + [ifc_query.h](esphome/ifc_query.h) | **Current UART commissioning image** — network diagnostics and manual read-only IFC query. Deployed. | WiFi (Improv over USB) | Encrypted (`api.encryption: {}` — zero-key bootstrap, unique key must be provisioned) | No |
 | [proflame-usb-only.yaml](esphome/proflame-usb-only.yaml) | **Historical USB-only rollback** — no WiFi, no API, no UART. Diagnostic log only. | None | None | None |
 
 The USB-only file is a safe rollback: it removes all network connectivity and
@@ -45,7 +69,8 @@ before enabling Wi-Fi, so the bootstrap API is not left exposed.
 The firmware uses a generic `esp32c5` target, not a verified NiceMCU board
 definition. `flash_size: 4MB` now matches the **4 MB detected by esptool**.
 The board was confirmed as C5rev1.0 with 4 MB flash and native USB
-connection; exact NiceMCU PCB pinout and TX/RX UART routing remain unverified.
+connection; exact NiceMCU PCB header layout remains unverified. UART GPIO4/5
+are now assigned in firmware. Keep the YAML and `ifc_query.h` in the same directory.
 
 1. Leave the fireplace, OEM dongle and remote exactly as they are. Disconnect
    **every external GPIO lead** from the C5; only its USB cable is connected.
@@ -82,8 +107,8 @@ connection; exact NiceMCU PCB pinout and TX/RX UART routing remain unverified.
    or some factory-flash operations can restore bootstrap mode.
 - **Logger level NONE:** Improv debug logs can include Wi-Fi passwords; native
   USB serial logging is suppressed. Native USB baud rate remains 115200.
-- **No OTA, web server, AP, or IFC actuator controls.** Diagnostic sensors only:
-  uptime, Wi-Fi signal, status.
+- **No OTA, web server, AP, or IFC actuator controls.** Network diagnostics plus
+  manual IFC GET query only; details and parser limitations are in [wiring.md](wiring.md).
 - **Full factory flash may erase provisioned preferences** (Wi-Fi, API key).
    Repeat Wi-Fi provisioning via physical USB Improv and API-key provisioning
    over the trusted network. USB provisions Wi-Fi, not the API key.
@@ -110,13 +135,14 @@ No ready-to-flash fireplace-control configuration is included here deliberately.
 
 ## Hardware identification and proposed wiring
 
-Still needed: fireplace make/model, IFC part number/revision and connector-label
-photo, existing dongle label/connection, and handheld-remote model. Photograph
+Fireplace identified from its rating plate: **Montigo P52DF-F, natural gas**.
+Dongle identified: **0584526_01**, connected to green-print IFC X0A.
+Still needed: IFC part number/revision and handheld-remote model. Photograph
 only safely accessible labels; do not open energized equipment. Add non-sensitive
 photos here after review. No appliance-specific wiring has been verified.
 
 **Runtime hardware confirmed:** C5rev1.0, 4 MB flash, native USB connection.
-PCB exact pinout unverified; TX/RX UART pins remain unassigned.
+PCB header layout unverified; firmware assigns RX GPIO4 and TX GPIO5.
 
 The upstream describes X0A as a four-pin JST XH connector with IFC signals
 `3V3 / TX / RX / GND`, with orientation established by its printed ground dot.
@@ -126,13 +152,13 @@ IFC and its manual before fabricating or plugging in a harness.
 | Candidate connection, NOT installation authorization | Purpose |
 | --- | --- |
 | C5 USB (GPIO13 D− / GPIO14 D+) | Native USB; C5rev1.0 confirmed, exact PCB routing unverified |
-| C5 UART TX/RX | Unassigned; verify the exact PCB before choosing pins |
+| C5 UART RX GPIO4 / TX GPIO5 | Green IFC TX → GPIO4; brown IFC RX ← GPIO5 |
 | C5 GND ↔ verified IFC GND | Only after confirming the interface grounding is suitable |
 | IFC 3V3 | Leave disconnected and individually insulated |
 | Board USB power | Separate regulated USB power; no 5 V lead to IFC |
 
-TX/RX pins for UART IFC remain TBD pending the exact NiceMCU C5 PCB pinout; do
-not assume USB connector routes to the native USB pins or any other board pinout.
+UART GPIO4/5 are firmware assignments, not confirmation of the exact NiceMCU
+header locations. Do not substitute a different board's physical header layout.
 Reserve GPIO13/14 for native USB; do not assign either to IFC UART. A USB-to-UART
 bridge may allow flashing but will not carry native `USB_SERIAL_JTAG` logs.
 Historical note: the prior XIAO ESP32-S3 bench used D6 / GPIO43 and D7 / GPIO44
@@ -196,6 +222,7 @@ and cables outside hot areas in accordance with the appliance instructions.
 
 | Date | Change |
 | --- | --- |
-| 2026-11-06 | Network-bench firmware deployed: WiFi via USB Improv, encrypted API (unique key provisioned), three HA entities healthy (-23 dBm signal). C5rev1.0 4MB nativeUSB confirmed. No OTA, web server, AP, IFC, actuator controls. |
+| 2026-11-06 | Added SVG wiring, RX GPIO4/TX GPIO5 and manual read-only IFC query. Compiled, parser-tested, independently reviewed and flashed app-only; saved credentials survived. No IFC query issued by agent. |
+| 2026-11-06 | Earlier network-bench firmware deployed: WiFi via USB Improv, encrypted API, three HA diagnostics. C5rev1.0 4MB nativeUSB confirmed. |
 | 2026-11-06 | Switched board from XIAO ESP32-S3 to NiceMCU ESP32-C5; removed S3 pin recommendations; C5 flash/USB unverified; USB detection attempted no device. |
 | 2026-11-06 | Initial project, owner-confirmed inventory, USB-only bench firmware, upstream risk review and gated implementation plan. No live deployment. |

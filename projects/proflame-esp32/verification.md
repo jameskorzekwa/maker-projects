@@ -12,9 +12,9 @@
 | C5 bench firmware compile (network-bench) | PASS, ESPHome 2026.10.2, ESP-IDF 5.5.6; image 837,564 bytes; HP SRAM 129,612 / 320,928 bytes |
 | C5 bench firmware compile (USB-only predecessor) | Historical PASS: image 207,256 bytes; HP SRAM 59,190 / 320,928 bytes |
 | Runtime hardware confirmation | C5rev1.0, 4 MB flash, native USB connection confirmed |
-| PCB pinout / TXRX assignment | Unverified; exact NiceMCU C5 PCB routing still unknown |
+| PCB pinout / TXRX assignment | Firmware RX GPIO4 / TX GPIO5; physical NiceMCU header layout unverified |
 | Compiled image flash (laptop USB, esptool 5.1) | Hash verified, flashed to board |
-| DeviceBuilder config hash | `b34c6625b7ce8864d6b044e59f9b53436bad6cb9824df601eb1355fbcac43d6e` |
+| Current DeviceBuilder config hash | `fe2e25a2204fc0522198e1f969eaa13026ab6e84a627be0b430ab0969b60e1d2` |
 | Deployed version | 2026.10.2 |
 | WiFi + HA adoption | Wi-Fi provisioned via USB Improv; HA adopted through encrypted native API; three entities healthy |
 | Entity status | Signal -23 dBm; uptime 31 sec after controlled reset |
@@ -24,6 +24,25 @@
 | Fireplace control firmware | Not implemented; upstream is not approved for connection |
 | Physical ignition/off and failure testing | Not performed |
 | Long burn-in / IFC tests | Not performed |
+
+## UART commissioning revision
+
+- RX GPIO4, TX GPIO5, 9600–8-N-1; manual GET register16 only. No boot/reconnect
+  commands, SET, ownership acquisition, actuator entities or retries.
+- `ifc_query.h` parser tests passed under g++ C++17, warnings-as-errors,
+  AddressSanitizer and UndefinedBehaviorSanitizer. Includes known ownership replies,
+  bad lengths/checksums, wrong registers and SET echoes.
+- ESPHome 2026.10.2 config/full compile passed, ESP-IDF 5.5.6: application image
+  857,330 bytes, HP SRAM 130,254 / 320,928. Padded app binary: 857,680 bytes.
+- App-only flash at **0x10000**, verified against the generated partition table;
+  NVS at 0x390000 left untouched. esptool verified the written hash.
+- After reboot: encrypted API works, zero key rejected, HA entry loaded; original
+  diagnostics healthy. Query-result and button entities registered as `unknown`,
+  expected before the first query. **No button press or IFC-connected test made.**
+- Live YAML and header match source hashes. Header SHA-256:
+  `a3e91e80f9e8251bc8d75904d71c8e286ba8e84a4de6448522794757f087afd1`.
+- SVG XML parsed, rendered and visually checked; independent static review found
+  no blocking issues. Receiver framing/late-reply and electrical caveats documented.
 
 Compilation proves toolchain acceptance, not hardware compatibility or safe
 appliance operation. Publication is not review, merge, installation or activation.

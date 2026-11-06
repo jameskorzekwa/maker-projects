@@ -1,8 +1,9 @@
 # Commissioning and rollback checklist
 
 **Not executable yet:** hardware identification and control-firmware fixes in
-[README.md](README.md) must be completed first. Current firmware is network-bench
-diagnostics only, with no IFC communication or actuator controls.
+[README.md](README.md) must be completed first. Current firmware permits only a
+manual IFC status query, with no control acquisition or actuator commands. See
+[wiring.md](wiring.md) for the separately documented diagnostic wiring and limits.
 Do not interpret unchecked tasks as tests already performed.
 
 ## Before IFC connection

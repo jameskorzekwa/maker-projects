@@ -1,10 +1,12 @@
-# NETWORK BENCH IMAGE. Disconnect every GPIO lead before powering/flashing.
-# No fireplace protocol, embedded credentials, actuator controls or IFC UART.
+# UART COMMISSIONING IMAGE. Disconnect every GPIO lead before USB flashing.
+# Manual read-only ownership query only; no control acquisition or actuators.
 # Provision Wi-Fi over USB Improv, then a unique API key over native API.
 esphome:
   name: proflame-bench
   friendly_name: Proflame USB Bench
   min_version: 2026.10.2
+  includes:
+    - ifc_query.h
 
 esp32:
   # Generic chip target; exact NiceMCU PCB/USB routing still unverified.
@@ -45,3 +47,69 @@ binary_sensor:
   - platform: status
     name: Status
     entity_category: diagnostic
+
+# Pins are GPIO numbers, not header positions or D4/D5 aliases.
+# Fireplace X0A: green (IFC TX) -> GPIO4, brown (IFC RX) -> GPIO5,
+# yellow -> GND. White supply lead stays disconnected and insulated.
+uart:
+  id: ifc_uart
+  rx_pin: GPIO4
+  tx_pin: GPIO5
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      bytes: 6
+      timeout: 20ms
+    sequence:
+      - lambda: |-
+          if (!id(ifc_query_pending)) return;
+          const auto result = proflame_query::classify(bytes.data(), bytes.size());
+          if (result == proflame_query::Result::INVALID) return;
+          id(ifc_query_pending) = false;
+          if (result == proflame_query::Result::UART_CONTROL) {
+            id(ifc_query_result).publish_state("Reply: UART control reported");
+          } else if (result == proflame_query::Result::EXTERNAL_CONTROL) {
+            id(ifc_query_result).publish_state("Reply: external/no UART control reported");
+          } else {
+            id(ifc_query_result).publish_state("Reply: unrecognized ownership value");
+          }
+
+globals:
+  - id: ifc_query_pending
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+text_sensor:
+  - platform: template
+    id: ifc_query_result
+    name: Last IFC Query Result
+    entity_category: diagnostic
+
+script:
+  - id: query_ifc
+    mode: single
+    then:
+      - lambda: |-
+          id(ifc_query_result).publish_state("Waiting for reply");
+          id(ifc_query_pending) = true;
+          id(ifc_uart).write_array(proflame_query::GET_CONTROL,
+                                   sizeof(proflame_query::GET_CONTROL));
+      - delay: 1s
+      - lambda: |-
+          if (id(ifc_query_pending)) {
+            id(ifc_query_pending) = false;
+            id(ifc_query_result).publish_state("No valid reply within 1 second");
+          }
+
+button:
+  - platform: template
+    name: Check IFC Link
+    entity_category: diagnostic
+    on_press:
+      - script.execute: query_ifc
