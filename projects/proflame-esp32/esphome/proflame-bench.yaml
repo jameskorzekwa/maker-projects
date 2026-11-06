@@ -1,0 +1,22 @@
+# USB-ONLY BENCH IMAGE. Disconnect every GPIO lead before powering/flashing.
+# No fireplace protocol, Wi-Fi credentials, actuator controls or UART output.
+esphome:
+  name: proflame-bench
+  friendly_name: Proflame USB Bench
+  min_version: 2026.10.2
+
+esp32:
+  board: seeed_xiao_esp32s3
+  framework:
+    type: esp-idf
+
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+  level: INFO
+
+interval:
+  - interval: 10s
+    then:
+      - logger.log:
+          level: INFO
+          format: "USB-only bench alive; no IFC connection permitted"
