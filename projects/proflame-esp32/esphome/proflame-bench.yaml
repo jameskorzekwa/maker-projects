@@ -1,5 +1,6 @@
-# USB-ONLY BENCH IMAGE. Disconnect every GPIO lead before powering/flashing.
-# No fireplace protocol, Wi-Fi credentials, actuator controls or UART output.
+# NETWORK BENCH IMAGE. Disconnect every GPIO lead before powering/flashing.
+# No fireplace protocol, embedded credentials, actuator controls or IFC UART.
+# Provision Wi-Fi over USB Improv, then a unique API key over native API.
 esphome:
   name: proflame-bench
   friendly_name: Proflame USB Bench
@@ -16,11 +17,31 @@ esp32:
 logger:
   hardware_uart: USB_SERIAL_JTAG
   baud_rate: 115200
-  level: INFO
+  # Improv debug logs can include passwords; suppress all serial logging.
+  level: NONE
 
-interval:
-  - interval: 10s
-    then:
-      - logger.log:
-          level: INFO
-          format: "USB-only bench alive; no IFC connection permitted"
+wifi:
+  reboot_timeout: 0s
+
+improv_serial:
+
+api:
+  reboot_timeout: 0s
+  # No key embedded in the firmware. Immediately provision a unique key.
+  # Before provisioning, the API accepts the public zero-key bootstrap mode.
+  encryption: {}
+
+sensor:
+  - platform: uptime
+    name: Uptime
+    update_interval: 30s
+    entity_category: diagnostic
+  - platform: wifi_signal
+    name: Wi-Fi Signal
+    update_interval: 30s
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: status
+    name: Status
+    entity_category: diagnostic

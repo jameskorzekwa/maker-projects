@@ -1,0 +1,23 @@
+# Historical USB-only rollback build. No Wi-Fi, API, UART or actuator controls.
+esphome:
+  name: proflame-bench
+  friendly_name: Proflame USB Bench
+  min_version: 2026.10.2
+
+esp32:
+  variant: esp32c5
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+  baud_rate: 115200
+  level: INFO
+
+interval:
+  - interval: 10s
+    then:
+      - logger.log:
+          level: INFO
+          format: "USB-only bench alive; no IFC connection permitted"

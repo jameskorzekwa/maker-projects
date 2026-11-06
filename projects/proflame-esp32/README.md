@@ -1,10 +1,11 @@
 # Proflame ESP32 dongle replacement
 
-Status: **USB bench preparation only; NOT ready to connect to the fireplace.**
+Status: **Network-bench firmware deployed and working (WiFi + encrypted API).
+NOT ready to connect to the fireplace IFC.**
 Created 2026-11-06 for James's home Home Assistant server (not the Casita).
-This directory is the maintained project record. Live ESPHome configurations
-eventually belong in the home server's `/config/esphome/`; nothing here has
-been deployed there. The existing OEM dongle and HA integration stay unchanged.
+This directory is the maintained project record. The network-bench configuration
+is installed in the home server's `/config/esphome/`, and the firmware is running
+on the board. The existing OEM dongle and fireplace integration stay unchanged.
 
 ## Goal and decisions
 
@@ -21,17 +22,30 @@ This would replace the OEM Wi-Fi integration for this fireplace, not run two
 UART masters in parallel. There is no claim of OEM feature parity, confirmed
 burner feedback, or automatic shutdown when connectivity is lost.
 
-## USB-only bench preparation
+## Firmware files
+
+Two ESPHome configs exist in this project:
+
+| File | Purpose | Network | API | OTA |
+| --- | --- | --- | --- | --- |
+| [proflame-bench.yaml](esphome/proflame-bench.yaml) | **Current network-bench image** — WiFi via USB Improv runtime, encrypted native API, diagnostic sensors. Deployed. | WiFi (Improv over USB) | Encrypted (`api.encryption: {}` — zero-key bootstrap, unique key must be provisioned) | No |
+| [proflame-usb-only.yaml](esphome/proflame-usb-only.yaml) | **Historical USB-only rollback** — no WiFi, no API, no UART. Diagnostic log only. | None | None | None |
+
+The USB-only file is a safe rollback: it removes all network connectivity and
+cannot drive the fireplace. The network-bench image is the current deployed
+firmware.
+
+### Network-bench build and flash (current)
+
+This records a supervised deployment, not a self-contained provisioning tool.
+The provisioning scripts used for this deployment are session-private and are
+not released with this project. Arrange and verify the runtime provisioner
+before enabling Wi-Fi, so the bootstrap API is not left exposed.
 
 The firmware uses a generic `esp32c5` target, not a verified NiceMCU board
-definition. `flash_size: 4MB` is a conservative build allocation, **not a measured
-capacity**. Compile now, but **stop before flashing** until the board's C5 chip,
-at least 4 MB of flash and native USB connection have been confirmed. The exact
-NiceMCU model/revision and USB routing remain unknown. Laptop inspection on
-2026-11-06 returned USB controllers only and no USB serial port. James reports
-the board attached, but it did not enumerate during that inspection. Reconnect
-with a known data cable before attempting identification; cable failure has not
-been diagnosed.
+definition. `flash_size: 4MB` now matches the **4 MB detected by esptool**.
+The board was confirmed as C5rev1.0 with 4 MB flash and native USB
+connection; exact NiceMCU PCB pinout and TX/RX UART routing remain unverified.
 
 1. Leave the fireplace, OEM dongle and remote exactly as they are. Disconnect
    **every external GPIO lead** from the C5; only its USB cable is connected.
@@ -45,19 +59,41 @@ been diagnosed.
    esphome version
    esphome config esphome/proflame-bench.yaml
    esphome compile esphome/proflame-bench.yaml
-   # STOP: the hardware/USB identification gate above must pass first.
    # Replace PORT with the actual port on the USB-connected computer.
    esphome upload esphome/proflame-bench.yaml --device PORT
-   esphome logs esphome/proflame-bench.yaml --device PORT
    ```
 
-4. Confirm the `USB-only bench alive; no IFC connection permitted` message
-   repeats every ten seconds. Observe for 15 minutes and power-cycle the board;
-   record resets, USB behavior and firmware version in [verification.md](verification.md).
+4. Close any serial log/flash view so the port is free. After upload, connect
+   via USB Improv to provision Wi-Fi credentials, then
+   provision a unique API encryption key into the ESP32's saved preferences
+   using the native API. Keep the key in approved secure storage, then use it
+   for HA adoption. This requires the supported runtime provisioning client;
+   merely adding this YAML does not create a private key.
+   Record resets, USB behavior and firmware version in [verification.md](verification.md).
 
-The bench firmware intentionally has **no Wi-Fi, API, OTA, UART, Proflame
-component or actuator entities**. It needs no credentials and cannot test the
-fireplace protocol or HA integration. It is not a functioning dongle.
+### Network-bench operational notes
+
+- **API encryption:** `api.encryption: {}` starts in zero-key bootstrap mode,
+  accepting both the public zero-key and the deprecated plaintext API. This is
+  **not** authenticated against an active LAN attacker. Immediately provision a
+  unique key on a trusted network after first connection, or remove power on
+  failure. Verify the unique key is installed and the zero key is rejected;
+   an ordinary reboot retains the unique key (verified). Erasing preferences
+   or some factory-flash operations can restore bootstrap mode.
+- **Logger level NONE:** Improv debug logs can include Wi-Fi passwords; native
+  USB serial logging is suppressed. Native USB baud rate remains 115200.
+- **No OTA, web server, AP, or IFC actuator controls.** Diagnostic sensors only:
+  uptime, Wi-Fi signal, status.
+- **Full factory flash may erase provisioned preferences** (Wi-Fi, API key).
+   Repeat Wi-Fi provisioning via physical USB Improv and API-key provisioning
+   over the trusted network. USB provisions Wi-Fi, not the API key.
+- **No long burn-in or IFC tests performed.**
+
+### USB-only rollback
+
+To remove all network connectivity, compile and flash `proflame-usb-only.yaml`.
+This configuration has no WiFi, no API, no UART, and no actuator controls. It
+produces no HA entities and cannot drive the fireplace.
 
 ## Why the ready-made component is not enabled
 
@@ -79,6 +115,9 @@ photo, existing dongle label/connection, and handheld-remote model. Photograph
 only safely accessible labels; do not open energized equipment. Add non-sensitive
 photos here after review. No appliance-specific wiring has been verified.
 
+**Runtime hardware confirmed:** C5rev1.0, 4 MB flash, native USB connection.
+PCB exact pinout unverified; TX/RX UART pins remain unassigned.
+
 The upstream describes X0A as a four-pin JST XH connector with IFC signals
 `3V3 / TX / RX / GND`, with orientation established by its printed ground dot.
 That is **not a universal left-to-right hookup instruction**. Verify the actual
@@ -86,7 +125,7 @@ IFC and its manual before fabricating or plugging in a harness.
 
 | Candidate connection, NOT installation authorization | Purpose |
 | --- | --- |
-| C5 USB (GPIO13 D− / GPIO14 D+) | Native USB; exact NiceMCU PCB routing to be confirmed |
+| C5 USB (GPIO13 D− / GPIO14 D+) | Native USB; C5rev1.0 confirmed, exact PCB routing unverified |
 | C5 UART TX/RX | Unassigned; verify the exact PCB before choosing pins |
 | C5 GND ↔ verified IFC GND | Only after confirming the interface grounding is suitable |
 | IFC 3V3 | Leave disconnected and individually insulated |
@@ -124,17 +163,25 @@ evidence.
 
 ## HA integration and rollback
 
-Only after these gates: add encrypted ESPHome native API connectivity using the
-approved credential provisioning mechanism. Do not commit or log credentials.
-Neither a Wi-Fi profile nor credentials are provisioned in this project.
-Add a clearly named test device; keep all fireplace automations disabled while
-commissioning. Do not reuse the old entity IDs until behavior and units are
-verified. Preserve the OEM dongle, its configuration and the paired remote.
+**Current state (network-bench):** WiFi provisioned over USB Improv; device
+adopted by Home Assistant with encrypted native API. Three diagnostic entities
+healthy (uptime, Wi-Fi signal, status). Friendly name: "Proflame USB Bench"
+(historical; entity rename deferred). No fireplace automations were added or changed.
+OEM dongle, its configuration and paired remote preserved.
 
-Rollback is to shut down using the appliance's documented procedure, isolate
-power as instructed by its manufacturer, remove the DIY harness, restore the OEM
-connection, then verify remote and original HA operation. Do not hot-plug the IFC.
-Do not remove the current HA integration until the replacement is accepted.
+**API key provisioning:** Before HA adoption, a unique API encryption key was
+provisioned in device preferences. The zero-key bootstrap mode accepts both the
+public zero-key and deprecated plaintext API; this is not authenticated against
+an active LAN attacker. Verify the unique key is installed and the zero key is
+rejected. An ordinary reboot preserves the unique key; this was verified after
+a controlled USB reset. Erasing saved preferences requires reprovisioning.
+
+Rollback to USB-only: compile and flash `proflame-usb-only.yaml` to remove all
+network connectivity. For full OEM rollback: shut down using the appliance's
+documented procedure, isolate power as instructed by its manufacturer, remove
+the DIY harness, restore the OEM connection, then verify remote and original HA
+operation. Do not hot-plug the IFC. Do not remove the current HA integration
+until the replacement is accepted.
 
 ## Safety
 
@@ -149,5 +196,6 @@ and cables outside hot areas in accordance with the appliance instructions.
 
 | Date | Change |
 | --- | --- |
+| 2026-11-06 | Network-bench firmware deployed: WiFi via USB Improv, encrypted API (unique key provisioned), three HA entities healthy (-23 dBm signal). C5rev1.0 4MB nativeUSB confirmed. No OTA, web server, AP, IFC, actuator controls. |
 | 2026-11-06 | Switched board from XIAO ESP32-S3 to NiceMCU ESP32-C5; removed S3 pin recommendations; C5 flash/USB unverified; USB detection attempted no device. |
 | 2026-11-06 | Initial project, owner-confirmed inventory, USB-only bench firmware, upstream risk review and gated implementation plan. No live deployment. |
