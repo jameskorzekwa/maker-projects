@@ -1,5 +1,6 @@
 #include "../esphome/ifc_query.h"
 #include <cassert>
+#include <array>
 #include <cstring>
 #include <initializer_list>
 
@@ -133,5 +134,27 @@ int main() {
   assert(!is_state_set_echo(doc1, 6));             // a request is not an echo
   assert(!is_state_set_echo(granted, 6));          // ownership echo is separate
   assert(!parse_get_reply(doc1, 6, r));  // echo is never treated as state
+  // ---- Thermostat registers (live scan values) ----
+  for (const uint8_t *req : {GET_SETPOINT, GET_ROOM_TEMP, GET_SETPOINT_MIRROR})
+    assert(req[0] == 0x5E && xor5(req) == req[5]);
+  const uint8_t sp73[] = {0xAE, 0x00, 0x49, 0x00, 0x1E, 0xF9};   // after remote 71 -> 73
+  const uint8_t sp71[] = {0xAE, 0x00, 0x47, 0x00, 0x1E, 0xF7};   // before
+  const uint8_t mir73[] = {0xAE, 0x00, 0x49, 0x00, 0x21, 0xC6};
+  const uint8_t room[] = {0xAE, 0x02, 0x9E, 0x00, 0x1F, 0x2D};   // 670 = 67.0 F
+  assert(parse_get_reply(sp73, 6, r) && r.reg == REG_SETPOINT && setpoint_f(r) == 73);
+  assert(parse_get_reply(sp71, 6, r) && setpoint_f(r) == 71);
+  assert(parse_get_reply(mir73, 6, r) && r.reg == REG_SETPOINT_MIRROR && setpoint_f(r) == 73);
+  assert(parse_get_reply(room, 6, r) && r.reg == REG_ROOM_TEMP && room_temp_f(r) == 67.0f);
+  uint8_t g[6];
+  assert(build_setpoint(73, g));
+  const uint8_t want73[] = {0x5D, 0x00, 0x49, 0x00, 0x1E, static_cast<uint8_t>(0x5D ^ 0x49 ^ 0x1E)};
+  assert(std::memcmp(g, want73, 6) == 0 && xor5(g) == g[5]);
+  assert(build_setpoint(41, g) && build_setpoint(95, g));
+  assert(!build_setpoint(40, g) && !build_setpoint(96, g) && !build_setpoint(-5, g) && !build_setpoint(300, g));
+  assert(is_state_set_echo(std::array<uint8_t, 6>{0xAD, 0, 0x49, 0, 0x1E, static_cast<uint8_t>(0xAD ^ 0x49 ^ 0x1E)}.data(), 6));
+  // Registers outside the known set are still rejected.
+  uint8_t r20[] = {0xAE, 0, 0, 0, 0x20, 0};
+  r20[5] = xor5(r20);
+  assert(!parse_get_reply(r20, 6, r));
   return 0;
 }

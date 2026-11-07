@@ -115,6 +115,19 @@ uart:
           char raw[12];
           snprintf(raw, sizeof(raw), "%02X %02X %02X", r.payload[0], r.payload[1], r.payload[2]);
 
+          if (r.reg == proflame_query::REG_SETPOINT) {
+            id(sp_f) = proflame_query::setpoint_f(r);
+            id(sp_valid) = true;
+            id(sp_seen) = true;
+            id(publish_climate).execute();
+            return;
+          }
+          if (r.reg == proflame_query::REG_SETPOINT_MIRROR) return;
+          if (r.reg == proflame_query::REG_ROOM_TEMP) {
+            const float f = proflame_query::room_temp_f(r);
+            if (f > 20.0f && f < 120.0f) id(room_temperature).publish_state((f - 32.0f) * 5.0f / 9.0f);
+            return;
+          }
           if (r.reg != proflame_query::REG_CONTROL) {
             // State bytes are held as PENDING. They are only accepted when the
             // control checks immediately before AND after them both say UART;
@@ -186,6 +199,10 @@ uart:
           id(pilot_select).publish_state(s1.continuous_pilot ? "Continuous" : "Intermittent");
           id(aux_switch).publish_state(s2.aux);
           id(split_flow_switch).publish_state(s2.split_flow);
+          id(cl_known) = true;
+          id(cl_burning) = burning;
+          id(cl_preset) = burning ? proflame_query::mode_name(s1.mode) : "Off";
+          id(publish_climate).execute();
 
 globals:
   - {id: rx_count, type: uint32_t, restore_value: false, initial_value: '0'}
@@ -214,6 +231,13 @@ globals:
   - {id: new_s2, type: uint8_t, restore_value: false, initial_value: '0'}
   - {id: send_s1, type: bool, restore_value: false, initial_value: 'false'}
   - {id: send_s2, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: sp_f, type: int, restore_value: false, initial_value: '0'}
+  - {id: sp_valid, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: sp_seen, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: new_sp, type: int, restore_value: false, initial_value: '-1'}
+  - {id: cl_known, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: cl_burning, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: cl_preset, type: std::string, restore_value: false, initial_value: '"Off"'}
 
 text_sensor:
   - platform: template
@@ -242,6 +266,15 @@ text_sensor:
     entity_category: diagnostic
 
 sensor:
+  # Room temperature from IFC register 0x1F (tenths of F, provisional mapping).
+  # Published in C as ESPHome climate expects; Home Assistant shows it in F.
+  - platform: template
+    id: room_temperature
+    name: Room Temperature
+    device_class: temperature
+    state_class: measurement
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
   - platform: uptime
     name: Uptime
     update_interval: 30s
@@ -277,9 +310,9 @@ switch:
     restore_mode: DISABLED
     turn_on_action:
       # Like the original: last active mode, and stored flame if flame is 0.
-      - lambda: 'id(apply_cmd).execute(1, -1, -1, -1, -1, -1, -1, -1);'
+      - lambda: 'id(apply_cmd).execute(1, -1, -1, -1, -1, -1, -1, -1, -1);'
     turn_off_action:
-      - lambda: 'id(apply_cmd).execute(0, 0, -1, -1, -1, -1, -1, -1);'
+      - lambda: 'id(apply_cmd).execute(0, 0, -1, -1, -1, -1, -1, -1, -1);'
   # On this fireplace (Montigo P52DF-F) the physical light is wired to the IFC
   # AUX relay, so AUX is exposed as the on/off Light. Verified 2026-11-07.
   - platform: template
@@ -288,17 +321,51 @@ switch:
     icon: mdi:lightbulb
     restore_mode: DISABLED
     turn_on_action:
-      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 1, -1);'
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 1, -1, -1);'
     turn_off_action:
-      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 0, -1);'
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 0, -1, -1);'
   - platform: template
     id: split_flow_switch
     name: Split Flow
     restore_mode: DISABLED
     turn_on_action:
-      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, -1, 1);'
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, -1, 1, -1);'
     turn_off_action:
-      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, -1, 0);'
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, -1, 0, -1);'
+
+climate:
+  # Same controls as the old integration: Heat/Off, Off/Manual/Thermostat/Smart
+  # presets, target temperature (register 0x1E) and room temperature (0x1F).
+  - platform: template
+    id: fireplace_climate
+    name: Thermostat
+    icon: mdi:fireplace
+    optimistic: false
+    restore_mode: NO_RESTORE
+    sensor: room_temperature
+    supported_modes: ["OFF", "HEAT"]
+    custom_presets: ["Off", "Manual", "Thermostat", "Smart"]
+    visual:
+      min_temperature: 5.0
+      max_temperature: 35.0
+      temperature_step: 0.5
+    set_mode_action:
+      - lambda: |-
+          if (x == climate::CLIMATE_MODE_OFF) id(apply_cmd).execute(-1, 0, -1, -1, -1, -1, -1, -1, -1);
+          else if (x == climate::CLIMATE_MODE_HEAT) id(apply_cmd).execute(1, -1, -1, -1, -1, -1, -1, -1, -1);
+    set_custom_preset_action:
+      - lambda: |-
+          const std::string p = x.c_str();
+          const int m = p == "Off" ? 0 : p == "Manual" ? 1 : p == "Thermostat" ? 2 : p == "Smart" ? 3 : -1;
+          if (m >= 0) id(apply_cmd).execute(-1, m, -1, -1, -1, -1, -1, -1, -1);
+    set_target_temperature_action:
+      - lambda: |-
+          const int f = static_cast<int>(lroundf(x * 9.0f / 5.0f + 32.0f));
+          if (f < proflame_query::SETPOINT_MIN_F || f > proflame_query::SETPOINT_MAX_F) {
+            id(cmd_result).publish_state("Rejected: setpoint out of range (41-95 F)");
+            return;
+          }
+          id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, -1, -1, f);
 
 select:
   - platform: template
@@ -310,14 +377,14 @@ select:
       - lambda: |-
           int m = x == "Off" ? 0 : x == "Manual" ? 1 : x == "Thermostat" ? 2 : x == "Smart" ? 3 : -1;
           if (m < 0) return;
-          id(apply_cmd).execute(-1, m, -1, -1, -1, -1, -1, -1);
+          id(apply_cmd).execute(-1, m, -1, -1, -1, -1, -1, -1, -1);
   - platform: template
     id: pilot_select
     name: Pilot
     icon: mdi:candle
     options: ["Intermittent", "Continuous"]
     set_action:
-      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, x == "Continuous" ? 1 : 0, -1, -1);'
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, x == "Continuous" ? 1 : 0, -1, -1, -1);'
 
 number:
   - platform: template
@@ -329,7 +396,7 @@ number:
     step: 1
     mode: slider
     set_action:
-      - lambda: 'id(apply_cmd).execute(-1, -1, static_cast<int>(x), -1, -1, -1, -1, -1);'
+      - lambda: 'id(apply_cmd).execute(-1, -1, static_cast<int>(x), -1, -1, -1, -1, -1, -1);'
   - platform: template
     id: fan_speed
     name: Fan Speed
@@ -339,7 +406,7 @@ number:
     step: 1
     mode: slider
     set_action:
-      - lambda: 'id(apply_cmd).execute(-1, -1, -1, static_cast<int>(x), -1, -1, -1, -1);'
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, static_cast<int>(x), -1, -1, -1, -1, -1);'
   # IFC lamp (night light) output, 0-6. Accepted by the IFC but nothing is
   # connected to it on this fireplace, so it is hidden by default.
   - platform: template
@@ -353,9 +420,21 @@ number:
     step: 1
     mode: slider
     set_action:
-      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, static_cast<int>(x), -1, -1, -1);'
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, static_cast<int>(x), -1, -1, -1, -1);'
 
 button:
+  # Diagnostic: one GET (read-only, 0x5E) per register 0x00-0x3F, logged as hex.
+  # Used to look for undocumented registers such as room/target temperature.
+  - platform: template
+    name: Scan IFC Registers
+    icon: mdi:magnify
+    entity_category: diagnostic
+    on_press:
+      - if:
+          condition:
+            lambda: 'return !id(apply_cmd).is_running() && !id(scan_regs).is_running();'
+          then:
+            - script.execute: scan_regs
   - platform: template
     name: Request Control
     icon: mdi:hand-back-right
@@ -367,6 +446,25 @@ button:
           id(ifc_uart).write_array(proflame_query::REQUEST_CONTROL, sizeof(proflame_query::REQUEST_CONTROL));
 
 script:
+  - id: scan_regs
+    mode: single
+    then:
+      - wait_until:
+          condition:
+            lambda: 'return !id(poll_ifc).is_running();'
+          timeout: 2s
+      - lambda: 'ESP_LOGI("scan", "Register scan start (GET only)");'
+      - repeat:
+          count: 64
+          then:
+            - lambda: |-
+                const uint8_t reg = static_cast<uint8_t>(iteration);
+                uint8_t f[6] = {0x5E, 0x00, 0x00, 0x00, reg, 0};
+                f[5] = f[0] ^ f[1] ^ f[2] ^ f[3] ^ f[4];
+                ESP_LOGI("scan", "GET reg 0x%02X", reg);
+                id(ifc_uart).write_array(f, 6);
+            - delay: 300ms
+      - lambda: 'ESP_LOGI("scan", "Register scan done");'
   # GET control, state 1, state 2, then control again. State is committed only
   # if both control checks say UART. Trailing delay lets the last reply land.
   - id: poll_ifc
@@ -379,7 +477,21 @@ script:
       - lambda: 'id(ifc_uart).write_array(proflame_query::GET_STATE2, 6);'
       - delay: 250ms
       - lambda: 'id(ifc_uart).write_array(proflame_query::GET_CONTROL, 6);'
+      - delay: 250ms
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_SETPOINT, 6);'
+      - delay: 250ms
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_ROOM_TEMP, 6);'
       - delay: 200ms
+
+  - id: publish_climate
+    mode: queued
+    max_runs: 3
+    then:
+      - climate.template.publish:
+          id: fireplace_climate
+          mode: !lambda 'return id(cl_burning) ? climate::CLIMATE_MODE_HEAT : climate::CLIMATE_MODE_OFF;'
+          custom_preset: !lambda 'return id(cl_preset);'
+          target_temperature: !lambda 'return id(sp_valid) ? (id(sp_f) - 32) * 5.0f / 9.0f : NAN;'
 
   # One user command. Parameters: -1 = leave unchanged.
   # p_power: 1 = power on (stored mode; stored flame if flame is 0).
@@ -394,19 +506,21 @@ script:
       p_pilot: int
       p_aux: int
       p_split: int
+      p_setpoint: int
     then:
       - wait_until:
           condition:
-            lambda: 'return !id(poll_ifc).is_running();'
+            lambda: 'return !id(poll_ifc).is_running() && !id(scan_regs).is_running();'
           timeout: 2s
       - if:
           condition:
-            lambda: 'return id(poll_ifc).is_running();'
+            lambda: 'return id(poll_ifc).is_running() || id(scan_regs).is_running();'
           then:
             - lambda: 'id(cmd_result).publish_state("Rejected: busy, try again");'
             - script.stop: apply_cmd
       - lambda: |-
           id(cmd_ok) = false;
+          id(new_sp) = -1;
           id(cmd_result).publish_state("Working");
           if (id(remote_in_control)) {
             ESP_LOGI("proflame", "Command: requesting control once");
@@ -469,7 +583,8 @@ script:
           id(new_s2) = b2;
           id(send_s1) = b1 != cur1;
           id(send_s2) = b2 != cur2;
-          if (!id(send_s1) && !id(send_s2)) {
+          if (p_setpoint >= 0 && !(id(sp_valid) && p_setpoint == id(sp_f))) id(new_sp) = p_setpoint;
+          if (!id(send_s1) && !id(send_s2) && id(new_sp) < 0) {
             id(cmd_result).publish_state("No change needed");
             return;
           }
@@ -487,6 +602,16 @@ script:
           if (!id(cmd_ok) || !id(send_s1)) return;
           uint8_t f[6];
           if (proflame_query::build_set(proflame_query::REG_STATE1, id(new_s1), f)) id(ifc_uart).write_array(f, 6);
+      - delay: 250ms
+      - lambda: |-
+          if (!id(cmd_ok) || id(new_sp) < 0) return;
+          uint8_t f[6];
+          if (proflame_query::build_setpoint(id(new_sp), f)) {
+            ESP_LOGI("proflame", "Command: setpoint %d F", id(new_sp));
+            id(ifc_uart).write_array(f, 6);
+          } else {
+            id(new_sp) = -1;
+          }
       - delay: 400ms
       # Read-back confirmation, same verified sequence.
       - lambda: |-
@@ -503,6 +628,19 @@ script:
       - delay: 250ms
       - lambda: |-
           if (!id(cmd_ok)) return;
+          id(sp_seen) = false;
+          id(ifc_uart).write_array(proflame_query::GET_SETPOINT, 6);
+      - delay: 250ms
+      - lambda: |-
+          if (!id(cmd_ok)) return;
+          const bool sp_ok = id(new_sp) < 0 || (id(sp_seen) && id(sp_f) == id(new_sp));
+          if (!sp_ok) {
+            char m2[64];
+            snprintf(m2, sizeof(m2), "Setpoint not confirmed: read %d F, wanted %d F", id(sp_f), id(new_sp));
+            id(cmd_result).publish_state(m2);
+            ESP_LOGW("proflame", "%s", m2);
+            return;
+          }
           const uint8_t mask1 = 0xF3;  // compare documented state-1 bits only
           if (id(state_seen) && (id(s1_byte) & mask1) == (id(new_s1) & mask1) && id(s2_byte) == id(new_s2)) {
             id(cmd_result).publish_state("Confirmed by read-back");
@@ -520,7 +658,7 @@ interval:
   - interval: 5s
     then:
       - lambda: |-
-          if (!id(apply_cmd).is_running()) id(poll_ifc).execute();
+          if (!id(apply_cmd).is_running() && !id(scan_regs).is_running()) id(poll_ifc).execute();
           const bool fresh = id(link_seen) && (millis() - id(last_reply_ms)) < 15000;
           if (fresh) { id(stale_published) = false; return; }
           if (!id(link_seen) || id(stale_published)) return;

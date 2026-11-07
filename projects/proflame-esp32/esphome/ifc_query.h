@@ -14,6 +14,18 @@ inline constexpr uint8_t GET_STATE2[] = {0x5E, 0, 0, 0, 0x18, 0x46};
 inline constexpr uint8_t REG_CONTROL = 0x16;
 inline constexpr uint8_t REG_STATE1 = 0x17;
 inline constexpr uint8_t REG_STATE2 = 0x18;
+// Undocumented registers identified on James's IFC (2026-11-07):
+// 0x1E thermostat setpoint, whole degrees F (remote 71 -> 73 moved it 71 -> 73);
+// 0x21 mirrors 0x1E; 0x1F room temperature candidate, tenths of degrees F
+// (670 = 67.0 F while the remote displayed 66 F; still provisional).
+inline constexpr uint8_t REG_SETPOINT = 0x1E;
+inline constexpr uint8_t REG_ROOM_TEMP = 0x1F;
+inline constexpr uint8_t REG_SETPOINT_MIRROR = 0x21;
+inline constexpr uint8_t GET_SETPOINT[] = {0x5E, 0, 0, 0, 0x1E, 0x40};
+inline constexpr uint8_t GET_ROOM_TEMP[] = {0x5E, 0, 0, 0, 0x1F, 0x41};
+inline constexpr uint8_t GET_SETPOINT_MIRROR[] = {0x5E, 0, 0, 0, 0x21, 0x7F};
+inline constexpr int SETPOINT_MIN_F = 41;  // 5 C, same limits as the old integration
+inline constexpr int SETPOINT_MAX_F = 95;  // 35 C
 
 // The ONLY write frame: ask the IFC for control (SET register 0x16). It does
 // not change burner, flame, fan or light state. Sent only on explicit request.
@@ -41,7 +53,10 @@ struct Reply {
 // valid XOR checksum. Anything else (SET echoes, noise, partial frames) fails.
 inline bool parse_get_reply(const uint8_t *data, size_t size, Reply &out) {
   if (data == nullptr || size != 6 || data[0] != 0xAE) return false;
-  if (data[4] != REG_CONTROL && data[4] != REG_STATE1 && data[4] != REG_STATE2) return false;
+  const uint8_t reg = data[4];
+  if (reg != REG_CONTROL && reg != REG_STATE1 && reg != REG_STATE2 && reg != REG_SETPOINT &&
+      reg != REG_ROOM_TEMP && reg != REG_SETPOINT_MIRROR)
+    return false;
   uint8_t checksum = 0;
   for (size_t i = 0; i < 5; ++i) checksum ^= data[i];
   if (checksum != data[5]) return false;
@@ -118,10 +133,25 @@ inline bool build_set(uint8_t reg, uint8_t value, uint8_t out[6]) {
   out[5] = out[0] ^ out[1] ^ out[2] ^ out[3] ^ out[4];
   return true;
 }
+// Thermostat setpoint SET frame (register 0x1E only). Refuses values outside
+// 41-95 F instead of clamping, so a bad conversion can never be written.
+inline bool build_setpoint(int fahrenheit, uint8_t out[6]) {
+  if (fahrenheit < SETPOINT_MIN_F || fahrenheit > SETPOINT_MAX_F) return false;
+  out[0] = 0x5D;
+  out[1] = 0x00;
+  out[2] = static_cast<uint8_t>(fahrenheit);
+  out[3] = 0x00;
+  out[4] = REG_SETPOINT;
+  out[5] = out[0] ^ out[1] ^ out[2] ^ out[3] ^ out[4];
+  return true;
+}
+inline int setpoint_f(const Reply &r) { return r.payload[1]; }
+inline float room_temp_f(const Reply &r) { return ((r.payload[0] << 8) | r.payload[1]) / 10.0f; }
+
 // SET echo for state registers (AD 00 vv 00 reg cs); used only for logging.
 inline bool is_state_set_echo(const uint8_t *data, size_t size) {
   if (data == nullptr || size != 6 || data[0] != 0xAD) return false;
-  if (data[4] != REG_STATE1 && data[4] != REG_STATE2) return false;
+  if (data[4] != REG_STATE1 && data[4] != REG_STATE2 && data[4] != REG_SETPOINT) return false;
   uint8_t checksum = 0;
   for (size_t i = 0; i < 5; ++i) checksum ^= data[i];
   return checksum == data[5];
