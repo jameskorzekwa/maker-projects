@@ -1,20 +1,32 @@
-# Proflame ESP32 dongle replacement
+# Proflame ESP32 fireplace controller (basement)
 
-A NiceMCU ESP32-C5 running ESPHome that replaces the SIT Proflame Connect Wi-Fi
-dongle on James's home fireplace, talking directly to the Proflame 2 IFC over
-its X0A diagnostic serial port. It exposes the fireplace to Home Assistant
-through the native ESPHome API.
+A NiceMCU ESP32-C5 running ESPHome that controls James's **basement** Proflame 2
+fireplace through the controller's X0A diagnostic serial port, and exposes it
+to Home Assistant as **Basement Fireplace**.
 
-**Status (2026-11-07): working.** Communication, all supported controls and the
-ESP32-side thermostat were tested on the fireplace with James present.
+**History:** it was first built and commissioned on the living room fireplace
+(2026-11-06/07). The living room controller turned out to be the newer
+"Connect" board, so the original SIT Proflame Connect dongle went back there
+(controlled by the `proflame_connect_wifi` integration), and the ESP32 moved to
+the basement fireplace, whose older controller cannot power the dongle.
 
 | | |
 | --- | --- |
-| Fireplace | Montigo P52DF-F (natural gas), green-print Proflame 2 IFC |
-| Replaced dongle | SIT 0.584.526 (`0584526_01`), kept for rollback |
-| Board | NiceMCU ESP32-C5 (chip rev 1.0, 4 MB flash, native USB) |
+| Fireplace | Montigo P52DF-F (natural gas), basement |
+| Controller | Proflame 2 IFC, **older board**: X0A supply 3.24 V (regulated, unchanged with fresh batteries); answers registers 0x00–0x18 only |
+| Board | NiceMCU ESP32-C5 (chip rev 1.0, 4 MB flash, native USB), USB-powered |
 | Firmware | [esphome/proflame-bench.yaml](esphome/proflame-bench.yaml) + [esphome/ifc_query.h](esphome/ifc_query.h), ESPHome 2026.10.2 |
-| HA device | **Proflame USB Bench** (`proflame-bench`), encrypted API, Wi-Fi logs, password OTA |
+| HA device | **Basement Fireplace** (`proflame-bench`), Basement area, entities `*.basement_fireplace_*`; encrypted API, Wi-Fi logs, password OTA |
+| Wi-Fi | **−90 to −92 dBm** at the basement fireplace: unreliable; move the board or add an access point |
+
+### Supply voltages (corrected)
+
+| Controller | X0A white → yellow | Notes |
+| --- | --- | --- |
+| Living room (newer, Connect board) | **6.24 V** | Battery-backed (4 AA). Powers the OEM dongle. An earlier "3.3 V" report for this unit was not a real measurement. |
+| Basement (older board) | **3.24 V** | Regulated; stays 3.24 V with fresh 6.24 V batteries. Too low for the OEM dongle. |
+
+The white supply wire is never connected to the ESP32 in either case.
 
 ## Wiring
 
@@ -22,7 +34,7 @@ ESP32-side thermostat were tested on the fireplace with James present.
 
 | X0A wire (installed view, SW1 on the right) | Function | ESP32-C5 |
 | --- | --- | --- |
-| White | IFC 3.3 V output (owner measured 3.3 V) | **Not connected**, insulated |
+| White | IFC supply output (basement 3.24 V) | **Not connected**, insulated |
 | Green | IFC TX | **GPIO4** (RX) |
 | Brown | IFC RX | **GPIO5** (TX) |
 | Yellow | Ground | **GND** |
@@ -31,8 +43,7 @@ The ESP32 is powered separately over USB. UART 9600 baud, 8-N-1. Disconnect
 the OEM dongle (never run both on X0A) and isolate fireplace mains and backup
 batteries before touching the harness. Details: [wiring.md](wiring.md).
 
-An early 6.26 V supply reading was a measurement error and was retracted; see
-[electrical-findings.md](electrical-findings.md) for the history.
+See [electrical-findings.md](electrical-findings.md) for the measurement history.
 
 ## Home Assistant entities
 
@@ -42,7 +53,7 @@ An early 6.26 V supply reading was a measurement error and was retracted; see
 | **Fireplace** (switch) | On = Manual at the last flame level; Off = everything off |
 | **Mode** (select) | Off / Manual / Thermostat / Smart (same behavior as the climate presets) |
 | **Flame Height**, **Fan Speed** (numbers, 0–6) | Burner flame and comfort fan |
-| **Light** (switch) | The fireplace light, wired to the IFC AUX relay on this unit (on/off only) |
+| **Light** (switch) | IFC AUX relay (the living room light was wired there; basement wiring not yet confirmed) |
 | **Light Follows Fireplace** (config switch) | Light turns on/off with the fireplace |
 | **Pilot** (select), **Split Flow** (switch) | Continuous/intermittent pilot; split-flow valve |
 | Fireplace Status, Thermostat Status, Room Temperature (+ Source) | Status |
@@ -51,25 +62,21 @@ An early 6.26 V supply reading was a measurement error and was retracted; see
 
 ## Thermostat
 
-The IFC's own thermostat modes depend on the handheld remote, which measures
-the room and calls for heat. Selected from the Wi-Fi side they turn the light
-on but never light the burner. So **Thermostat and Smart run on the ESP32**:
+The IFC's own thermostat modes depend on the handheld remote, so Thermostat and
+Smart run on the ESP32 (Manual mode cycled on/off; idle = Manual with flame 0 so
+fan and light keep running; Smart lowers the flame near target; 5-minute minimum
+for automatic cycling; user changes apply immediately; no temperature → off).
 
-- Room temperature: `sensor.main_floor_temperature` from Home Assistant; falls
-  back to the remote's last report to the IFC (register 0x1F) if that is
-  unavailable or HA is disconnected. The fallback is only used if the remote's
-  value changed within the last 2 hours. **Room Temperature Source** shows which
-  is in use.
-- Heats (Manual mode at the stored flame level) at ≥0.5 °F below target; goes
-  idle at ≥0.5 °F above. **Idle = Manual with flame 0**, so the fan and light
-  keep running. Smart lowers the flame one level per degree as the room
-  approaches target.
-- 5-minute minimum between automatic on/off changes. Changes you make (selecting
-  a preset, changing the target) apply immediately.
-- Turns everything off if no room temperature is available. Off requests are
-  retried until the IFC confirms. A failed ignition cancels the thermostat.
-  Using the remote cancels the thermostat. Mode and target persist across
-  reboots.
+**Room temperature source: the basement remote only** (James's decision; the
+main floor sensor measured the living room). The remote's reading reaches the
+ESP32 only through IFC register 0x1F, and **the basement's older controller
+doesn't have that register**. So in the basement, Thermostat/Smart stay off and
+Room Temperature Source shows "Unavailable (this controller does not report the
+remote temperature)". The remote's own thermostat still works normally. An HA
+or ESP32-attached basement temperature sensor would be needed to use it.
+
+Starting Thermostat/Smart (or any other control) requests control from the IFC
+automatically when the remote last had it.
 
 ## Protocol
 
@@ -134,9 +141,8 @@ integration work.
 
 - No dimmable lamp on this fireplace (the light is on the AUX relay).
 - While the remote has control, HA can't see or control the fireplace.
-- Room temperature staleness of `sensor.main_floor_temperature` is not detected
-  unless the sensor goes unavailable.
-- The meaning of most registers 0x00–0x24 is still unknown.
+- The meaning of most registers is still unknown (0x00–0x24 living room, 0x00–0x18 basement).
+- Basement Wi-Fi is about −90 dBm; commands may be slow or lost.
 
 ## Further documents
 

@@ -1,6 +1,7 @@
 # Commissioning and rollback checklist
 
-**Commissioned 2026-11-07** with James at the fireplace: communication,
+**Commissioned 2026-11-07** on the living room fireplace, then moved to the
+basement fireplace the same day. On the living room unit, with James at the fireplace: communication,
 power, flame, fan, light (AUX), control-request handling and the ESP32
 thermostat (heat, idle with fan/light on, immediate user changes) were
 verified. The checklist below is the original plan; the rollback section

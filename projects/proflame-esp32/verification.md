@@ -1,10 +1,23 @@
 # Verification record
 
-## Final: commissioned firmware (2026-11-07)
+## Moved to the basement (2026-11-07)
+
+- OEM dongle back on the living room controller (6.24 V X0A); the basement
+  controller's X0A is 3.24 V and cannot power it. The ESP32 now runs the
+  basement fireplace; read-only register scan: 0x00–0x18 answer, no 0x1E/0x1F.
+- Firmware: every control (including starting Thermostat/Smart) requests
+  control automatically; only an actual UART → remote change cancels the
+  thermostat; commands are queued instead of dropped; the thermostat no longer
+  forces the light on; temperature source is the remote only (unavailable here).
+- HA: device renamed Basement Fireplace, Basement area, entities
+  `*.basement_fireplace_*` (no automations/dashboards referenced the old IDs).
+- Basement Wi-Fi −90 to −92 dBm.
+
+## Living room commissioning (2026-11-07)
 
 Tested live with James at the fireplace (Montigo P52DF-F):
 
-- Wiring per [wiring.md](wiring.md); white measured 3.3 V (6.26 V retracted).
+- Wiring per [wiring.md](wiring.md); white unconnected (6.24 V battery-backed supply).
 - GET 0x16 → `AE C1 A0 00 16 D9`; valid replies on 0x16–0x18, zero invalid frames.
 - Manual on, flame height, fan speed, light (AUX) and off: all confirmed by
   read-back and observed physically. The IFC lamp output (0x17 bits 4–6) is

@@ -1,12 +1,13 @@
 # Electrical findings — 2026-11-06/07
 
-> **Resolved 2026-11-07.** James re-measured white-to-yellow at **3.3 V**; the
-> 6.26 V reading below was a measurement error. The documented direct wiring
-> (green → GPIO4, brown → GPIO5, yellow → GND, white unconnected) was then
-> connected and works: valid replies, full control tested. The rest of this
-> document is the history of that investigation.
+> **Correction (2026-11-07).** The 6.24–6.26 V reading below was **correct**: the
+> living room controller's X0A supply is battery-backed (4 AA). A later "3.3 V"
+> report for that unit was not a real measurement. The direct wiring (white
+> unconnected) worked regardless. The **basement** controller is an older board
+> whose X0A supply is a regulated **3.24 V**, unchanged with fresh 6.24 V
+> batteries, which is why the OEM dongle does not power up there.
 
-## Original (retracted) measurement
+## Living room measurement
 
 Montigo P52DF-F, green-print Proflame IFC, OEM SIT dongle 0584526_01:
 **+6.26 V DC**, red probe on white, black on yellow, **dongle plugged in**.
