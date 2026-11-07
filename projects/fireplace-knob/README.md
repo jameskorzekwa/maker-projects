@@ -13,14 +13,14 @@ SLEEP --tap--> MAIN --tap--> SETTINGS --tap on item--> EDIT (Power/Mode/Fan/Ligh
   v             |  |            +-- "Back" + tap --> MAIN
 SET POINT <--turn+  |
   +-----------------+
-Any screen: 20 s with no input --> SLEEP.  Hold ~0.9 s anywhere: fireplace on/off.
+Any screen: 10 s with no input --> SLEEP.  Hold ~0.9 s anywhere: fireplace on/off.
 ```
 
 | Screen | Shows | Turn | Tap |
 | --- | --- | --- | --- |
 | **Sleep** | Room temperature at the Sleep brightness; a small orange flame when the fireplace is on | Opens Set Point; the first click already changes the value | Main |
 | **Main** | Room temperature, set point (or flame height in Manual), mode, fan and light state | Set Point | Settings |
-| **Set Point** | Set temperature (Manual while burning: flame height) | ±1 °F (or ±1 flame) | Main (also after 10 s idle) |
+| **Set Point** | Set temperature (Manual while burning: flame height) | ±1 °F (or ±1 flame) | Main (10 s idle goes to Sleep) |
 | **Settings** | Power, Mode, Fan, Light, Flame, Brightness, Back. Flame appears only in Manual while burning | Choose a row | Open it (Back → Main) |
 | **Power** | ON/OFF | Choose | Apply and return to Settings |
 | **Mode** | Manual / Thermostat / Smart | Choose | Apply and return to Settings. While off, only picks the mode for the next turn-on |
@@ -124,8 +124,7 @@ over USB.
    work.
 2. From Sleep, turn the knob: Set Point should open and the value should move
    on that first click. Clockwise should raise it; if not, set
-   `rotation_sign: "-1"`. Wait 10 s: it should return to Main, and 10 s later
-   go to Sleep.
+   `rotation_sign: "-1"`. Wait 10 s: it should go to Sleep.
 3. Tap through Main → Settings → each item and back. Hold to switch the
    fireplace on and off. Confirm each change in Home Assistant.
 4. Change the fan, light, mode and brightness. Check the HA entities and the
@@ -144,6 +143,7 @@ over USB.
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-07 | Sleep after 10 s; HA-connected check uses the state-subscription test and is re-polled, so OFFLINE no longer sticks after a reconnect; Main never wraps. |
 | 2026-11-07 | New UI: Sleep/Main/Set Point/Settings flow, Brightness and Room Temperature Source settings in HA. OTA installed. |
 | 2026-11-07 | Mode screen (Manual/Thermostat/Smart) with per-mode screen lists, a Flame screen for Manual, and Fan in every mode. OTA installed. |
 | 2026-11-07 | Hardware feedback: header icons overlapped their titles, so the icon + text rows are now auto-centred flex rows. The panel drifted and glitched, so the firmware now uses PSRAM XIP, `LCD_RGB_RESTART_IN_VSYNC`, IRAM-safe RGB ISR, 64-byte cache lines, and a 16 MHz pclk. OTA installed; drift fix awaiting confirmation. |

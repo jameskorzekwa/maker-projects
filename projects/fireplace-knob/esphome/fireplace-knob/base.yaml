@@ -15,7 +15,7 @@
 #              sent when you tap (a timeout discards them). Brightness has
 #              two steps: Awake, then Sleep.
 #   Anywhere   hold ~0.9 s = fireplace on/off (on = the selected mode).
-#              20 s without input -> Sleep.
+#              10 s without input -> Sleep.
 #
 # Only a long press (or Power in Settings) ever lights the fireplace.
 #
@@ -62,7 +62,7 @@ substitutions:
   rotation_sign: "1"        # set to "-1" if the knob turns the wrong way
   long_press: 700ms
   setpoint_timeout_s: "10"  # Set Point -> Main
-  sleep_after_s: "20"       # any screen -> Sleep
+  sleep_after_s: "10"       # any screen -> Sleep
   awake_brightness_default: "100"
   sleep_brightness_default: "25"
 
@@ -324,6 +324,9 @@ globals:
   - id: toast_until_ms
     type: uint32_t
     initial_value: "0"
+  - id: last_connected      # HA connection state as last drawn
+    type: bool
+    initial_value: "false"
 
 # ------------------------------------------------------------------
 # Home Assistant: settings exposed on the device page
@@ -771,7 +774,8 @@ script:
           static const char *MODE_UP[] = {"MANUAL", "THERMOSTAT", "SMART"};
           static const char *MODE_MC[] = {"Manual", "Thermostat", "Smart"};
           char buf[64];
-          const bool connected = api::global_api_server->is_connected();
+          const bool connected = api::global_api_server->is_connected_with_state_subscription();
+          id(last_connected) = connected;
           const std::string fp = id(ha_fireplace).state;
           const bool fp_on = fp == "on";
           const bool fp_known = fp == "on" || fp == "off";
@@ -807,13 +811,13 @@ script:
           else lv_obj_add_flag(id(sleep_flame), LV_OBJ_FLAG_HIDDEN);
 
           // ---- Main ----
-          if (!connected) snprintf(buf, sizeof(buf), "Connecting to Home Assistant");
-          else if (manual_flame) snprintf(buf, sizeof(buf), "Flame %d", id(flame_target));
+          if (manual_flame) snprintf(buf, sizeof(buf), "Flame %d", id(flame_target));
           else snprintf(buf, sizeof(buf), "Set ${temp_format}\u00B0", id(setpoint));
           lv_label_set_text(id(main_set), buf);
-          lv_obj_set_style_text_color(id(main_set), lv_color_hex(fp_on ? ORANGE : SUB), 0);
-          snprintf(buf, sizeof(buf), "Fan %d  \u00B7  Light %s", id(fan_target),
-                   (id(light_pending) ? id(light_target) : id(ha_light).state == "on") ? "on" : "off");
+          lv_obj_set_style_text_color(id(main_set), lv_color_hex(!connected ? GREY : fp_on ? ORANGE : SUB), 0);
+          if (!connected) snprintf(buf, sizeof(buf), "Connecting to Home Assistant...");
+          else snprintf(buf, sizeof(buf), "Fan %d  \u00B7  Light %s", id(fan_target),
+                        (id(light_pending) ? id(light_target) : id(ha_light).state == "on") ? "on" : "off");
           lv_label_set_text(id(main_info), buf);
           lv_label_set_text(id(main_hint), manual_flame ? "Tap: settings   Turn: flame" : "Tap: settings   Turn: set temp");
 
@@ -963,6 +967,10 @@ interval:
             id(toast_until_ms) = 0;
             lv_obj_add_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
           }
+          // Redraw as soon as the HA connection state changes, whatever the
+          // order of connect/disconnect events during a reconnect.
+          if (api::global_api_server->is_connected_with_state_subscription() != id(last_connected))
+            id(render)->execute();
           if (id(knob_button).state) return;   // a hold in progress never times out
           const uint32_t idle = (now - id(last_activity_ms)) / 1000;
           if (id(page) != 0 && idle >= ${sleep_after_s}) {
@@ -1126,6 +1134,7 @@ lvgl:
             y: 112
             width: 380
             text_align: CENTER
+            long_mode: CLIP
             text: ""
             text_font: font_title
             text_color: 0xFF7A1A
