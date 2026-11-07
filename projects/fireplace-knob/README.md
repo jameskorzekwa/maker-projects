@@ -121,4 +121,5 @@ over USB.
 
 | Date | Change |
 | --- | --- |
-| 2026-11-07 | Initial firmware for the living-room fireplace, prepared before the hardware arrived. Validated and compiled, but not yet run on hardware. |
+| 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-07 | Hardware feedback: header icons overlapped their titles, so the icon + text rows are now auto-centred flex rows. The panel drifted and glitched, so the firmware now uses PSRAM XIP, `LCD_RGB_RESTART_IN_VSYNC`, IRAM-safe RGB ISR, 64-byte cache lines, and a 16 MHz pclk. OTA installed; drift fix awaiting confirmation. |

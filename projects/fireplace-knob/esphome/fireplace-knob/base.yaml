@@ -82,8 +82,17 @@ esp32:
     sdkconfig_options:
       CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
       CONFIG_ESP32S3_DATA_CACHE_64KB: y
-      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: n
-      CONFIG_SPIRAM_RODATA: n
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: y
+      # RGB panel stability (screen drift / tearing seen on hardware 2026-11-07).
+      # The panel streams the framebuffer from PSRAM continuously; any flash
+      # access disables the cache and starves it. Running code + rodata from
+      # PSRAM (XIP) removes those stalls, and restarting the DMA in every VSYNC
+      # stops a momentary underrun from leaving the image permanently shifted.
+      CONFIG_SPIRAM_XIP_FROM_PSRAM: y
+      CONFIG_LCD_RGB_RESTART_IN_VSYNC: y
+      CONFIG_LCD_RGB_ISR_IRAM_SAFE: y
+
+safe_mode:
 
 psram:
   mode: octal
@@ -187,7 +196,7 @@ display:
     vsync_front_porch: 8
     vsync_pulse_width: 10
     vsync_back_porch: 10
-    pclk_frequency: 18MHz
+    pclk_frequency: 16MHz     # ~60 fps; less PSRAM bandwidth than 18 MHz
     pclk_inverted: true
     init_sequence:
       - [0x01]
@@ -645,12 +654,17 @@ font:
     size: 40
     bpp: 4
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
-    id: font_icons
-    size: 56
+    id: font_icons_small
+    size: 38
     bpp: 4
     glyphs:
       - "\U000F0238"  # fire
       - "\U000F1722"  # fire-off
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_icons
+    size: 44
+    bpp: 4
+    glyphs:
       - "\U000F050F"  # thermometer
       - "\U000F0210"  # fan
       - "\U000F0335"  # lightbulb
@@ -690,41 +704,65 @@ lvgl:
               bg_opa: TRANSP
               pad_all: 0
 
-        - label:
-            id: status_icon
+        # Icon + text rows are flex containers sized to their content and
+        # centred as a unit, so they stay centred whatever the text width.
+        - obj:
+            id: status_row
             align: CENTER
-            x: -48
-            y: -158
-            text: "\U000F1722"
-            text_font: font_icons
-            text_color: 0x5A5A5A
-        - label:
-            id: status_text
-            align: CENTER
-            x: 30
-            y: -156
-            width: 150
-            text: "OFF"
-            text_font: font_title
-            text_color: 0x9A9A9A
+            y: -160
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout:
+              type: flex
+              pad_column: 8
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+            widgets:
+              - label:
+                  id: status_icon
+                  text: "\U000F1722"
+                  text_font: font_icons_small
+                  text_color: 0x5A5A5A
+              - label:
+                  id: status_text
+                  text: "OFF"
+                  text_font: font_title
+                  text_color: 0x9A9A9A
 
-        - label:
-            id: title_icon
+        - obj:
+            id: title_row
             align: CENTER
-            x: -108
-            y: -92
-            text: "\U000F050F"
-            text_font: font_icons
-            text_color: 0xFF7A1A
-        - label:
-            id: title_label
-            align: CENTER
-            x: 20
-            y: -90
-            width: 230
-            text: "SET TEMP"
-            text_font: font_title
-            text_color: 0xCFCFCF
+            y: -98
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout:
+              type: flex
+              pad_column: 12
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+            widgets:
+              - label:
+                  id: title_icon
+                  text: "\U000F050F"
+                  text_font: font_icons
+                  text_color: 0xFF7A1A
+              - label:
+                  id: title_label
+                  text: "SET TEMP"
+                  text_font: font_title
+                  text_color: 0xCFCFCF
 
         - label:
             id: value_label
