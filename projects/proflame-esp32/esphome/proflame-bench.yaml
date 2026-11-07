@@ -1,6 +1,8 @@
 # Proflame X0A compatibility test firmware for the NiceMCU ESP32-C5.
 # GPIO4 = RX (IFC TX, green), GPIO5 = TX (IFC RX, brown), GND = yellow.
 # White (IFC supply, owner-corrected reading 3.3 V) stays disconnected; USB power.
+# Flame/fan/light values are the IFC's stored SETTINGS: they stay nonzero
+# while the fireplace is off. Burner activity requires Mode != Off.
 # READ-ONLY POLLING: every 5 s sends GET requests for registers 0x16, 0x17
 # and 0x18 only. No SET frames, control acquisition, retries or actuators.
 # Credentials come from Device Builder secrets.yaml; none are stored here.
@@ -95,6 +97,8 @@ uart:
             id(fireplace_mode).publish_state(proflame_query::mode_name(s1.mode));
             id(night_light_level).publish_state(s1.light);
             id(continuous_pilot).publish_state(s1.continuous_pilot);
+            if (s1.flags != 0)
+              ESP_LOGD("proflame", "State 1 undocumented flag bits 2-3 = %u", s1.flags);
           } else {
             const auto s2 = proflame_query::decode_state2(r);
             id(state2_raw).publish_state(raw);
@@ -153,17 +157,17 @@ sensor:
     entity_category: diagnostic
   - platform: template
     id: flame_level
-    name: Flame Level
+    name: Flame Level Setting
     accuracy_decimals: 0
     icon: mdi:fire
   - platform: template
     id: night_light_level
-    name: Night Light Level
+    name: Night Light Level Setting
     accuracy_decimals: 0
     icon: mdi:lightbulb
   - platform: template
     id: comfort_fan_speed
-    name: Comfort Fan Speed
+    name: Comfort Fan Speed Setting
     accuracy_decimals: 0
     icon: mdi:fan
   - platform: template

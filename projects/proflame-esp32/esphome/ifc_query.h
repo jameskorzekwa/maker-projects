@@ -52,8 +52,12 @@ inline Result classify(const uint8_t *data, size_t size) {
 
 // Register 0x17 / 0x18 bit layout per the documented Proflame 2 protocol,
 // carried in the middle payload byte (e.g. AE 00 61 00 17 = mode ON, light 6).
+// Observed on James's fireplace while physically OFF: state-1 byte 0x04. The
+// documented modes 0-3 fit in bits 0-1, so mode is decoded from those bits and
+// bits 2-3 are reported separately as undocumented flags (bit 2 set when off).
 struct State1 {
-  uint8_t mode;        // 0 OFF, 1 ON, 2 THERMOSTAT, 3 SMART
+  uint8_t mode;        // 0 OFF, 1 ON, 2 THERMOSTAT, 3 SMART (bits 0-1)
+  uint8_t flags;       // bits 2-3, meaning undocumented
   uint8_t light;       // 0-6 (7 = out of documented range)
   bool continuous_pilot;
 };
@@ -66,8 +70,8 @@ struct State2 {
 
 inline State1 decode_state1(const Reply &r) {
   const uint8_t b = r.payload[1];
-  return State1{static_cast<uint8_t>(b & 0x0F), static_cast<uint8_t>((b >> 4) & 0x07),
-                static_cast<bool>(b & 0x80)};
+  return State1{static_cast<uint8_t>(b & 0x03), static_cast<uint8_t>((b >> 2) & 0x03),
+                static_cast<uint8_t>((b >> 4) & 0x07), static_cast<bool>(b & 0x80)};
 }
 inline State2 decode_state2(const Reply &r) {
   const uint8_t b = r.payload[1];

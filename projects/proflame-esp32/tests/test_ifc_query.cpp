@@ -35,6 +35,13 @@ int main() {
   assert(a.mode == 1 && a.light == 6 && !a.continuous_pilot);
   assert(std::strcmp(mode_name(a.mode), "On") == 0);
 
+  // Live: AE 00 04 00 17 BD read while the fireplace was physically OFF.
+  const uint8_t live_off[] = {0xAE, 0x00, 0x04, 0x00, 0x17, 0xBD};
+  assert(parse_get_reply(live_off, 6, r));
+  a = decode_state1(r);
+  assert(a.mode == 0 && a.flags == 1 && a.light == 0 && !a.continuous_pilot);
+  assert(std::strcmp(mode_name(a.mode), "Off") == 0);
+
   // State 1 with continuous pilot, mode OFF, light 0.
   uint8_t s1p[] = {0xAE, 0x00, 0x80, 0x00, 0x17, 0};
   s1p[5] = xor5(s1p);
