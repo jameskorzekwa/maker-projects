@@ -80,11 +80,17 @@ uart:
           if (set_reply != proflame_query::Result::INVALID) {
             id(last_reply_ms) = millis();
             id(link_seen) = true;
-            const char *text = set_reply == proflame_query::Result::UART_CONTROL ? "Granted" :
-                               set_reply == proflame_query::Result::EXTERNAL_CONTROL ? "Denied (remote in use)" :
-                               "Unrecognized reply";
-            id(control_request_result).publish_state(text);
-            ESP_LOGI("proflame", "Control request reply: %s", text);
+            // This IFC echoes AD C1 A0 00 16 DA even when it keeps the remote in
+            // control (observed 2026-11-07), so the echo is NOT a grant. The
+            // outcome is decided by the next GET 0x16 control check.
+            if (set_reply == proflame_query::Result::EXTERNAL_CONTROL) {
+              id(control_verify_pending) = false;
+              id(control_request_result).publish_state("Denied (remote in use)");
+            } else {
+              id(control_verify_pending) = true;
+              id(control_request_result).publish_state("Reply received; checking control");
+            }
+            ESP_LOGI("proflame", "Control request reply received; verifying with next control check");
             return;
           }
           proflame_query::Reply r{};
@@ -103,6 +109,13 @@ uart:
             // The IFC returns all-zero state while the RF remote is in control
             // (observed: fireplace burning, registers 00 00 00). Do not report it.
             id(remote_in_control) = (c != proflame_query::Result::UART_CONTROL);
+            if (id(control_verify_pending)) {
+              id(control_verify_pending) = false;
+              const char *outcome = c == proflame_query::Result::UART_CONTROL ? "Granted (verified)" :
+                                    "Not granted (remote still in control)";
+              id(control_request_result).publish_state(outcome);
+              ESP_LOGI("proflame", "Control request outcome: %s", outcome);
+            }
             id(ifc_control).publish_state(
                 c == proflame_query::Result::UART_CONTROL ? "UART (ESP32/Wi-Fi side)" :
                 c == proflame_query::Result::EXTERNAL_CONTROL ? "External (remote)" :
@@ -147,6 +160,10 @@ globals:
     restore_value: false
     initial_value: '0'
   - id: link_seen
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: control_verify_pending
     type: bool
     restore_value: false
     initial_value: 'false'
@@ -277,6 +294,7 @@ button:
       - delay: 1s
       - lambda: |-
           if (id(control_request_result).state == "Waiting for reply") {
+            id(control_verify_pending) = false;
             id(control_request_result).publish_state("No reply within 1 second");
             ESP_LOGW("proflame", "No reply to control request within 1 second");
           }
