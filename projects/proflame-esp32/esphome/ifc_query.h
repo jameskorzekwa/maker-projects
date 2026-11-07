@@ -15,7 +15,22 @@ inline constexpr uint8_t REG_CONTROL = 0x16;
 inline constexpr uint8_t REG_STATE1 = 0x17;
 inline constexpr uint8_t REG_STATE2 = 0x18;
 
+// The ONLY write frame: ask the IFC for control (SET register 0x16). It does
+// not change burner, flame, fan or light state. Sent only on explicit request.
+inline constexpr uint8_t REQUEST_CONTROL[] = {0x5D, 0xC1, 0xA0, 0x00, 0x16, 0x2A};
+
 enum class Result { INVALID, UART_CONTROL, EXTERNAL_CONTROL, UNKNOWN_VALUE };
+
+// Response to REQUEST_CONTROL: AD C1 A0 00 16 DA granted, AD 00 00 00 16 BB denied.
+inline Result classify_control_set_reply(const uint8_t *data, size_t size) {
+  if (data == nullptr || size != 6 || data[0] != 0xAD || data[4] != 0x16) return Result::INVALID;
+  uint8_t checksum = 0;
+  for (size_t i = 0; i < 5; ++i) checksum ^= data[i];
+  if (checksum != data[5]) return Result::INVALID;
+  if (data[1] == 0xC1 && data[2] == 0xA0 && data[3] == 0) return Result::UART_CONTROL;
+  if (data[1] == 0 && data[2] == 0 && data[3] == 0) return Result::EXTERNAL_CONTROL;
+  return Result::UNKNOWN_VALUE;
+}
 
 struct Reply {
   uint8_t reg;

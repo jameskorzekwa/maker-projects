@@ -4,7 +4,9 @@
 # Flame/fan/light values are the IFC's stored SETTINGS: they stay nonzero
 # while the fireplace is off. Burner activity requires Mode != Off.
 # READ-ONLY POLLING: every 5 s sends GET requests for registers 0x16, 0x17
-# and 0x18 only. No SET frames, control acquisition, retries or actuators.
+# and 0x18 only. The single exception is the manual 'Request Control' button,
+# which sends ONE SET 0x16 ownership request per press (no burner/flame/fan
+# commands, no retries, nothing at boot). No actuators exist.
 # Credentials come from Device Builder secrets.yaml; none are stored here.
 esphome:
   name: proflame-bench
@@ -74,6 +76,17 @@ uart:
           UARTDebug::log_hex(direction, bytes, ' ');
           if (direction != uart::UART_DIRECTION_RX) return;
           id(rx_count) += bytes.size();
+          const auto set_reply = proflame_query::classify_control_set_reply(bytes.data(), bytes.size());
+          if (set_reply != proflame_query::Result::INVALID) {
+            id(last_reply_ms) = millis();
+            id(link_seen) = true;
+            const char *text = set_reply == proflame_query::Result::UART_CONTROL ? "Granted" :
+                               set_reply == proflame_query::Result::EXTERNAL_CONTROL ? "Denied (remote in use)" :
+                               "Unrecognized reply";
+            id(control_request_result).publish_state(text);
+            ESP_LOGI("proflame", "Control request reply: %s", text);
+            return;
+          }
           proflame_query::Reply r{};
           if (!proflame_query::parse_get_reply(bytes.data(), bytes.size(), r)) {
             id(bad_frames) += 1;
@@ -153,6 +166,9 @@ text_sensor:
   - platform: template
     id: fireplace_mode
     name: Fireplace Mode
+  - platform: template
+    id: control_request_result
+    name: Control Request Result
   - platform: template
     id: state1_raw
     name: IFC State 1 Raw
@@ -247,3 +263,20 @@ interval:
           id(comfort_fan_speed).publish_state(NAN);
           id(fireplace_mode).publish_state("Unknown (no IFC reply)");
           id(ifc_control).publish_state("Unknown (no IFC reply)");
+
+button:
+  - platform: template
+    name: Request Control
+    icon: mdi:hand-back-right
+    on_press:
+      - lambda: |-
+          id(control_request_result).publish_state("Waiting for reply");
+          ESP_LOGI("proflame", "Sending ONE control request (SET register 0x16)");
+          id(ifc_uart).write_array(proflame_query::REQUEST_CONTROL,
+                                   sizeof(proflame_query::REQUEST_CONTROL));
+      - delay: 1s
+      - lambda: |-
+          if (id(control_request_result).state == "Waiting for reply") {
+            id(control_request_result).publish_state("No reply within 1 second");
+            ESP_LOGW("proflame", "No reply to control request within 1 second");
+          }

@@ -79,5 +79,19 @@ int main() {
   const uint8_t seven[] = {0xAE, 0x00, 0x61, 0x00, 0x17, 0xD8, 0x00};
   assert(!parse_get_reply(seven, 7, r));
   assert(classify(s1, 6) == Result::INVALID);  // state reply is not an ownership reply
+
+  // Control request: exact documented frame, valid checksum, register 0x16 only.
+  assert(REQUEST_CONTROL[0] == 0x5D && REQUEST_CONTROL[4] == 0x16);
+  assert(xor5(REQUEST_CONTROL) == REQUEST_CONTROL[5]);
+  const uint8_t granted[] = {0xAD, 0xC1, 0xA0, 0x00, 0x16, 0xDA};
+  const uint8_t denied[] = {0xAD, 0x00, 0x00, 0x00, 0x16, 0xBB};
+  assert(classify_control_set_reply(granted, 6) == Result::UART_CONTROL);
+  assert(classify_control_set_reply(denied, 6) == Result::EXTERNAL_CONTROL);
+  assert(classify_control_set_reply(live, 6) == Result::INVALID);       // GET reply, not SET
+  assert(classify_control_set_reply(set_echo, 6) == Result::INVALID);   // register 0x17
+  uint8_t bad[6];
+  std::memcpy(bad, granted, 6);
+  bad[5] ^= 1;
+  assert(classify_control_set_reply(bad, 6) == Result::INVALID);
   return 0;
 }
