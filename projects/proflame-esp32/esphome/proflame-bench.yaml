@@ -87,10 +87,22 @@ uart:
           snprintf(raw, sizeof(raw), "%02X %02X %02X", r.payload[0], r.payload[1], r.payload[2]);
           if (r.reg == proflame_query::REG_CONTROL) {
             const auto c = proflame_query::control_state(r);
+            // The IFC returns all-zero state while the RF remote is in control
+            // (observed: fireplace burning, registers 00 00 00). Do not report it.
+            id(remote_in_control) = (c != proflame_query::Result::UART_CONTROL);
             id(ifc_control).publish_state(
                 c == proflame_query::Result::UART_CONTROL ? "UART (ESP32/Wi-Fi side)" :
                 c == proflame_query::Result::EXTERNAL_CONTROL ? "External (remote)" :
                 std::string("Unknown value ") + raw);
+          } else if (id(remote_in_control)) {
+            if (r.reg == proflame_query::REG_STATE1) id(state1_raw).publish_state(raw);
+            else id(state2_raw).publish_state(raw);
+            if (id(fireplace_mode).state != "Unknown (remote in control)") {
+              id(fireplace_mode).publish_state("Unknown (remote in control)");
+              id(flame_level).publish_state(NAN);
+              id(night_light_level).publish_state(NAN);
+              id(comfort_fan_speed).publish_state(NAN);
+            }
           } else if (r.reg == proflame_query::REG_STATE1) {
             const auto s1 = proflame_query::decode_state1(r);
             id(state1_raw).publish_state(raw);
@@ -125,6 +137,10 @@ globals:
     type: bool
     restore_value: false
     initial_value: 'false'
+  - id: remote_in_control
+    type: bool
+    restore_value: false
+    initial_value: 'true'
   - id: stale_published
     type: bool
     restore_value: false
