@@ -1,10 +1,10 @@
 # Commissioning and rollback checklist
 
-**Not executable yet:** hardware identification and control-firmware fixes in
-[README.md](README.md) must be completed first. Current firmware is receive-only
-on both GPIO4/5, with no query/transmit or actuator commands. See
-[wiring.md](wiring.md) for the separately documented diagnostic wiring and limits.
-Do not interpret unchecked tasks as tests already performed.
+**Commissioned 2026-11-07** with James at the fireplace: communication,
+power, flame, fan, light (AUX), control-request handling and the ESP32
+thermostat (heat, idle with fan/light on, immediate user changes) were
+verified. The checklist below is the original plan; the rollback section
+remains current. See [verification.md](verification.md).
 
 ## Before IFC connection
 

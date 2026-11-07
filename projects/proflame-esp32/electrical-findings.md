@@ -1,6 +1,12 @@
-# Electrical findings and wiring withdrawal — 2026-11-06
+# Electrical findings — 2026-11-06/07
 
-## Confirmed by owner measurement
+> **Resolved 2026-11-07.** James re-measured white-to-yellow at **3.3 V**; the
+> 6.26 V reading below was a measurement error. The documented direct wiring
+> (green → GPIO4, brown → GPIO5, yellow → GND, white unconnected) was then
+> connected and works: valid replies, full control tested. The rest of this
+> document is the history of that investigation.
+
+## Original (retracted) measurement
 
 Montigo P52DF-F, green-print Proflame IFC, OEM SIT dongle 0584526_01:
 **+6.26 V DC**, red probe on white, black on yellow, **dongle plugged in**.

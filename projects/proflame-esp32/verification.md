@@ -1,10 +1,30 @@
 # Verification record
 
-> **Electrical correction:** owner measured **+6.26 V DC white-to-yellow with
-> OEM dongle connected**. Earlier 3.3 V supply assumption is false for this unit.
-> Direct hookup/diagram withdrawn; firmware tests below do not establish signal
-> levels or safe electrical compatibility. No live reflash or IFC query was made
-> for this correction. See [electrical findings](electrical-findings.md).
+## Final: commissioned firmware (2026-11-07)
+
+Tested live with James at the fireplace (Montigo P52DF-F):
+
+- Wiring per [wiring.md](wiring.md); white measured 3.3 V (6.26 V retracted).
+- GET 0x16 → `AE C1 A0 00 16 D9`; valid replies on 0x16–0x18, zero invalid frames.
+- Manual on, flame height, fan speed, light (AUX) and off: all confirmed by
+  read-back and observed physically. The IFC lamp output (0x17 bits 4–6) is
+  accepted but nothing is connected to it on this fireplace.
+- Remote use switches control to the remote (registers read zero, shown as
+  unknown); after the remote turns it off one control request regains control.
+  The IFC echoes refused control requests, so grants are verified by re-reading 0x16.
+- IFC thermostat modes (0x17 mode 2/3) don't light the burner without the
+  remote; the ESP32 thermostat (main floor temperature, remote fallback) was
+  verified: immediate ignition on start and on raising the target, idle at
+  Manual/flame 0 with fan and light on, automatic off after the 5-minute minimum.
+- Register scan (GET only): 0x00–0x24 answer; 0x1E setpoint confirmed by a
+  remote 71 → 73 change.
+- Every firmware revision: parser/encoder tests (ASan/UBSan, exhaustive bit
+  checks), ESPHome 2026.10.2 compile, OTA with hash verification. Independent
+  reviews of the control path and the thermostat; all blocking findings fixed.
+- Not verified: Smart flame stepping in practice; room-temperature fallback
+  live; detection of a frozen `sensor.main_floor_temperature`.
+
+## History
 
 2026-11-06 preparation, executed on bee2 unless stated otherwise.
 

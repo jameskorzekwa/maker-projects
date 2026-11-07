@@ -1,255 +1,146 @@
 # Proflame ESP32 dongle replacement
 
-> **CURRENT STATUS (2026-11-07) — communication with the fireplace works.**
-> James re-measured white-to-yellow at **3.3 V**; the earlier 6.26 V reading was
-> a measurement error and is retracted. Wiring as documented upstream: green
-> (IFC TX) → GPIO4, brown (IFC RX) → GPIO5, yellow → GND, white unconnected,
-> C5 USB-powered. The deployed firmware polls registers 0x16/0x17/0x18 every
-> 5 s with **GET requests only** (no SET, no control acquisition, no actuators)
-> and the IFC returns valid checksummed replies. Encrypted Wi-Fi logs and
-> password-authenticated OTA are enabled and verified with a real OTA upload.
-> Sections below that describe the direct hookup as withdrawn, the 6.26 V
-> reading, or RX-only firmware are **superseded history**.
+A NiceMCU ESP32-C5 running ESPHome that replaces the SIT Proflame Connect Wi-Fi
+dongle on James's home fireplace, talking directly to the Proflame 2 IFC over
+its X0A diagnostic serial port. It exposes the fireplace to Home Assistant
+through the native ESPHome API.
 
-Live readback, first polling session:
+**Status (2026-11-07): working.** Communication, all supported controls and the
+ESP32-side thermostat were tested on the fireplace with James present.
 
-| Register | Raw reply | Decoded |
+| | |
+| --- | --- |
+| Fireplace | Montigo P52DF-F (natural gas), green-print Proflame 2 IFC |
+| Replaced dongle | SIT 0.584.526 (`0584526_01`), kept for rollback |
+| Board | NiceMCU ESP32-C5 (chip rev 1.0, 4 MB flash, native USB) |
+| Firmware | [esphome/proflame-bench.yaml](esphome/proflame-bench.yaml) + [esphome/ifc_query.h](esphome/ifc_query.h), ESPHome 2026.10.2 |
+| HA device | **Proflame USB Bench** (`proflame-bench`), encrypted API, Wi-Fi logs, password OTA |
+
+## Wiring
+
+![X0A to ESP32-C5 wiring](wiring.svg)
+
+| X0A wire (installed view, SW1 on the right) | Function | ESP32-C5 |
 | --- | --- | --- |
-| 0x16 control | `AE C1 A0 00 16 D9` | UART control reported |
-| 0x17 state 1 | `AE 00 04 00 17 BD` | mode nibble **4** (outside documented 0–3), night light 0, pilot off |
-| 0x18 state 2 | `AE 00 5C 00 18 EA` | flame 4, comfort fan 5, AUX on, split flow off |
+| White | IFC 3.3 V output (owner measured 3.3 V) | **Not connected**, insulated |
+| Green | IFC TX | **GPIO4** (RX) |
+| Brown | IFC RX | **GPIO5** (TX) |
+| Yellow | Ground | **GND** |
 
-Decoding follows the published register layout; mode value 4 and the actual
-fireplace state at the time still need physical confirmation.
-Created 2026-11-06 for James's home Home Assistant server (not the Casita).
-This directory is the maintained project record. The network-bench configuration
-is installed in the home server's `/config/esphome/`, and the firmware is running
-on the board. The existing OEM dongle and fireplace integration stay unchanged.
+The ESP32 is powered separately over USB. UART 9600 baud, 8-N-1. Disconnect
+the OEM dongle (never run both on X0A) and isolate fireplace mains and backup
+batteries before touching the harness. Details: [wiring.md](wiring.md).
 
-## Goal and decisions
+An early 6.26 V supply reading was a measurement error and was retracted; see
+[electrical-findings.md](electrical-findings.md) for the history.
 
-Replace the OEM Wi-Fi dongle with locally maintained ESPHome firmware, retaining
-the original Proflame IFC and all appliance safety controls. James confirmed:
+## Home Assistant entities
 
-- Available board: **NiceMCU ESP32-C5**.
-- **Normal handheld-remote operation must remain available.** Do not unpair it.
-- USB cable/supply, JST XH four-pin pigtail, multimeter, wiring/insulation and
-  enclosure/strain relief are already available; see [components.md](components.md).
-
-Target architecture: HA native ESPHome API → ESP32 → IFC diagnostic UART.
-This would replace the OEM Wi-Fi integration for this fireplace, not run two
-UART masters in parallel. There is no claim of OEM feature parity, confirmed
-burner feedback, or automatic shutdown when connectivity is lost.
-
-## Wiring: previous direct connection withdrawn
-
-**[Open the SVG wiring diagram](wiring.svg)** · **[Detailed wiring and sources](wiring.md)**
-
-| Existing X0A wire | Current finding / C5 connection |
+| Entity | Function |
 | --- | --- |
-| Green | Suspected signal; direction/voltage unverified — **do not connect** |
-| Brown | Suspected signal; direction/voltage unverified — **do not connect** |
-| Yellow | Reference for white-to-yellow measurement; isolation unverified — **do not connect** |
-| White | **+6.26 V measured relative to yellow under OEM load; do not connect** |
+| **Thermostat** (climate) | Heat/Off; presets Off, Manual, Thermostat, Smart; target temperature; room temperature |
+| **Fireplace** (switch) | On = Manual at the last flame level; Off = everything off |
+| **Mode** (select) | Off / Manual / Thermostat / Smart (same behavior as the climate presets) |
+| **Flame Height**, **Fan Speed** (numbers, 0–6) | Burner flame and comfort fan |
+| **Light** (switch) | The fireplace light, wired to the IFC AUX relay on this unit (on/off only) |
+| **Light Follows Fireplace** (config switch) | Light turns on/off with the fireplace |
+| **Pilot** (select), **Split Flow** (switch) | Continuous/intermittent pilot; split-flow valve |
+| Fireplace Status, Thermostat Status, Room Temperature (+ Source) | Status |
+| IFC Control, Last Command Result, Control Request Result, IFC Link, raw registers, Remote Room Temperature / Setpoint, Scan IFC Registers | Diagnostics |
+| Lamp Output Level (unused) | IFC lamp output; nothing is connected to it here, hidden by default |
 
-GPIO4/5 remain logical firmware assignments, not approved electrical connections.
-The older source-derived pinout is contradicted at least for supply voltage.
-Colors refer to the photographed harness, not a standard. Keep the C5 USB-powered
-and disconnected from X0A. Isolate mains and battery backup before disconnecting
-any existing experimental wiring. Retain the OEM dongle.
+## Thermostat
 
-The former **Check IFC Link** button and query firmware were removed from the
-current device. Both GPIO4 and GPIO5 are now receive-only at 9600–8-N-1, with
-per-channel byte count, age since latest batch and latest candidate hex batch
-(up to 32 bytes), publishing every two seconds. **RX UARTs Ready** indicates no
-reported UART initialization failure, not verified signal reception. There is no
-configured TX pin or UART write path. Input pulls are disabled in configuration.
+The IFC's own thermostat modes depend on the handheld remote, which measures
+the room and calls for heat. Selected from the Wi-Fi side they turn the light
+on but never light the burner. So **Thermostat and Smart run on the ESP32**:
 
-Initial post-flash observation: GPIO4 count zero; GPIO5 received repeated `00`
-bytes. These are **not validated IFC frames**. Noise, a low/floating input,
-framing errors or electrical mismatch may produce candidate bytes. Silence with
-the OEM removed and no query transmitter may be normal. This does not approve
-direct wiring, prove safe voltages or establish current physical hookup.
+- Room temperature: `sensor.main_floor_temperature` from Home Assistant; falls
+  back to the remote's last report to the IFC (register 0x1F) if that is
+  unavailable or HA is disconnected. The fallback is only used if the remote's
+  value changed within the last 2 hours. **Room Temperature Source** shows which
+  is in use.
+- Heats (Manual mode at the stored flame level) at ≥0.5 °F below target; goes
+  idle at ≥0.5 °F above. **Idle = Manual with flame 0**, so the fan and light
+  keep running. Smart lowers the flame one level per degree as the room
+  approaches target.
+- 5-minute minimum between automatic on/off changes. Changes you make (selecting
+  a preset, changing the target) apply immediately.
+- Turns everything off if no room temperature is available. Off requests are
+  retried until the IFC confirms. A failed ignition cancels the thermostat.
+  Using the remote cancels the thermostat. Mode and target persist across
+  reboots.
 
-## Firmware files and rollback
+## Protocol
 
-Two ESPHome configs exist in this project:
+Six-byte frames `[cmd, p0, p1, p2, register, XOR]`; GET `5E` → reply `AE`,
+SET `5D` → echo `AD`.
 
-| File | Purpose | Network | API | OTA |
-| --- | --- | --- | --- | --- |
-| [proflame-bench.yaml](esphome/proflame-bench.yaml) | **Current RX-only image** — network diagnostics and two input-only UART receivers. Deployed; old query header no longer included. | WiFi (Improv over USB) | Encrypted (`api.encryption: {}` — zero-key bootstrap, unique key must be provisioned) | No |
-| [proflame-usb-only.yaml](esphome/proflame-usb-only.yaml) | **Historical USB-only rollback** — no WiFi, no API, no UART. Diagnostic log only. | None | None | None |
+| Register | Meaning | Source |
+| --- | --- | --- |
+| 0x16 | Control ownership. `C1 A0 00` = UART, `00 00 00` = remote | Documented |
+| 0x17 | p1: mode bits 0–1 (0 off, 1 manual, 2 thermostat, 3 thermostat+power), undocumented bits 2–3, lamp bits 4–6, pilot bit 7 | Documented; bit layout corrected on this unit |
+| 0x18 | p1: flame bits 0–2, AUX bit 3, fan bits 4–6, split flow bit 7 | Documented |
+| 0x1E (0x21 mirror) | Remote thermostat setpoint, whole °F | Found by register scan |
+| 0x1F | Remote's room temperature report, tenths °F | Found by register scan (provisional) |
+| 0x00–0x24 | All answer GET; the rest are not yet identified | Register scan |
 
-The USB-only file is a safe rollback: it removes all network connectivity and
-cannot drive the fireplace. The network-bench image is the current deployed
-firmware.
+Behavior on this IFC:
 
-### Network-bench build and flash (current)
+- Using the remote switches control to the remote; 0x16–0x18 then read all
+  zeros, shown in HA as unknown. Commands are refused until the remote turns
+  the fireplace off, after which the ESP32 requests control once.
+- The IFC echoes a control request even when refusing it. The grant is
+  confirmed by the next 0x16 read.
+- 0x1E/0x1F read correctly even while the remote has control.
 
-This records a supervised deployment, not a self-contained provisioning tool.
-The provisioning scripts used for this deployment are session-private and are
-not released with this project. Arrange and verify the runtime provisioner
-before enabling Wi-Fi, so the bootstrap API is not left exposed.
+## Firmware safety rules
 
-The firmware uses a generic `esp32c5` target, not a verified NiceMCU board
-definition. `flash_size: 4MB` now matches the **4 MB detected by esptool**.
-The board was confirmed as C5rev1.0 with 4 MB flash and native USB
-connection; exact NiceMCU PCB header layout remains unverified. GPIO4/5 are now
-both configured as RX. The old `ifc_query.h` is retained only as historical code.
+- Nothing is written at boot or reconnect; background traffic is GET-only
+  (the thermostat, when active, sends commands as described above).
+- Each command is sent once, never queued or replayed. A command is refused
+  while another is running.
+- Before writing, the firmware verifies UART control and reads fresh state
+  (control checks before and after the state read). Writes change only the
+  targeted fields and keep undocumented bits. Every command is confirmed by
+  read-back (**Last Command Result**).
 
-1. Leave the fireplace, OEM dongle and remote exactly as they are. Disconnect
-   **every external GPIO lead** from the C5; only its USB cable is connected.
-   Flashing replaces whatever firmware is on this board: use a spare board or
-   preserve its previous source/firmware first.
-2. Use ESPHome **2026.10.2** on the computer physically connected to the board.
-   Commands executed on bee2 cannot access a USB board plugged into a laptop.
-3. From this directory, run:
+## Build, update, test
 
-   ```sh
-   esphome version
-   esphome config esphome/proflame-bench.yaml
-   esphome compile esphome/proflame-bench.yaml
-   # Replace PORT with the actual port on the USB-connected computer.
-   esphome upload esphome/proflame-bench.yaml --device PORT
-   ```
+Device Builder's `secrets.yaml` holds `wifi_ssid`/`wifi_password` and
+`proflame_bench_api_key`/`proflame_bench_ota_password` (also in bee2 Secret
+Service). No credentials are in this repository.
 
-4. Close any serial log/flash view so the port is free. After upload, connect
-   via USB Improv to provision Wi-Fi credentials, then
-   provision a unique API encryption key into the ESP32's saved preferences
-   using the native API. Keep the key in approved secure storage, then use it
-   for HA adoption. This requires the supported runtime provisioning client;
-   merely adding this YAML does not create a private key.
-   Record resets, USB behavior and firmware version in [verification.md](verification.md).
+```sh
+# Parser/encoder tests (ASan/UBSan)
+g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  tests/test_ifc_query.cpp -o /tmp/proflame-test && /tmp/proflame-test
+# Build and install over Wi-Fi (needs secrets.yaml next to the YAML)
+esphome compile esphome/proflame-bench.yaml
+esphome upload esphome/proflame-bench.yaml --device proflame-bench.local
+```
 
-### Network-bench operational notes
+[esphome/proflame-usb-only.yaml](esphome/proflame-usb-only.yaml) is a minimal
+USB-only image without networking or IFC communication.
 
-- **API encryption:** `api.encryption: {}` starts in zero-key bootstrap mode,
-  accepting both the public zero-key and the deprecated plaintext API. This is
-  **not** authenticated against an active LAN attacker. Immediately provision a
-  unique key on a trusted network after first connection, or remove power on
-  failure. Verify the unique key is installed and the zero key is rejected;
-   an ordinary reboot retains the unique key (verified). Erasing preferences
-   or some factory-flash operations can restore bootstrap mode.
-- **Logger level NONE:** Improv debug logs can include Wi-Fi passwords; native
-  USB serial logging is suppressed. Native USB baud rate remains 115200.
-- **No OTA, web server, AP, transmitter or actuator controls.** Candidate bytes
-  are not voltage measurements or validated messages. An oscilloscope/appropriate
-  electrical interface is still required to establish electrical compatibility.
-- **Full factory flash may erase provisioned preferences** (Wi-Fi, API key).
-   Repeat Wi-Fi provisioning via physical USB Improv and API-key provisioning
-   over the trusted network. USB provisions Wi-Fi, not the API key.
-- **No long burn-in or IFC tests performed.**
+## Rollback
 
-### USB-only rollback
+Shut down and isolate the fireplace (mains and backup batteries), unplug the
+ESP32 harness from X0A, reconnect the original Proflame Connect dongle, restore
+power and confirm the remote and the original `proflame_connect_wifi`
+integration work.
 
-To remove all network connectivity, compile and flash `proflame-usb-only.yaml`.
-This configuration has no WiFi, no API, no UART, and no actuator controls. It
-produces no HA entities and cannot drive the fireplace.
+## Known limitations
 
-## Why the ready-made component is not enabled
+- No dimmable lamp on this fireplace (the light is on the AUX relay).
+- While the remote has control, HA can't see or control the fireplace.
+- Room temperature staleness of `sensor.main_floor_temperature` is not detected
+  unless the sensor goes unavailable.
+- The meaning of most registers 0x00–0x24 is still unknown.
 
-The candidate [kaechele/esphome-proflame2](https://github.com/kaechele/esphome-proflame2)
-was reviewed at `bb67453c8782385e2b895274d482e60eb4808934`.
-It implements the wired protocol, but source review found automatic control
-acquisition and a command-queue timestamp-copy defect. Silent-link handling,
-state freshness, and light feedback also require work. Details and the pinned
-source are in [upstream-review.md](upstream-review.md).
+## Further documents
 
-**Do not copy the upstream example onto a connected fireplace.** Even a
-configuration exposing only its diagnostic sensor requests control at startup.
-No ready-to-flash fireplace-control configuration is included here deliberately.
-
-## Hardware identification and proposed wiring
-
-Fireplace identified from its rating plate: **Montigo P52DF-F, natural gas**.
-Dongle identified: **0584526_01**, connected to green-print IFC X0A.
-Still needed: IFC part number/revision and handheld-remote model. Photograph
-only safely accessible labels; do not open energized equipment. Add non-sensitive
-photos here after review. No appliance-specific wiring has been verified.
-
-**Runtime hardware confirmed:** C5rev1.0, 4 MB flash, native USB connection.
-PCB header layout unverified; firmware assigns RX GPIO4 and TX GPIO5.
-
-The upstream describes X0A as a four-pin JST XH connector with IFC signals
-`3V3 / TX / RX / GND`, with orientation established by its printed ground dot.
-That is **not a universal left-to-right hookup instruction**. Verify the actual
-IFC and its manual before fabricating or plugging in a harness.
-
-| Candidate connection, NOT installation authorization | Purpose |
-| --- | --- |
-| C5 USB (GPIO13 D− / GPIO14 D+) | Native USB; C5rev1.0 confirmed, exact PCB routing unverified |
-| C5 UART RX GPIO4 / RX GPIO5 | Both receive-only; direct X0A hookup withdrawn |
-| C5 GND / IFC return | No connection until grounding/isolation established |
-| IFC white supply | +6.26 V measured to yellow under OEM load; leave disconnected |
-| Board USB power | Separate regulated USB power; no 5 V lead to IFC |
-
-UART GPIO4/5 are firmware assignments, not confirmation of the exact NiceMCU
-header locations. Do not substitute a different board's physical header layout.
-Reserve GPIO13/14 for native USB; do not assign either to IFC UART. A USB-to-UART
-bridge may allow flashing but will not carry native `USB_SERIAL_JTAG` logs.
-Historical note: the prior XIAO ESP32-S3 bench used D6 / GPIO43 and D7 / GPIO44
-as candidate UART pins—these do not apply to the C5. Do not connect RS232, RS485
-or 5 V TTL to this interface. Never parallel the OEM dongle and ESP32 TX lines.
-Do not power the ESP32 from the IFC accessory output: its available current has
-not been verified. Connector colors and premade Grove adapters are not pinout
-evidence.
-
-## Implementation gates
-
-1. **Identify hardware:** verify X0A, electrical levels/grounding, pin orientation,
-   appliance instructions and a safe mounting/power arrangement. A qualified
-   fireplace technician should resolve uncertain appliance-side electrical work.
-2. **Harden and test firmware against a mock, not the fireplace:** fix queue
-   expiry/bounds, stale state, unsolicited state-feedback writes and command
-   acceptance. Boot and network recovery must not acquire control or replay
-   actuator commands automatically. Require explicit arming and fresh state.
-3. **Meet the remote requirement:** prove normal handheld control, clear ownership
-   and truthful status on this IFC. Upstream says an active remote prevents UART
-   control and may leave stale reads. If that cannot meet the requirement, stop
-   and evaluate RF emulation separately; do not silently disable the remote.
-4. **Review and compile the resulting control firmware:** no automatic upgrade
-   from the pinned candidate. Add protocol/mock regression tests and independent
-   review before any IFC-connected trial.
-5. **Supervised commissioning:** follow [commissioning.md](commissioning.md).
-   Hardware acceptance and a supported independent shutdown method are mandatory.
-
-## HA integration and rollback
-
-**Current state (network-bench):** WiFi provisioned over USB Improv; device
-adopted by Home Assistant with encrypted native API. Three diagnostic entities
-healthy (uptime, Wi-Fi signal, status). Friendly name: "Proflame USB Bench"
-(historical; entity rename deferred). No fireplace automations were added or changed.
-OEM dongle, its configuration and paired remote preserved.
-
-**API key provisioning:** Before HA adoption, a unique API encryption key was
-provisioned in device preferences. The zero-key bootstrap mode accepts both the
-public zero-key and deprecated plaintext API; this is not authenticated against
-an active LAN attacker. Verify the unique key is installed and the zero key is
-rejected. An ordinary reboot preserves the unique key; this was verified after
-a controlled USB reset. Erasing saved preferences requires reprovisioning.
-
-Rollback to USB-only: compile and flash `proflame-usb-only.yaml` to remove all
-network connectivity. For full OEM rollback: shut down using the appliance's
-documented procedure, isolate power as instructed by its manufacturer, remove
-the DIY harness, restore the OEM connection, then verify remote and original HA
-operation. Do not hot-plug the IFC. Do not remove the current HA integration
-until the replacement is accepted.
-
-## Safety
-
-The IFC retains gas/ignition/flame-sensing safety; never bypass it, switch gas
-valves directly, or modify appliance interlocks. Retaining the IFC does not make
-a DIY accessory manufacturer-approved. Software cannot substitute for appliance
-safety controls, supervision during testing, or functioning CO/smoke alarms.
-Loss of HA/Wi-Fi/ESP power is **not** an established off command. Mount electronics
-and cables outside hot areas in accordance with the appliance instructions.
-
-## Revisions
-
-| Date | Change |
-| --- | --- |
-| 2026-11-06 | Owner's loaded +6.26 V measurement contradicts earlier supply label. Withdrew direct wiring/diagram; recorded manufacturer-document and component-search limits. No live reflash or IFC query. |
-| 2026-11-06 | Added SVG wiring, RX GPIO4/TX GPIO5 and manual read-only IFC query. Compiled, parser-tested, independently reviewed and flashed app-only; saved credentials survived. No IFC query issued by agent. |
-| 2026-11-06 | Earlier network-bench firmware deployed: WiFi via USB Improv, encrypted API, three HA diagnostics. C5rev1.0 4MB nativeUSB confirmed. |
-| 2026-11-06 | Switched board from XIAO ESP32-S3 to NiceMCU ESP32-C5; removed S3 pin recommendations; C5 flash/USB unverified; USB detection attempted no device. |
-| 2026-11-06 | Initial project, owner-confirmed inventory, USB-only bench firmware, upstream risk review and gated implementation plan. No live deployment. |
+- [wiring.md](wiring.md): connector details and sources
+- [electrical-findings.md](electrical-findings.md): supply measurements and component research
+- [upstream-review.md](upstream-review.md): why the kaechele/esphome-proflame2 component isn't used as-is
+- [commissioning.md](commissioning.md), [verification.md](verification.md), [components.md](components.md)

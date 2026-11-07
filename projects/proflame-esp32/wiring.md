@@ -1,9 +1,8 @@
-# X0A wiring and manual link check
+# X0A wiring
 
-> **WITHDRAWN: do not use the earlier direct-wiring recommendation.** Owner
-> measured +6.26 V DC white-to-yellow with OEM dongle connected. The old 3.3 V
-> assumption is false for this unit; signal levels and isolation remain unknown.
-> Keep all X0A wires disconnected from the C5. See [findings](electrical-findings.md).
+**Verified working on 2026-11-07** (Montigo P52DF-F, green-print Proflame 2 IFC).
+James measured **3.3 V** white-to-yellow; an earlier 6.26 V reading was a
+measurement error and was retracted.
 
 ![X0A to C5 wiring](wiring.svg)
 
@@ -11,19 +10,20 @@
 
 ## Connections
 
-GPIO4/5 are **firmware assignments only**, not approved X0A connections or
-header-position numbers. Exact PCB header locations and onboard connections
-have not been inspected. The replacement SVG is a withdrawal notice, not wiring.
+Use the board's **GPIO4 / GPIO5** labels, not header positions or D4/D5
+aliases. Looking at the installed X0A connector from the wire-entry side, with
+the red SW1 button on the right:
 
-Looking at the installed X0A connector from the wire-entry side as in James's
-close-up, with the red SW1 button on the right:
-
-| Position left → right | Existing wire | Current evidence | ESP32-C5 destination |
+| Position left → right | Wire | IFC function | ESP32-C5 |
 | --- | --- | --- | --- |
-| 1 | White | +6.26 V relative to yellow, OEM connected | **Do not connect** |
-| 2 | Green | Older source says IFC TX; exact-unit electrical interface unverified | **Do not connect** |
-| 3 | Brown | Older source says IFC RX; exact-unit electrical interface unverified | **Do not connect** |
-| 4, filled-dot end | Yellow | Measured supply reference; grounding/isolation unverified | **Do not connect** |
+| 1 | White | 3.3 V output | **Not connected**, insulated |
+| 2 | Green | TX (IFC output) | **GPIO4** (UART RX) |
+| 3 | Brown | RX (IFC input) | **GPIO5** (UART TX) |
+| 4, filled-dot end | Yellow | Ground | **GND** |
+
+Power the ESP32 separately over USB; never connect ESP 5V/VIN/3V3 to X0A.
+Remove the OEM dongle (never run two transmitters on X0A). Isolate fireplace
+mains and backup batteries before connecting or disconnecting the harness.
 
 Fireplace connector housing: **JST XH four-position XHP-4**, nominal 2.5 mm
 pitch. Do not substitute a PH/Grove cable or assume replacement wire colors
@@ -55,60 +55,7 @@ markings are consistent with ACPL-074L optocouplers, but that alone neither prov
 nor disproves a need for isolation at X0A. Do not energize uncertain wiring based
 on color alone; resolve electrical/board differences before connection.
 
-## Current firmware: RX-only, no query
+## Firmware
 
-GPIO4 and GPIO5 each feed an independent RX-only UART at 9600–8-N-1. There is
-no TX pin, query button, script or UART write operation. Per-channel counts,
-latest batch (up to 32 candidate bytes) and batch age publish every two seconds.
-No per-byte logs; Wi-Fi credentials remain protected by logger NONE. Input pulls
-are disabled in YAML. This is not a guarantee of electrical isolation or GPIO
-behavior throughout reset/boot/sleep. Byte count is not a validated-frame count.
-Do not connect the unknown X0A electrical interface directly.
-
-The last-hex field is the latest completed batch, not a rolling capture. Age
-refers to callback timing. Floating inputs or low/framing conditions can produce
-spurious candidate bytes. Unknown age means no received batch yet. With the OEM
-removed and no transmitter present, absence of IFC replies is expected from the
-older protocol description and does not identify a failed interface.
-
-## Historical firmware behavior (no longer deployed)
-
-`proflame-bench.yaml` configures **RX GPIO4, TX GPIO5, 9600 baud, 8-N-1**.
-It retains runtime-provisioned Wi-Fi and encrypted API diagnostics.
-
-The **Check IFC Link** button sends exactly one documented GET-ownership request:
-`5E 00 00 00 16 48`. It does not request ownership, ignite the burner or set any
-operating state. There are no automatic boot/reconnect queries, retries, SET
-commands or actuator entities. Do not automate this button.
-
-**Last IFC Query Result** records the last query attempt, not live link health
-or actual burner activity. Valid responses must have six bytes, opcode AE,
-register 16 and a matching XOR checksum. A non-restored pending flag and a
-one-second deadline bound each query; repeated presses while the script runs
-are ignored. Startup has no result until queried. Unrecognized ownership payloads
-are reported without interpretation.
-
-The debugger-based receiver is a commissioning aid, not a robust stream parser:
-noise or fragmented delivery can cause a timeout, and the protocol has no
-transaction ID to distinguish a delayed reply arriving during a later query.
-**No valid reply does not prove incorrect wiring.** The firmware cannot establish
-electrical safety or confirmed flame state. No IFC-connected query has been tested
-as part of this implementation.
-
-## Historical query build and test
-
-Copy **both** `esphome/proflame-bench.yaml` and `esphome/ifc_query.h` into the same
-ESPHome configuration directory. Do not include the unsafe upstream component.
-
-From this project directory:
-
-```sh
-g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
-  tests/test_ifc_query.cpp -o /tmp/proflame-query-test
-/tmp/proflame-query-test
-esphome config esphome/proflame-bench.yaml
-esphome compile esphome/proflame-bench.yaml
-```
-
-Validated and compiled with ESPHome 2026.10.2 / ESP-IDF 5.5.6. Parser tests pass
-with address/undefined-behavior sanitizers. Build success is not an appliance test.
+The current firmware ([README](README.md)) provides full control. UART 9600
+baud, 8-N-1; RX GPIO4, TX GPIO5.
