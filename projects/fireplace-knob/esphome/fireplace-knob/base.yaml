@@ -1,0 +1,801 @@
+# Fireplace knob - Elecrow CrowPanel 2.1" ESP32-S3 rotary display (480x480).
+#
+# Controls one fireplace through Home Assistant:
+#   Long press (hold)  -> fireplace on/off
+#   Short press        -> next screen: Set Temp -> Fan Speed -> Light -> ...
+#   Turn               -> adjust the value on the current screen
+#                         (Light: clockwise = on, counter-clockwise = off)
+#
+# Which fireplace it controls is set entirely by the substitutions below; the
+# per-fireplace files (../fireplace-knob-living-room.yaml, ...) include this
+# file as a package and override them. It lives in a subdirectory so the
+# ESPHome Device Builder does not list it as a device of its own.
+#
+# Hardware pinout (ST7701S RGB panel, PCF8574 expander @0x21, encoder
+# GPIO4/GPIO42, button on PCF8574 P5, backlight GPIO6) and the panel init
+# sequence come from the known-working community firmware
+# github.com/Jastreb07/elecrow-crowpanel-esphome-thermostat (thermostat_480.yaml,
+# MIT). The CST826 touch panel is not used: it needs an out-of-tree component
+# and this UI is knob-only.
+#
+# Home Assistant must allow this device to perform actions (ESPHome device
+# options -> "Allow the device to perform Home Assistant actions"), otherwise
+# every knob command is silently dropped.
+
+substitutions:
+  device_name: fireplace-knob
+  friendly_name: Fireplace Knob
+  fireplace_name: Fireplace
+
+  # ---- Home Assistant entities (override per fireplace) ----
+  fireplace_switch: switch.living_room_fireplace
+  climate_entity: climate.living_room_fireplace_mode
+  fan_number: number.living_room_fireplace_fan_speed
+  light_switch: switch.living_room_fireplace_light
+
+  # ---- Behaviour ----
+  temp_step: "1.0"          # degrees per knob detent
+  temp_min: "55"
+  temp_max: "85"
+  temp_default: "70"        # used until HA reports a set point
+  temp_format: "%.0f"       # "%.1f" for 0.5-degree steps
+  thermostat_preset: Thermostat  # preset used when a temp is set while burning in Manual
+  fan_max: "6"
+  rotation_sign: "1"        # set to "-1" if the knob turns the wrong way
+  long_press: 700ms
+  dim_after_s: "20"
+  off_after_s: "120"
+  dim_brightness: "0.15"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  min_version: 2026.10.2
+  on_boot:
+    # After the PCF8574 (setup priority 900), before the ST7701S driver (800):
+    # the panel must be powered and out of reset before its init sequence.
+    - priority: 850
+      then:
+        - output.turn_on: lcd_power
+        - output.turn_off: display_reset
+        - delay: 100ms
+        - output.turn_on: tp_reset
+        - delay: 100ms
+        - output.turn_off: tp_reset
+        - delay: 120ms
+        - output.turn_on: tp_reset
+        - delay: 120ms
+        - output.turn_on: tp_intr
+    - priority: -100
+      then:
+        - lambda: 'id(last_activity_ms) = millis();'
+        - light.turn_on:
+            id: display_backlight
+            brightness: 100%
+        - script.execute: render
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
+      CONFIG_ESP32S3_DATA_CACHE_64KB: y
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: n
+      CONFIG_SPIRAM_RODATA: n
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${device_name}"
+    password: !secret fireplace_knob_ap_password
+
+captive_portal:
+
+logger:
+  level: DEBUG
+  logs:
+    lvgl: INFO
+    sensor: INFO
+    text_sensor: INFO
+    homeassistant.sensor: INFO
+    homeassistant.text_sensor: INFO
+
+api:
+  encryption:
+    key: !secret fireplace_knob_api_key
+  on_client_connected:
+    - script.execute: render
+  on_client_disconnected:
+    - script.execute: render
+
+ota:
+  - platform: esphome
+    password: !secret fireplace_knob_ota_password
+
+# ------------------------------------------------------------------
+# Board hardware
+# ------------------------------------------------------------------
+i2c:
+  sda: GPIO38
+  scl: GPIO39
+  id: bus_a
+
+pcf8574:
+  - id: pcf
+    address: 0x21
+
+output:
+  - platform: ledc
+    pin: GPIO6
+    id: bl_pwm
+    frequency: 19531Hz
+  - platform: gpio
+    id: lcd_power
+    pin: {pcf8574: pcf, number: 3, mode: {output: true}}
+  - platform: gpio
+    id: tp_reset
+    pin: {pcf8574: pcf, number: 0, mode: {output: true}}
+  - platform: gpio
+    id: display_reset
+    pin: {pcf8574: pcf, number: 4, mode: {output: true}, inverted: true}
+  - platform: gpio
+    id: tp_intr
+    pin: {pcf8574: pcf, number: 2, mode: {output: true}}
+
+light:
+  - platform: monochromatic
+    id: display_backlight
+    name: Display Backlight
+    output: bl_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 250ms
+
+spi:
+  clk_pin: GPIO2
+  mosi_pin: GPIO1
+
+display:
+  - platform: st7701s
+    id: panel
+    update_interval: never
+    auto_clear_enabled: false
+    spi_mode: MODE3
+    color_order: RGB
+    invert_colors: false
+    dimensions:
+      width: 480
+      height: 480
+    cs_pin: GPIO16
+    de_pin: GPIO40
+    hsync_pin: GPIO15
+    vsync_pin: GPIO7
+    pclk_pin: GPIO41
+    data_pins:
+      red: [46, 3, 8, 18, 17]
+      green: [14, 13, 12, 11, 10, 9]
+      blue: [5, 45, 48, 47, 21]
+    hsync_front_porch: 20
+    hsync_pulse_width: 10
+    hsync_back_porch: 10
+    vsync_front_porch: 8
+    vsync_pulse_width: 10
+    vsync_back_porch: 10
+    pclk_frequency: 18MHz
+    pclk_inverted: true
+    init_sequence:
+      - [0x01]
+      - [0xFF, 0x77, 0x01, 0x00, 0x00, 0x10]
+      - [0xCC, 0x10]
+      - [0xCD, 0x08]
+      - [0xB0, 0x02, 0x13, 0x1B, 0x0D, 0x10, 0x05, 0x08, 0x07, 0x07, 0x24, 0x04, 0x11, 0x0E, 0x2C, 0x33, 0x1D]
+      - [0xB1, 0x05, 0x13, 0x1B, 0x0D, 0x11, 0x05, 0x08, 0x07, 0x07, 0x24, 0x04, 0x11, 0x0E, 0x2C, 0x33, 0x1D]
+      - [0xFF, 0x77, 0x01, 0x00, 0x00, 0x11]
+      - [0xB0, 0x5D]
+      - [0xB1, 0x43]
+      - [0xB2, 0x81]
+      - [0xB3, 0x80]
+      - [0xB5, 0x43]
+      - [0xB7, 0x85]
+      - [0xB8, 0x20]
+      - [0xC1, 0x78]
+      - [0xC2, 0x78]
+      - [0xD0, 0x88]
+      - [0xE0, 0x00, 0x00, 0x02]
+      - [0xE1, 0x03, 0xA0, 0x00, 0x00, 0x04, 0xA0, 0x00, 0x00, 0x00, 0x20, 0x20]
+      - [0xE2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - [0xE3, 0x00, 0x00, 0x11, 0x00]
+      - [0xE4, 0x22, 0x00]
+      - [0xE5, 0x05, 0xEC, 0xA0, 0xA0, 0x07, 0xEE, 0xA0, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - [0xE6, 0x00, 0x00, 0x11, 0x00]
+      - [0xE7, 0x22, 0x00]
+      - [0xE8, 0x06, 0xED, 0xA0, 0xA0, 0x08, 0xEF, 0xA0, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+      - [0xEB, 0x00, 0x00, 0x40, 0x40, 0x00, 0x00, 0x00]
+      - [0xED, 0xFF, 0xFF, 0xFF, 0xBA, 0x0A, 0xBF, 0x45, 0xFF, 0xFF, 0x54, 0xFB, 0xA0, 0xAB, 0xFF, 0xFF, 0xFF]
+      - [0xEF, 0x10, 0x0D, 0x04, 0x08, 0x3F, 0x1F]
+      - [0xFF, 0x77, 0x01, 0x00, 0x00, 0x13]
+      - [0xEF, 0x08]
+      - [0xFF, 0x77, 0x01, 0x00, 0x00, 0x00]
+      - [0x36, 0x00]
+      - [0x3A, 0x60]
+      - [0x11]
+      - delay 100ms
+      - [0x29]
+      - delay 50ms
+
+# ------------------------------------------------------------------
+# State
+# ------------------------------------------------------------------
+globals:
+  - id: page              # 0 = Set Temp, 1 = Fan Speed, 2 = Light
+    type: int
+    initial_value: "0"
+  - id: setpoint          # what the knob shows / last sent
+    type: float
+    restore_value: true
+    initial_value: "${temp_default}"
+  - id: temp_pending      # user is turning; ignore HA echoes until sent
+    type: bool
+    initial_value: "false"
+  - id: fan_target
+    type: int
+    initial_value: "0"
+  - id: fan_pending
+    type: bool
+    initial_value: "false"
+  - id: light_target
+    type: bool
+    initial_value: "false"
+  - id: light_pending
+    type: bool
+    initial_value: "false"
+  - id: long_fired
+    type: bool
+    initial_value: "false"
+  - id: press_woke        # the current press started on a dark screen
+    type: bool
+    initial_value: "false"
+  - id: last_activity_ms
+    type: uint32_t
+    initial_value: "0"
+  - id: screen_level      # 0 = full, 1 = dimmed, 2 = off
+    type: int
+    initial_value: "0"
+  - id: toast_until_ms
+    type: uint32_t
+    initial_value: "0"
+
+# ------------------------------------------------------------------
+# Home Assistant state mirrors
+# ------------------------------------------------------------------
+text_sensor:
+  - platform: homeassistant
+    id: ha_fireplace
+    entity_id: ${fireplace_switch}
+    on_value:
+      - script.execute: render
+  - platform: homeassistant
+    id: ha_light
+    entity_id: ${light_switch}
+    on_value:
+      - lambda: 'id(light_pending) = false;'
+      - script.execute: render
+  - platform: homeassistant
+    id: ha_preset
+    entity_id: ${climate_entity}
+    attribute: preset_mode
+    on_value:
+      - script.execute: render
+
+sensor:
+  - platform: homeassistant
+    id: ha_setpoint
+    entity_id: ${climate_entity}
+    attribute: temperature
+    on_value:
+      # null in Off/Manual on the Proflame integrations -> NaN; keep ours.
+      - lambda: |-
+          if (!std::isnan(x) && !id(temp_pending)) id(setpoint) = x;
+      - script.execute: render
+  - platform: homeassistant
+    id: ha_room_temp
+    entity_id: ${climate_entity}
+    attribute: current_temperature
+    on_value:
+      - script.execute: render
+  - platform: homeassistant
+    id: ha_fan
+    entity_id: ${fan_number}
+    on_value:
+      - lambda: |-
+          if (!std::isnan(x) && !id(fan_pending)) id(fan_target) = (int) lroundf(x);
+      - script.execute: render
+
+  - platform: rotary_encoder
+    id: knob
+    internal: true
+    pin_a:
+      number: GPIO4
+      mode: {input: true, pullup: true}
+    pin_b:
+      number: GPIO42
+      mode: {input: true, pullup: true}
+    on_clockwise:
+      - script.execute: {id: knob_turn, dir: !lambda 'return ${rotation_sign};'}
+    on_anticlockwise:
+      - script.execute: {id: knob_turn, dir: !lambda 'return -(${rotation_sign});'}
+
+  - platform: wifi_signal
+    name: Wi-Fi Signal
+    update_interval: 60s
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: status
+    name: Status
+  - platform: gpio
+    id: knob_button
+    internal: true
+    pin:
+      pcf8574: pcf
+      number: 5
+      mode: {input: true}
+      inverted: true
+    filters:
+      - delayed_on_off: 10ms
+    on_press:
+      - lambda: |-
+          id(long_fired) = false;
+          id(press_woke) = id(screen_level) == 2;
+      - script.execute: long_press_timer
+    on_release:
+      - script.stop: long_press_timer
+      - if:
+          condition:
+            lambda: 'return !id(long_fired);'
+          then:
+            - lambda: |-
+                id(toast_until_ms) = 0;
+                lv_obj_add_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
+            - script.execute: short_press
+
+button:
+  - platform: restart
+    name: Restart
+    entity_category: config
+
+# ------------------------------------------------------------------
+# Behaviour
+# ------------------------------------------------------------------
+script:
+  # Wake the screen and restart the idle timer. Callers check whether the
+  # screen was dark first, so an input that only wakes it changes nothing.
+  - id: wake
+    then:
+      - lambda: 'id(last_activity_ms) = millis();'
+      - if:
+          condition:
+            lambda: 'return id(screen_level) != 0;'
+          then:
+            - lambda: 'id(screen_level) = 0;'
+            - light.turn_on:
+                id: display_backlight
+                brightness: 100%
+
+  - id: long_press_timer
+    mode: restart
+    then:
+      - script.execute: wake
+      - delay: 200ms
+      - lambda: |-
+          bool on = id(ha_fireplace).state == "on";
+          id(show_toast)->execute(on ? "Hold to turn OFF" : "Hold to turn ON", 2000);
+      - delay: ${long_press}
+      - lambda: 'id(long_fired) = true;'
+      - script.execute: toggle_fireplace
+
+  - id: short_press
+    then:
+      - lambda: |-
+          id(wake)->execute();
+          if (id(press_woke)) return;   // that press only woke the screen
+          id(page) = (id(page) + 1) % 3;
+          id(render)->execute();
+
+  - id: show_toast
+    parameters: {text: string, ms: int}
+    then:
+      - lambda: |-
+          lv_label_set_text(id(toast_label), text.c_str());
+          lv_obj_remove_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
+          id(toast_until_ms) = millis() + ms;
+
+  - id: toggle_fireplace
+    then:
+      - if:
+          condition:
+            lambda: 'return id(ha_fireplace).state == "on";'
+          then:
+            - script.execute: {id: show_toast, text: "Turning OFF", ms: 2500}
+            - homeassistant.action:
+                action: switch.turn_off
+                data:
+                  entity_id: ${fireplace_switch}
+          else:
+            - script.execute: {id: show_toast, text: "Turning ON", ms: 2500}
+            - homeassistant.action:
+                action: switch.turn_on
+                data:
+                  entity_id: ${fireplace_switch}
+
+  - id: knob_turn
+    parameters: {dir: int}
+    then:
+      - lambda: |-
+          bool was_off = id(screen_level) == 2;
+          id(wake)->execute();
+          if (was_off) return;
+          switch (id(page)) {
+            case 0: {
+              float t = id(setpoint) + dir * ${temp_step};
+              id(setpoint) = std::min((float) ${temp_max}, std::max((float) ${temp_min}, t));
+              id(temp_pending) = true;
+              id(send_temp)->execute();
+              break;
+            }
+            case 1: {
+              int f = std::min(${fan_max}, std::max(0, id(fan_target) + dir));
+              if (f == id(fan_target)) break;
+              id(fan_target) = f;
+              id(fan_pending) = true;
+              id(send_fan)->execute();
+              break;
+            }
+            case 2: {
+              bool want = dir > 0;
+              bool cur = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
+              if (want == cur) break;
+              id(light_target) = want;
+              id(light_pending) = true;
+              id(send_light)->execute();
+              break;
+            }
+          }
+          id(render)->execute();
+
+  # Debounced: one HA call after the knob stops turning.
+  - id: send_temp
+    mode: restart
+    then:
+      - delay: 900ms
+      - homeassistant.action:
+          action: climate.set_temperature
+          data:
+            entity_id: ${climate_entity}
+          data_template:
+            temperature: "{{ t }}"
+          variables:
+            t: !lambda 'return id(setpoint);'
+      # A set point does nothing in Manual (flame-height) mode, so while the
+      # fireplace is burning in Manual, switch it to thermostat control.
+      # Never ignites a fireplace that is off.
+      - if:
+          condition:
+            lambda: 'return id(ha_fireplace).state == "on" && id(ha_preset).state == "Manual";'
+          then:
+            - homeassistant.action:
+                action: climate.set_preset_mode
+                data:
+                  entity_id: ${climate_entity}
+                  preset_mode: ${thermostat_preset}
+      - delay: 4s
+      - lambda: 'id(temp_pending) = false;'
+      - script.execute: render
+
+  - id: send_fan
+    mode: restart
+    then:
+      - delay: 600ms
+      - homeassistant.action:
+          action: number.set_value
+          data:
+            entity_id: ${fan_number}
+          data_template:
+            value: "{{ v }}"
+          variables:
+            v: !lambda 'return id(fan_target);'
+      - delay: 4s
+      - lambda: 'id(fan_pending) = false;'
+      - script.execute: render
+
+  - id: send_light
+    mode: restart
+    then:
+      - delay: 300ms
+      - if:
+          condition:
+            lambda: 'return id(light_target);'
+          then:
+            - homeassistant.action:
+                action: switch.turn_on
+                data:
+                  entity_id: ${light_switch}
+          else:
+            - homeassistant.action:
+                action: switch.turn_off
+                data:
+                  entity_id: ${light_switch}
+      - delay: 5s
+      - lambda: 'id(light_pending) = false;'
+      - script.execute: render
+
+  - id: render
+    then:
+      - lambda: |-
+          static const uint32_t ORANGE = 0xFF7A1A, CYAN = 0x38BDF8, YELLOW = 0xFACC15,
+                                GREY = 0x5A5A5A, DIM = 0x2A2A2A, WHITE = 0xFFFFFF,
+                                SUB = 0x9A9A9A;
+          char buf[48];
+          const bool connected = api::global_api_server->is_connected();
+          const std::string fp = id(ha_fireplace).state;
+          const bool fp_on = fp == "on";
+          const bool fp_known = fp == "on" || fp == "off";
+
+          // ---- status row ----
+          lv_label_set_text(id(status_icon), fp_on ? "\U000F0238" : "\U000F1722");
+          lv_obj_set_style_text_color(id(status_icon), lv_color_hex(fp_on ? ORANGE : GREY), 0);
+          if (!connected)      lv_label_set_text(id(status_text), "OFFLINE");
+          else if (!fp_known)  lv_label_set_text(id(status_text), "UNAVAILABLE");
+          else                 lv_label_set_text(id(status_text), fp_on ? "ON" : "OFF");
+          lv_obj_set_style_text_color(id(status_text), lv_color_hex(fp_on ? ORANGE : SUB), 0);
+
+          // ---- page ----
+          static const char *TITLES[] = {"SET TEMP", "FAN SPEED", "LIGHT"};
+          static const char *ICONS[] = {"\U000F050F", "\U000F0210", "\U000F0335"};
+          const int p = id(page);
+          lv_label_set_text(id(title_label), TITLES[p]);
+          lv_label_set_text(id(title_icon), ICONS[p]);
+
+          uint32_t accent;
+          if (p == 0) {
+            accent = ORANGE;
+            snprintf(buf, sizeof(buf), "${temp_format}\u00B0", id(setpoint));
+            lv_label_set_text(id(value_label), buf);
+            lv_arc_set_range(id(ring), (int32_t) (${temp_min} * 10), (int32_t) (${temp_max} * 10));
+            lv_arc_set_value(id(ring), (int32_t) lroundf(id(setpoint) * 10));
+            float room = id(ha_room_temp).state;
+            if (id(temp_pending))      snprintf(buf, sizeof(buf), "Setting...");
+            else if (std::isnan(room)) snprintf(buf, sizeof(buf), "Room --");
+            else                       snprintf(buf, sizeof(buf), "Room %.0f\u00B0", room);
+            lv_label_set_text(id(sub_label), buf);
+          } else if (p == 1) {
+            accent = CYAN;
+            int f = id(fan_target);
+            if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
+            lv_label_set_text(id(value_label), buf);
+            lv_arc_set_range(id(ring), 0, ${fan_max});
+            lv_arc_set_value(id(ring), f);
+            lv_label_set_text(id(sub_label), id(fan_pending) ? "Setting..." : "Speed 0 - ${fan_max}");
+          } else {
+            accent = YELLOW;
+            bool lon = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
+            lv_label_set_text(id(value_label), lon ? "ON" : "OFF");
+            lv_arc_set_range(id(ring), 0, 1);
+            lv_arc_set_value(id(ring), lon ? 1 : 0);
+            lv_label_set_text(id(title_icon), lon ? "\U000F0335" : "\U000F0336");
+            lv_label_set_text(id(sub_label), "Turn right: on   left: off");
+          }
+          if (!connected) lv_label_set_text(id(sub_label), "Connecting to Home Assistant");
+
+          lv_obj_set_style_arc_color(id(ring), lv_color_hex(accent), LV_PART_INDICATOR);
+          lv_obj_set_style_text_color(id(title_icon), lv_color_hex(accent), 0);
+          lv_obj_set_style_text_color(id(value_label), lv_color_hex(connected ? WHITE : GREY), 0);
+
+          lv_obj_t *dots[] = {id(dot0), id(dot1), id(dot2)};
+          for (int i = 0; i < 3; i++)
+            lv_obj_set_style_bg_color(dots[i], lv_color_hex(i == p ? accent : DIM), 0);
+
+interval:
+  - interval: 250ms
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          if (id(toast_until_ms) != 0 && (int32_t) (now - id(toast_until_ms)) >= 0) {
+            id(toast_until_ms) = 0;
+            lv_obj_add_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
+          }
+          const uint32_t idle = (now - id(last_activity_ms)) / 1000;
+          if (id(screen_level) == 0 && idle >= ${dim_after_s}) {
+            id(screen_level) = 1;
+            auto call = id(display_backlight).turn_on();
+            call.set_brightness(${dim_brightness});
+            call.perform();
+          } else if (id(screen_level) == 1 && idle >= ${off_after_s}) {
+            id(screen_level) = 2;
+            id(display_backlight).turn_off().perform();
+            id(page) = 0;           // wake up on Set Temp
+            id(render)->execute();
+          }
+
+# ------------------------------------------------------------------
+# UI
+# ------------------------------------------------------------------
+font:
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_value
+    size: 150
+    bpp: 4
+    glyphs: "0123456789.-\u00B0OFN"
+  - file: {type: gfonts, family: Roboto, weight: 500}
+    id: font_title
+    size: 30
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 400}
+    id: font_sub
+    size: 26
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_toast
+    size: 40
+    bpp: 4
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_icons
+    size: 56
+    bpp: 4
+    glyphs:
+      - "\U000F0238"  # fire
+      - "\U000F1722"  # fire-off
+      - "\U000F050F"  # thermometer
+      - "\U000F0210"  # fan
+      - "\U000F0335"  # lightbulb
+      - "\U000F0336"  # lightbulb-outline
+
+lvgl:
+  displays: [panel]
+  buffer_size: 12%
+  bg_color: 0x000000
+  default_font: font_sub
+  scrollable: false
+  scrollbar_mode: "OFF"
+  pages:
+    - id: main_page
+      bg_color: 0x000000
+      widgets:
+        - arc:
+            id: ring
+            align: CENTER
+            width: 456
+            height: 456
+            start_angle: 135
+            end_angle: 45
+            min_value: 0
+            max_value: 100
+            value: 0
+            adjustable: false
+            clickable: false
+            arc_color: 0x1C1C1C
+            arc_width: 22
+            arc_rounded: true
+            indicator:
+              arc_color: 0xFF7A1A
+              arc_width: 22
+              arc_rounded: true
+            knob:
+              bg_opa: TRANSP
+              pad_all: 0
+
+        - label:
+            id: status_icon
+            align: CENTER
+            x: -48
+            y: -158
+            text: "\U000F1722"
+            text_font: font_icons
+            text_color: 0x5A5A5A
+        - label:
+            id: status_text
+            align: CENTER
+            x: 30
+            y: -156
+            width: 150
+            text: "OFF"
+            text_font: font_title
+            text_color: 0x9A9A9A
+
+        - label:
+            id: title_icon
+            align: CENTER
+            x: -108
+            y: -92
+            text: "\U000F050F"
+            text_font: font_icons
+            text_color: 0xFF7A1A
+        - label:
+            id: title_label
+            align: CENTER
+            x: 20
+            y: -90
+            width: 230
+            text: "SET TEMP"
+            text_font: font_title
+            text_color: 0xCFCFCF
+
+        - label:
+            id: value_label
+            align: CENTER
+            y: 20
+            width: 380
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+
+        - label:
+            id: sub_label
+            align: CENTER
+            y: 118
+            width: 340
+            text_align: CENTER
+            long_mode: DOT
+            text: ""
+            text_font: font_sub
+            text_color: 0x9A9A9A
+
+        - obj:
+            id: dot0
+            align: CENTER
+            x: -28
+            y: 172
+            width: 14
+            height: 14
+            radius: 7
+            border_width: 0
+            bg_color: 0xFF7A1A
+            bg_opa: COVER
+        - obj:
+            id: dot1
+            align: CENTER
+            x: 0
+            y: 172
+            width: 14
+            height: 14
+            radius: 7
+            border_width: 0
+            bg_color: 0x2A2A2A
+            bg_opa: COVER
+        - obj:
+            id: dot2
+            align: CENTER
+            x: 28
+            y: 172
+            width: 14
+            height: 14
+            radius: 7
+            border_width: 0
+            bg_color: 0x2A2A2A
+            bg_opa: COVER
+
+        - obj:
+            id: toast
+            align: CENTER
+            width: 400
+            height: 130
+            radius: 65
+            bg_color: 0x111111
+            bg_opa: 92%
+            border_color: 0xFF7A1A
+            border_width: 3
+            hidden: true
+            widgets:
+              - label:
+                  id: toast_label
+                  align: CENTER
+                  text: ""
+                  text_font: font_toast
+                  text_color: 0xFFFFFF

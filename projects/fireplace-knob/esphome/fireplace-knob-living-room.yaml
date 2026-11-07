@@ -1,0 +1,17 @@
+# Living-room fireplace knob (Elecrow CrowPanel 2.1" rotary display).
+# All behaviour and hardware live in fireplace-knob/base.yaml.
+# Living room = Proflame Connect Wi-Fi integration (proflame_connect_wifi).
+
+substitutions:
+  device_name: fireplace-knob-living-room
+  friendly_name: Living Room Fireplace Knob
+  fireplace_name: Living Room
+  fireplace_switch: switch.living_room_fireplace
+  climate_entity: climate.living_room_fireplace_mode
+  fan_number: number.living_room_fireplace_fan_speed
+  light_switch: switch.living_room_fireplace_light
+  temp_step: "1.0"
+  temp_format: "%.0f"
+
+packages:
+  knob: !include fireplace-knob/base.yaml

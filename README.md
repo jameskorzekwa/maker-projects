@@ -7,6 +7,7 @@ Build notes, wiring references, parts lists, and photos for maker projects.
 | Project | Description |
 | --- | --- |
 | [Proflame ESP32 fireplace controller](projects/proflame-esp32/) | NiceMCU ESP32-C5 replacing the Proflame Connect Wi-Fi dongle: direct X0A serial control of a Proflame 2 fireplace from Home Assistant, with an ESP32-side thermostat. |
+| [Fireplace Knob](projects/fireplace-knob/) | Elecrow CrowPanel 2.1" ESP32-S3 rotary display running ESPHome/LVGL: hold for fireplace on/off, press to cycle Set Temp / Fan Speed / Light, turn to adjust. |
 | [ESP32-C6 Bluetooth Proxy](projects/esp32-c6-bluetooth-proxy/) | A plug-in ESPHome Bluetooth proxy built around a Seeed Studio XIAO ESP32-C6. |
 | [ESP32-C3 Lux Sensor](projects/esp32-c3-lux-sensor/) | An 18 V-powered lux sensor built with an ESP32-C3 and BH1750. |
 | [Renogy Battery Monitor to Home Assistant](projects/renogy-battery-monitor-esp32/) | A XIAO ESP32-S3 built into the Renogy RBM500 battery monitor display that publishes the Casita battery readings to Home Assistant. |
