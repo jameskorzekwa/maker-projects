@@ -209,20 +209,23 @@ uart:
           const auto s1 = proflame_query::decode_state1(r1);
           const auto s2 = proflame_query::decode_state2(r2);
           if (s2.flame > 0 && s2.flame <= 6) id(stored_flame) = s2.flame;
-          if (s1.mode >= 1 && s1.mode <= 3 && !(s1.mode == 1 && s2.flame == 0)) id(stored_mode) = s1.mode;
+          // stored_mode stays Manual: IFC modes 2/3 only work with the handheld remote.
           const bool burning = s1.mode != 0 && !(s1.mode == 1 && s2.flame == 0);
-          if (!id(burn_seeded)) { id(burn_seeded) = true; id(prev_burning) = burning; }
-          if (burning != id(prev_burning)) {
+          const bool manual_on = s1.mode == 1 && s2.flame > 0;
+          id(cl_manual_on) = manual_on;
+          if (!id(burn_seeded)) { id(burn_seeded) = true; id(prev_burning) = manual_on; }
+          if (manual_on != id(prev_burning)) {
             id(tstat_switch_ms) = millis();
             id(tstat_switched) = true;
           }
-          id(prev_burning) = burning;
+          id(prev_burning) = manual_on;
           if (!burning && !id(apply_cmd).is_running()) id(pending_off) = false;
           id(fireplace_status).publish_state(s1.mode == 0 ? "Off" :
               (s1.mode == 1 && s2.flame == 0) ? "Off (Manual, flame 0)" :
               proflame_query::mode_name(s1.mode));
           id(fireplace_power).publish_state(burning);
-          id(mode_select).publish_state(proflame_query::mode_name(s1.mode));
+          id(mode_select).publish_state(id(tstat_mode) == 1 ? "Thermostat" : id(tstat_mode) == 2 ? "Smart" :
+                                        proflame_query::mode_name(s1.mode));
           id(flame_height).publish_state(s2.flame);
           id(fan_speed).publish_state(s2.fan);
           id(light_brightness).publish_state(s1.light);
@@ -282,6 +285,7 @@ globals:
   - {id: pending_off, type: bool, restore_value: false, initial_value: 'false'}
   - {id: prev_burning, type: bool, restore_value: false, initial_value: 'false'}
   - {id: burn_seeded, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: cl_manual_on, type: bool, restore_value: false, initial_value: 'false'}
   # Remote's room temperature (register 0x1F), used only as a fallback.
   - {id: remote_temp_f, type: float, restore_value: false, initial_value: 'NAN'}
   - {id: remote_temp_ms, type: uint32_t, restore_value: false, initial_value: '0'}
@@ -457,14 +461,7 @@ climate:
       - lambda: |-
           const std::string p = x.c_str();
           if (p == "Thermostat" || p == "Smart") {
-            // The IFC's own thermostat modes need the handheld remote, so the
-            // ESP32 regulates instead, cycling Manual mode on/off.
-            id(tstat_mode) = p == "Thermostat" ? 1 : 2;
-            id(tstat_expect) = -1;
-            id(pending_off) = false;
-            id(tstat_status) = "Starting";
-            id(publish_climate).execute();
-            id(tstat_eval).execute();
+            id(start_tstat).execute(p == "Thermostat" ? 1 : 2);
             return;
           }
           id(tstat_mode) = 0;
@@ -492,6 +489,8 @@ select:
       - lambda: |-
           int m = x == "Off" ? 0 : x == "Manual" ? 1 : x == "Thermostat" ? 2 : x == "Smart" ? 3 : -1;
           if (m < 0) return;
+          // Thermostat/Smart run on the ESP32 (IFC modes 2/3 need the remote).
+          if (m >= 2) { id(start_tstat).execute(m == 2 ? 1 : 2); return; }
           id(tstat_mode) = 0;
           if (m == 0) { id(request_off).execute(); return; }
           id(apply_cmd).execute(-1, m, -1, -1, -1, -1, -1, -1, -1);
@@ -651,7 +650,9 @@ script:
           const bool have_temp = !std::isnan(room);
           const float target = id(tstat_target_f);
           const uint32_t now = millis();
-          const bool burning = id(cl_burning);  // verified IFC state
+          // Burner commanded on = Manual with flame > 0. IFC thermostat modes
+          // (2/3) are treated as "not heating" so the ESP32 takes over.
+          const bool burning = id(cl_manual_on);
           id(tstat_heating) = burning;
           // B2: min cycle measured from the last CONFIRMED on/off transition.
           const bool cycle_ok = !id(tstat_switched) || (now - id(tstat_switch_ms)) >= 5u * 60u * 1000u;
@@ -711,6 +712,21 @@ script:
                         (want != burning && !may_switch) ? " (min cycle wait)" : "");
           id(tstat_status) = msg;
           id(publish_climate).execute();
+
+  # Start the ESP32 thermostat (1 = Thermostat, 2 = Smart).
+  - id: start_tstat
+    mode: single
+    parameters:
+      m: int
+    then:
+      - lambda: |-
+          id(tstat_mode) = m;
+          id(tstat_expect) = -1;
+          id(pending_off) = false;
+          id(tstat_status) = "Starting";
+          id(publish_climate).execute();
+      - script.execute: update_room_temp
+      - script.execute: tstat_eval
 
   # B1: turn off now, or remember to retry if a command is running.
   - id: request_off
@@ -805,7 +821,7 @@ script:
           int mode = s1.mode, flame = s2.flame;
 
           if (p_power == 1) {
-            mode = id(stored_mode);
+            mode = 1;
             b1 = proflame_query::with_mode(b1, mode);
             if (flame == 0) b2 = proflame_query::with_flame(b2, id(stored_flame));
           }
@@ -816,7 +832,7 @@ script:
           if (p_flame >= 0) {
             b2 = proflame_query::with_flame(b2, p_flame);
             // As in the original integration: a nonzero flame while off turns it on.
-            if (p_flame > 0 && (b1 & 0x03) == 0) b1 = proflame_query::with_mode(b1, id(stored_mode) == 2 ? 2 : 1);
+            if (p_flame > 0 && (b1 & 0x03) != 1) b1 = proflame_query::with_mode(b1, 1);
           }
           if (p_fan >= 0) b2 = proflame_query::with_fan(b2, p_fan);
           if (p_light >= 0) b1 = proflame_query::with_light(b1, p_light);
