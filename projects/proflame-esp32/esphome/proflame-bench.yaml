@@ -40,6 +40,7 @@ api:
   reboot_timeout: 0s
   on_client_disconnected:
     - delay: 1s
+    - script.execute: update_room_temp
     - script.execute: tstat_eval
   encryption:
     key: !secret proflame_bench_api_key
@@ -128,7 +129,14 @@ uart:
           if (r.reg == proflame_query::REG_SETPOINT_MIRROR) return;
           if (r.reg == proflame_query::REG_ROOM_TEMP) {
             const float f = proflame_query::room_temp_f(r);
-            if (f > 20.0f && f < 120.0f) id(remote_room_temperature).publish_state((f - 32.0f) * 5.0f / 9.0f);
+            if (f > 20.0f && f < 120.0f) {
+              if (!id(remote_temp_seen) || f != id(remote_temp_f)) id(remote_change_ms) = millis();
+              id(remote_temp_f) = f;
+              id(remote_temp_ms) = millis();
+              id(remote_temp_seen) = true;
+              id(remote_room_temperature).publish_state((f - 32.0f) * 5.0f / 9.0f);
+              id(update_room_temp).execute();
+            }
             return;
           }
           if (r.reg != proflame_query::REG_CONTROL) {
@@ -274,6 +282,12 @@ globals:
   - {id: pending_off, type: bool, restore_value: false, initial_value: 'false'}
   - {id: prev_burning, type: bool, restore_value: false, initial_value: 'false'}
   - {id: burn_seeded, type: bool, restore_value: false, initial_value: 'false'}
+  # Remote's room temperature (register 0x1F), used only as a fallback.
+  - {id: remote_temp_f, type: float, restore_value: false, initial_value: 'NAN'}
+  - {id: remote_temp_ms, type: uint32_t, restore_value: false, initial_value: '0'}
+  - {id: remote_temp_seen, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: effective_temp_f, type: float, restore_value: false, initial_value: 'NAN'}
+  - {id: remote_change_ms, type: uint32_t, restore_value: false, initial_value: '0'}
   # What the thermostat last commanded (-1 none, 0 off, 1 on) and when.
   - {id: tstat_expect, type: int, restore_value: false, initial_value: '-1'}
   - {id: tstat_cmd_ms, type: uint32_t, restore_value: false, initial_value: '0'}
@@ -283,6 +297,11 @@ text_sensor:
     id: fireplace_status
     name: Fireplace Status
     icon: mdi:fireplace
+  - platform: template
+    id: room_temp_source
+    name: Room Temperature Source
+    icon: mdi:thermometer-check
+    entity_category: diagnostic
   - platform: template
     id: tstat_status_sensor
     name: Thermostat Status
@@ -318,8 +337,7 @@ sensor:
     entity_id: sensor.main_floor_temperature
     internal: true
     on_value:
-      - lambda: |-
-          id(room_temperature).publish_state(std::isnan(x) ? NAN : (x - 32.0f) * 5.0f / 9.0f);
+      - script.execute: update_room_temp
   - platform: template
     id: room_temperature
     name: Room Temperature
@@ -589,6 +607,32 @@ script:
       - lambda: 'id(ifc_uart).write_array(proflame_query::GET_ROOM_TEMP, 6);'
       - delay: 200ms
 
+  # Effective room temperature: main floor thermostat (via Home Assistant), or
+  # the remote's last report to the IFC when that is unavailable.
+  - id: update_room_temp
+    mode: queued
+    max_runs: 3
+    then:
+      - lambda: |-
+          const float ha = id(ha_room_temp_f).state;
+          const bool ha_ok = api::global_api_server != nullptr &&
+                             api::global_api_server->is_connected_with_state_subscription() && !std::isnan(ha);
+          // The remote value is only trusted while the IFC link is delivering it.
+          // ...and only if its value has changed within the last 2 hours, so a
+          // stale report can't keep the burner on indefinitely.
+          const uint32_t now = millis();
+          const bool remote_ok = id(remote_temp_seen) && (now - id(remote_temp_ms)) < 60000u &&
+                                 (now - id(remote_change_ms)) < 2u * 3600u * 1000u &&
+                                 !std::isnan(id(remote_temp_f));
+          float f = NAN;
+          const char *src = id(remote_temp_seen) && !remote_ok && !ha_ok ?
+                            "Unavailable (remote reading stale)" : "Unavailable";
+          if (ha_ok) { f = ha; src = "Main floor thermostat"; }
+          else if (remote_ok) { f = id(remote_temp_f); src = "Fireplace remote (fallback)"; }
+          id(effective_temp_f) = f;
+          if (id(room_temp_source).state != src) id(room_temp_source).publish_state(src);
+          id(room_temperature).publish_state(std::isnan(f) ? NAN : (f - 32.0f) * 5.0f / 9.0f);
+
   # ESP32 thermostat decision. Runs every 30 s and on preset/target changes.
   # Heats with Manual mode at the stored flame (Smart: flame scales with how
   # far the room is below target). Turns off immediately if the room
@@ -601,10 +645,10 @@ script:
           if (id(apply_cmd).is_running()) return;
           if (!id(have_state)) { id(tstat_status) = "Waiting for fireplace state"; return; }
           if (id(remote_in_control)) { id(tstat_status) = "Paused: remote in control"; return; }
-          const float room = id(ha_room_temp_f).state;
-          // B4: only a Home Assistant state subscription counts as connected.
-          const bool have_temp = api::global_api_server != nullptr &&
-                                 api::global_api_server->is_connected_with_state_subscription() && !std::isnan(room);
+          // Main floor thermostat, falling back to the remote's reading. Only a
+          // Home Assistant state subscription counts as connected (B4).
+          const float room = id(effective_temp_f);
+          const bool have_temp = !std::isnan(room);
           const float target = id(tstat_target_f);
           const uint32_t now = millis();
           const bool burning = id(cl_burning);  // verified IFC state
@@ -660,9 +704,10 @@ script:
             id(apply_cmd).execute(-1, -1, flame, -1, -1, -1, -1, -1, -1);
           }
           char msg[72];
+          const bool fallback = id(room_temp_source).state == "Fireplace remote (fallback)";
           if (!have_temp) snprintf(msg, sizeof(msg), "Off: room temperature unavailable");
-          else snprintf(msg, sizeof(msg), "%s: room %.1f F, target %.1f F%s",
-                        burning ? "Heating" : "Idle", room, target,
+          else snprintf(msg, sizeof(msg), "%s: room %.1f F%s, target %.1f F%s",
+                        burning ? "Heating" : "Idle", room, fallback ? " (remote)" : "", target,
                         (want != burning && !may_switch) ? " (min cycle wait)" : "");
           id(tstat_status) = msg;
           id(publish_climate).execute();
@@ -869,6 +914,7 @@ script:
 interval:
   - interval: 30s
     then:
+      - script.execute: update_room_temp
       - script.execute: tstat_eval
   - interval: 5s
     then:
