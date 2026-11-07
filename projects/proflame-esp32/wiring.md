@@ -55,7 +55,23 @@ markings are consistent with ACPL-074L optocouplers, but that alone neither prov
 nor disproves a need for isolation at X0A. Do not energize uncertain wiring based
 on color alone; resolve electrical/board differences before connection.
 
-## Firmware behavior
+## Current firmware: RX-only, no query
+
+GPIO4 and GPIO5 each feed an independent RX-only UART at 9600–8-N-1. There is
+no TX pin, query button, script or UART write operation. Per-channel counts,
+latest batch (up to 32 candidate bytes) and batch age publish every two seconds.
+No per-byte logs; Wi-Fi credentials remain protected by logger NONE. Input pulls
+are disabled in YAML. This is not a guarantee of electrical isolation or GPIO
+behavior throughout reset/boot/sleep. Byte count is not a validated-frame count.
+Do not connect the unknown X0A electrical interface directly.
+
+The last-hex field is the latest completed batch, not a rolling capture. Age
+refers to callback timing. Floating inputs or low/framing conditions can produce
+spurious candidate bytes. Unknown age means no received batch yet. With the OEM
+removed and no transmitter present, absence of IFC replies is expected from the
+older protocol description and does not identify a failed interface.
+
+## Historical firmware behavior (no longer deployed)
 
 `proflame-bench.yaml` configures **RX GPIO4, TX GPIO5, 9600 baud, 8-N-1**.
 It retains runtime-provisioned Wi-Fi and encrypted API diagnostics.
@@ -79,7 +95,7 @@ transaction ID to distinguish a delayed reply arriving during a later query.
 electrical safety or confirmed flame state. No IFC-connected query has been tested
 as part of this implementation.
 
-## Build and test
+## Historical query build and test
 
 Copy **both** `esphome/proflame-bench.yaml` and `esphome/ifc_query.h` into the same
 ESPHome configuration directory. Do not include the unsafe upstream component.

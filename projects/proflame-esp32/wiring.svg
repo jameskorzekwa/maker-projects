@@ -15,7 +15,7 @@
     <text x="70" y="410" font-size="21" font-weight="bold">Keep all four X0A wires disconnected from the C5.</text>
     <text x="45" y="475" font-size="20">Use the OEM dongle. Keep the C5 separately USB-powered and disconnected.</text>
     <text x="45" y="515" font-size="20">A buck converter only addresses power—not signal levels or isolation.</text>
-    <text x="45" y="555" font-size="20">Do not press Check IFC Link on an unverified electrical connection.</text>
+    <text x="45" y="555" font-size="20">RX-only firmware cannot validate voltage safety. Previous query button removed.</text>
     <text x="45" y="600" font-size="18">Updated 2026-11-06. See electrical-findings.md for source evidence and remaining limits.</text>
   </g>
 </svg>

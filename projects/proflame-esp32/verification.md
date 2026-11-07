@@ -8,6 +8,25 @@
 
 2026-11-06 preparation, executed on bee2 unless stated otherwise.
 
+## Latest: RX-only diagnostics
+
+- Two UART RX inputs, GPIO4/GPIO5 at 9600–8-N-1, no TX pin/write/query/button.
+- Two static guard tests (`tests/test_rx_only.py`) pass; independent YAML and
+  generated-code review found no blockers. Final build adds UART initialization
+  failure-status reporting. Schema validation/full ESPHome 2026.10.2 compile pass.
+- ESP-IDF 5.5.6 image 858,940 bytes, HP SRAM 130,814 / 320,928. App-only USB
+  flash wrote 859,296 padded bytes at 0x10000; hash verified, NVS untouched.
+- YAML/source hash: `cb4e29a96b978f82173141615df86086a1fee66d4fe7b58fe8ea61ac95ed13ca`.
+- Encrypted API works; zero key rejected; HA entry loaded and RX UARTs Ready on.
+- First readback: GPIO4 count 0, age unknown, No bytes received. GPIO5 count
+  1629 with an all-zero latest batch and age ~0.025 s. This is **not** evidence of
+  valid IFC communication, correct framing or safe electrical levels. Physical
+  hookup during observation was not independently established.
+- Counts and batch ages are diagnostic approximations, not lossless captures.
+  No controlled test-signal injection or electrical validation was performed.
+
+## Earlier revisions (historical)
+
 | Check | Result |
 | --- | --- |
 | Owner hardware choice | NiceMCU ESP32-C5 reported; exact model not established; do not assume NiceMCU 2.8IPS; board not physically inspected |

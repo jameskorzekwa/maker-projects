@@ -1,17 +1,26 @@
 # Proflame ESP32 dongle replacement
 
-> **WIRING CORRECTION — direct hookup withdrawn.** James measured **+6.26 V DC
-> from white to yellow with the OEM dongle connected** (red probe white, black
-> yellow). The earlier 3.3 V power label does not apply to this unit. Do not
-> connect any X0A wire to the C5 until the electrical interface is established.
-> The installed manual UART query firmware is not electrical validation; do not
-> press Check IFC Link with the unverified interface connected. See
-> [electrical findings](electrical-findings.md). No live firmware was changed by
-> this documentation correction.
+> **CURRENT STATUS (2026-11-07) — communication with the fireplace works.**
+> James re-measured white-to-yellow at **3.3 V**; the earlier 6.26 V reading was
+> a measurement error and is retracted. Wiring as documented upstream: green
+> (IFC TX) → GPIO4, brown (IFC RX) → GPIO5, yellow → GND, white unconnected,
+> C5 USB-powered. The deployed firmware polls registers 0x16/0x17/0x18 every
+> 5 s with **GET requests only** (no SET, no control acquisition, no actuators)
+> and the IFC returns valid checksummed replies. Encrypted Wi-Fi logs and
+> password-authenticated OTA are enabled and verified with a real OTA upload.
+> Sections below that describe the direct hookup as withdrawn, the 6.26 V
+> reading, or RX-only firmware are **superseded history**.
 
-Status: **UART commissioning firmware deployed (Wi-Fi + encrypted API + manual
-read-only query). No fireplace control. Appliance electrical compatibility and
-physical NiceMCU header locations remain unverified.**
+Live readback, first polling session:
+
+| Register | Raw reply | Decoded |
+| --- | --- | --- |
+| 0x16 control | `AE C1 A0 00 16 D9` | UART control reported |
+| 0x17 state 1 | `AE 00 04 00 17 BD` | mode nibble **4** (outside documented 0–3), night light 0, pilot off |
+| 0x18 state 2 | `AE 00 5C 00 18 EA` | flame 4, comfort fan 5, AUX on, split flow off |
+
+Decoding follows the published register layout; mode value 4 and the actual
+fireplace state at the time still need physical confirmation.
 Created 2026-11-06 for James's home Home Assistant server (not the Casita).
 This directory is the maintained project record. The network-bench configuration
 is installed in the home server's `/config/esphome/`, and the firmware is running
@@ -49,10 +58,18 @@ Colors refer to the photographed harness, not a standard. Keep the C5 USB-powere
 and disconnected from X0A. Isolate mains and battery backup before disconnecting
 any existing experimental wiring. Retain the OEM dongle.
 
-The **Check IFC Link** HA button sends one GET-status request, with no SET or
-ownership acquisition. There is no automatic boot/reconnect traffic or retry.
-**Last IFC Query Result** is historical query feedback, not current burner state.
-The agent has **not pressed this button** or performed an IFC-connected test.
+The former **Check IFC Link** button and query firmware were removed from the
+current device. Both GPIO4 and GPIO5 are now receive-only at 9600–8-N-1, with
+per-channel byte count, age since latest batch and latest candidate hex batch
+(up to 32 bytes), publishing every two seconds. **RX UARTs Ready** indicates no
+reported UART initialization failure, not verified signal reception. There is no
+configured TX pin or UART write path. Input pulls are disabled in configuration.
+
+Initial post-flash observation: GPIO4 count zero; GPIO5 received repeated `00`
+bytes. These are **not validated IFC frames**. Noise, a low/floating input,
+framing errors or electrical mismatch may produce candidate bytes. Silence with
+the OEM removed and no query transmitter may be normal. This does not approve
+direct wiring, prove safe voltages or establish current physical hookup.
 
 ## Firmware files and rollback
 
@@ -60,7 +77,7 @@ Two ESPHome configs exist in this project:
 
 | File | Purpose | Network | API | OTA |
 | --- | --- | --- | --- | --- |
-| [proflame-bench.yaml](esphome/proflame-bench.yaml) + [ifc_query.h](esphome/ifc_query.h) | **Current UART commissioning image** — network diagnostics and manual read-only IFC query. Deployed. | WiFi (Improv over USB) | Encrypted (`api.encryption: {}` — zero-key bootstrap, unique key must be provisioned) | No |
+| [proflame-bench.yaml](esphome/proflame-bench.yaml) | **Current RX-only image** — network diagnostics and two input-only UART receivers. Deployed; old query header no longer included. | WiFi (Improv over USB) | Encrypted (`api.encryption: {}` — zero-key bootstrap, unique key must be provisioned) | No |
 | [proflame-usb-only.yaml](esphome/proflame-usb-only.yaml) | **Historical USB-only rollback** — no WiFi, no API, no UART. Diagnostic log only. | None | None | None |
 
 The USB-only file is a safe rollback: it removes all network connectivity and
@@ -77,8 +94,8 @@ before enabling Wi-Fi, so the bootstrap API is not left exposed.
 The firmware uses a generic `esp32c5` target, not a verified NiceMCU board
 definition. `flash_size: 4MB` now matches the **4 MB detected by esptool**.
 The board was confirmed as C5rev1.0 with 4 MB flash and native USB
-connection; exact NiceMCU PCB header layout remains unverified. UART GPIO4/5
-are now assigned in firmware. Keep the YAML and `ifc_query.h` in the same directory.
+connection; exact NiceMCU PCB header layout remains unverified. GPIO4/5 are now
+both configured as RX. The old `ifc_query.h` is retained only as historical code.
 
 1. Leave the fireplace, OEM dongle and remote exactly as they are. Disconnect
    **every external GPIO lead** from the C5; only its USB cable is connected.
@@ -115,8 +132,9 @@ are now assigned in firmware. Keep the YAML and `ifc_query.h` in the same direct
    or some factory-flash operations can restore bootstrap mode.
 - **Logger level NONE:** Improv debug logs can include Wi-Fi passwords; native
   USB serial logging is suppressed. Native USB baud rate remains 115200.
-- **No OTA, web server, AP, or IFC actuator controls.** Network diagnostics plus
-  manual IFC GET query only; details and parser limitations are in [wiring.md](wiring.md).
+- **No OTA, web server, AP, transmitter or actuator controls.** Candidate bytes
+  are not voltage measurements or validated messages. An oscilloscope/appropriate
+  electrical interface is still required to establish electrical compatibility.
 - **Full factory flash may erase provisioned preferences** (Wi-Fi, API key).
    Repeat Wi-Fi provisioning via physical USB Improv and API-key provisioning
    over the trusted network. USB provisions Wi-Fi, not the API key.
@@ -160,7 +178,7 @@ IFC and its manual before fabricating or plugging in a harness.
 | Candidate connection, NOT installation authorization | Purpose |
 | --- | --- |
 | C5 USB (GPIO13 D− / GPIO14 D+) | Native USB; C5rev1.0 confirmed, exact PCB routing unverified |
-| C5 UART RX GPIO4 / TX GPIO5 | Firmware allocation only; direct X0A hookup withdrawn |
+| C5 UART RX GPIO4 / RX GPIO5 | Both receive-only; direct X0A hookup withdrawn |
 | C5 GND / IFC return | No connection until grounding/isolation established |
 | IFC white supply | +6.26 V measured to yellow under OEM load; leave disconnected |
 | Board USB power | Separate regulated USB power; no 5 V lead to IFC |

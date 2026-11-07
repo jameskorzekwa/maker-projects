@@ -1,6 +1,9 @@
-# UART COMMISSIONING IMAGE. Disconnect every GPIO lead before USB flashing.
-# Manual read-only ownership query only; no control acquisition or actuators.
-# Provision Wi-Fi over USB Improv, then a unique API key over native API.
+# Proflame X0A compatibility test firmware for the NiceMCU ESP32-C5.
+# GPIO4 = RX (IFC TX, green), GPIO5 = TX (IFC RX, brown), GND = yellow.
+# White (IFC supply, owner-corrected reading 3.3 V) stays disconnected; USB power.
+# READ-ONLY POLLING: every 5 s sends GET requests for registers 0x16, 0x17
+# and 0x18 only. No SET frames, control acquisition, retries or actuators.
+# Credentials come from Device Builder secrets.yaml; none are stored here.
 esphome:
   name: proflame-bench
   friendly_name: Proflame USB Bench
@@ -9,29 +12,135 @@ esphome:
     - ifc_query.h
 
 esp32:
-  # Generic chip target; exact NiceMCU PCB/USB routing still unverified.
   variant: esp32c5
-  # Build allocation only: verify actual flash >= 4 MB before flashing.
   flash_size: 4MB
   framework:
     type: esp-idf
 
+# Same pattern as the other ESPHome devices: Wi-Fi from secrets.yaml.
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  reboot_timeout: 0s
+
+# Keys live only in the Device Builder secrets.yaml, so Device Builder can
+# authenticate Wi-Fi logs and OTA. The API key matches the one already
+# provisioned on the device and in Home Assistant.
+api:
+  reboot_timeout: 0s
+  encryption:
+    key: !secret proflame_bench_api_key
+
+ota:
+  - platform: esphome
+    password: !secret proflame_bench_ota_password
+
 logger:
   hardware_uart: USB_SERIAL_JTAG
   baud_rate: 115200
-  # Improv debug logs can include passwords; suppress all serial logging.
-  level: NONE
+  level: DEBUG
+  logs:
+    # Keep component chatter down; UART traffic is logged by the debugger below.
+    sensor: INFO
+    text_sensor: INFO
+    api: INFO
+    api.connection: INFO
+    wifi: INFO
 
-wifi:
-  reboot_timeout: 0s
+uart:
+  id: ifc_uart
+  rx_pin:
+    number: GPIO4
+    mode:
+      input: true
+      pullup: false
+      pulldown: false
+  tx_pin: GPIO5
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+  debug:
+    # Logs every byte sent and received as hex for diagnosis.
+    direction: BOTH
+    dummy_receiver: true
+    after:
+      bytes: 6
+      timeout: 20ms
+    sequence:
+      - lambda: |-
+          UARTDebug::log_hex(direction, bytes, ' ');
+          if (direction != uart::UART_DIRECTION_RX) return;
+          id(rx_count) += bytes.size();
+          proflame_query::Reply r{};
+          if (!proflame_query::parse_get_reply(bytes.data(), bytes.size(), r)) {
+            id(bad_frames) += 1;
+            ESP_LOGW("proflame", "Ignored %u byte(s): not a valid GET reply",
+                     static_cast<unsigned>(bytes.size()));
+            return;
+          }
+          id(last_reply_ms) = millis();
+          id(link_seen) = true;
+          char raw[12];
+          snprintf(raw, sizeof(raw), "%02X %02X %02X", r.payload[0], r.payload[1], r.payload[2]);
+          if (r.reg == proflame_query::REG_CONTROL) {
+            const auto c = proflame_query::control_state(r);
+            id(ifc_control).publish_state(
+                c == proflame_query::Result::UART_CONTROL ? "UART (ESP32/Wi-Fi side)" :
+                c == proflame_query::Result::EXTERNAL_CONTROL ? "External (remote)" :
+                std::string("Unknown value ") + raw);
+          } else if (r.reg == proflame_query::REG_STATE1) {
+            const auto s1 = proflame_query::decode_state1(r);
+            id(state1_raw).publish_state(raw);
+            id(fireplace_mode).publish_state(proflame_query::mode_name(s1.mode));
+            id(night_light_level).publish_state(s1.light);
+            id(continuous_pilot).publish_state(s1.continuous_pilot);
+          } else {
+            const auto s2 = proflame_query::decode_state2(r);
+            id(state2_raw).publish_state(raw);
+            id(flame_level).publish_state(s2.flame);
+            id(comfort_fan_speed).publish_state(s2.fan);
+            id(aux_output).publish_state(s2.aux);
+            id(split_flow).publish_state(s2.split_flow);
+          }
 
-improv_serial:
+globals:
+  - id: rx_count
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: bad_frames
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: last_reply_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: link_seen
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: stale_published
+    type: bool
+    restore_value: false
+    initial_value: 'false'
 
-api:
-  reboot_timeout: 0s
-  # No key embedded in the firmware. Immediately provision a unique key.
-  # Before provisioning, the API accepts the public zero-key bootstrap mode.
-  encryption: {}
+text_sensor:
+  - platform: template
+    id: ifc_control
+    name: IFC Control
+  - platform: template
+    id: fireplace_mode
+    name: Fireplace Mode
+  - platform: template
+    id: state1_raw
+    name: IFC State 1 Raw
+    entity_category: diagnostic
+  - platform: template
+    id: state2_raw
+    name: IFC State 2 Raw
+    entity_category: diagnostic
 
 sensor:
   - platform: uptime
@@ -42,74 +151,79 @@ sensor:
     name: Wi-Fi Signal
     update_interval: 30s
     entity_category: diagnostic
+  - platform: template
+    id: flame_level
+    name: Flame Level
+    accuracy_decimals: 0
+    icon: mdi:fire
+  - platform: template
+    id: night_light_level
+    name: Night Light Level
+    accuracy_decimals: 0
+    icon: mdi:lightbulb
+  - platform: template
+    id: comfort_fan_speed
+    name: Comfort Fan Speed
+    accuracy_decimals: 0
+    icon: mdi:fan
+  - platform: template
+    name: IFC RX Byte Count
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: return id(rx_count);
+  - platform: template
+    name: IFC Invalid Frames
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: return id(bad_frames);
 
 binary_sensor:
   - platform: status
     name: Status
     entity_category: diagnostic
-
-# Pins are GPIO numbers, not header positions or D4/D5 aliases.
-# Fireplace X0A: green (IFC TX) -> GPIO4, brown (IFC RX) -> GPIO5,
-# yellow -> GND. White supply lead stays disconnected and insulated.
-uart:
-  id: ifc_uart
-  rx_pin: GPIO4
-  tx_pin: GPIO5
-  baud_rate: 9600
-  data_bits: 8
-  parity: NONE
-  stop_bits: 1
-  debug:
-    direction: RX
-    dummy_receiver: true
-    after:
-      bytes: 6
-      timeout: 20ms
-    sequence:
-      - lambda: |-
-          if (!id(ifc_query_pending)) return;
-          const auto result = proflame_query::classify(bytes.data(), bytes.size());
-          if (result == proflame_query::Result::INVALID) return;
-          id(ifc_query_pending) = false;
-          if (result == proflame_query::Result::UART_CONTROL) {
-            id(ifc_query_result).publish_state("Reply: UART control reported");
-          } else if (result == proflame_query::Result::EXTERNAL_CONTROL) {
-            id(ifc_query_result).publish_state("Reply: external/no UART control reported");
-          } else {
-            id(ifc_query_result).publish_state("Reply: unrecognized ownership value");
-          }
-
-globals:
-  - id: ifc_query_pending
-    type: bool
-    restore_value: false
-    initial_value: 'false'
-
-text_sensor:
   - platform: template
-    id: ifc_query_result
-    name: Last IFC Query Result
+    name: IFC Link
+    device_class: connectivity
     entity_category: diagnostic
+    lambda: return id(link_seen) && (millis() - id(last_reply_ms)) < 15000;
+  - platform: template
+    id: continuous_pilot
+    name: Continuous Pilot
+  - platform: template
+    id: aux_output
+    name: AUX Output
+  - platform: template
+    id: split_flow
+    name: Split Flow
 
 script:
-  - id: query_ifc
+  - id: poll_ifc
     mode: single
     then:
       - lambda: |-
-          id(ifc_query_result).publish_state("Waiting for reply");
-          id(ifc_query_pending) = true;
-          id(ifc_uart).write_array(proflame_query::GET_CONTROL,
-                                   sizeof(proflame_query::GET_CONTROL));
-      - delay: 1s
+          id(ifc_uart).write_array(proflame_query::GET_CONTROL, sizeof(proflame_query::GET_CONTROL));
+      - delay: 250ms
       - lambda: |-
-          if (id(ifc_query_pending)) {
-            id(ifc_query_pending) = false;
-            id(ifc_query_result).publish_state("No valid reply within 1 second");
-          }
+          id(ifc_uart).write_array(proflame_query::GET_STATE1, sizeof(proflame_query::GET_STATE1));
+      - delay: 250ms
+      - lambda: |-
+          id(ifc_uart).write_array(proflame_query::GET_STATE2, sizeof(proflame_query::GET_STATE2));
 
-button:
-  - platform: template
-    name: Check IFC Link
-    entity_category: diagnostic
-    on_press:
-      - script.execute: query_ifc
+interval:
+  - interval: 5s
+    then:
+      - script.execute: poll_ifc
+      - lambda: |-
+          // No valid reply for 15 s: report readings as unknown instead of stale.
+          const bool fresh = id(link_seen) && (millis() - id(last_reply_ms)) < 15000;
+          if (fresh) { id(stale_published) = false; return; }
+          if (!id(link_seen) || id(stale_published)) return;
+          id(stale_published) = true;
+          ESP_LOGW("proflame", "No valid IFC reply for 15 s; marking state unknown");
+          id(flame_level).publish_state(NAN);
+          id(night_light_level).publish_state(NAN);
+          id(comfort_fan_speed).publish_state(NAN);
+          id(fireplace_mode).publish_state("Unknown (no IFC reply)");
+          id(ifc_control).publish_state("Unknown (no IFC reply)");
