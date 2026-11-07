@@ -33,7 +33,7 @@ int main() {
   assert(parse_get_reply(s1, 6, r) && r.reg == REG_STATE1);
   State1 a = decode_state1(r);
   assert(a.mode == 1 && a.light == 6 && !a.continuous_pilot);
-  assert(std::strcmp(mode_name(a.mode), "On") == 0);
+  assert(std::strcmp(mode_name(a.mode), "Manual") == 0);
 
   // Live: AE 00 04 00 17 BD read while the fireplace was physically OFF.
   const uint8_t live_off[] = {0xAE, 0x00, 0x04, 0x00, 0x17, 0xBD};
@@ -93,5 +93,45 @@ int main() {
   std::memcpy(bad, granted, 6);
   bad[5] ^= 1;
   assert(classify_control_set_reply(bad, 6) == Result::INVALID);
+
+  // ---- Encoding ----
+  // Documented SET examples: 5D 00 01 00 17 4B (mode ON) and 5D 00 80 00 18 C5.
+  uint8_t f[6];
+  assert(build_set(REG_STATE1, with_mode(0x00, 1), f));
+  const uint8_t doc1[] = {0x5D, 0x00, 0x01, 0x00, 0x17, 0x4B};
+  assert(std::memcmp(f, doc1, 6) == 0);
+  assert(build_set(REG_STATE2, with_split(0x00, true), f));
+  const uint8_t doc2[] = {0x5D, 0x00, 0x80, 0x00, 0x18, 0xC5};
+  assert(std::memcmp(f, doc2, 6) == 0);
+  // Each setter changes only its own field, for every possible input byte.
+  for (int b = 0; b < 256; ++b) {
+    const uint8_t v = static_cast<uint8_t>(b);
+    for (int x = 0; x <= 6; ++x) {
+      assert((with_light(v, x) & ~0x70) == (v & ~0x70) && ((with_light(v, x) >> 4) & 7) == x);
+      assert((with_flame(v, x) & ~0x07) == (v & ~0x07) && (with_flame(v, x) & 7) == x);
+      assert((with_fan(v, x) & ~0x70) == (v & ~0x70) && ((with_fan(v, x) >> 4) & 7) == x);
+    }
+    for (int m = 0; m < 4; ++m)
+      assert((with_mode(v, m) & ~0x03) == (v & ~0x03) && (with_mode(v, m) & 3) == m);
+    for (bool on : {false, true}) {
+      assert((with_pilot(v, on) & 0x7F) == (v & 0x7F) && bool(with_pilot(v, on) & 0x80) == on);
+      assert((with_split(v, on) & 0x7F) == (v & 0x7F) && bool(with_split(v, on) & 0x80) == on);
+      assert((with_aux(v, on) & ~0x08) == (v & ~0x08) && bool(with_aux(v, on) & 0x08) == on);
+    }
+  }
+  // Observed off byte 0x04 keeps undocumented bit 2 when turned on.
+  assert(with_mode(0x04, 1) == 0x05);
+  // A level reported as 7 is untouched by an unrelated change (AUX toggle).
+  assert((with_aux(0x07, true) & 0x07) == 7);
+  // Levels clamp to 0-6.
+  assert(with_flame(0, 9) == 6 && with_fan(0, -3) == 0 && with_light(0, 7) == 0x60);
+  // build_set refuses ownership and unknown registers; checksums valid.
+  assert(!build_set(0x16, 0, f) && !build_set(0x19, 0, f));
+  assert(build_set(REG_STATE2, 0x5C, f) && xor5(f) == f[5]);
+  // SET echoes recognised only for state registers with valid checksum.
+  assert(is_state_set_echo(set_echo, 6));          // documented AD 00 01 00 17 BB
+  assert(!is_state_set_echo(doc1, 6));             // a request is not an echo
+  assert(!is_state_set_echo(granted, 6));          // ownership echo is separate
+  assert(!parse_get_reply(doc1, 6, r));  // echo is never treated as state
   return 0;
 }

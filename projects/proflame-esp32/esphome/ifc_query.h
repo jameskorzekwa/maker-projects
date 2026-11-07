@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
-// Read-only Proflame 2 IFC helpers. Only GET requests (0x5E) are defined here;
-// there are deliberately no SET (0x5D) frames in this file.
+// Proflame 2 IFC protocol helpers: GET requests, reply parsing, the ownership
+// request, and SET frame building for state registers 0x17/0x18 only.
 namespace proflame_query {
 
 inline constexpr uint8_t GET_CONTROL[] = {0x5E, 0, 0, 0, 0x16, 0x48};
@@ -94,10 +94,43 @@ inline State2 decode_state2(const Reply &r) {
                 static_cast<uint8_t>((b >> 4) & 0x07), static_cast<bool>(b & 0x80)};
 }
 
+// ---- Command encoding (SET 0x5D on registers 0x17 / 0x18 only) ----
+// Field setters change ONE field of the current raw register byte and keep
+// every other bit (including undocumented bits and out-of-range values).
+inline uint8_t clamp6(int v) { return v < 0 ? 0 : (v > 6 ? 6 : static_cast<uint8_t>(v)); }
+inline uint8_t with_mode(uint8_t b, int mode) { return static_cast<uint8_t>((b & ~0x03) | (mode & 0x03)); }
+inline uint8_t with_light(uint8_t b, int v) { return static_cast<uint8_t>((b & ~0x70) | (clamp6(v) << 4)); }
+inline uint8_t with_pilot(uint8_t b, bool on) { return static_cast<uint8_t>(on ? (b | 0x80) : (b & 0x7F)); }
+inline uint8_t with_flame(uint8_t b, int v) { return static_cast<uint8_t>((b & ~0x07) | clamp6(v)); }
+inline uint8_t with_aux(uint8_t b, bool on) { return static_cast<uint8_t>(on ? (b | 0x08) : (b & ~0x08)); }
+inline uint8_t with_fan(uint8_t b, int v) { return static_cast<uint8_t>((b & ~0x70) | (clamp6(v) << 4)); }
+inline uint8_t with_split(uint8_t b, bool on) { return static_cast<uint8_t>(on ? (b | 0x80) : (b & 0x7F)); }
+
+// Builds a SET frame for register 0x17 or 0x18. Returns false for any other
+// register so ownership (0x16) and unknown registers can never be written here.
+inline bool build_set(uint8_t reg, uint8_t value, uint8_t out[6]) {
+  if (reg != REG_STATE1 && reg != REG_STATE2) return false;
+  out[0] = 0x5D;
+  out[1] = 0x00;
+  out[2] = value;
+  out[3] = 0x00;
+  out[4] = reg;
+  out[5] = out[0] ^ out[1] ^ out[2] ^ out[3] ^ out[4];
+  return true;
+}
+// SET echo for state registers (AD 00 vv 00 reg cs); used only for logging.
+inline bool is_state_set_echo(const uint8_t *data, size_t size) {
+  if (data == nullptr || size != 6 || data[0] != 0xAD) return false;
+  if (data[4] != REG_STATE1 && data[4] != REG_STATE2) return false;
+  uint8_t checksum = 0;
+  for (size_t i = 0; i < 5; ++i) checksum ^= data[i];
+  return checksum == data[5];
+}
+
 inline const char *mode_name(uint8_t mode) {
   switch (mode) {
     case 0: return "Off";
-    case 1: return "On";
+    case 1: return "Manual";
     case 2: return "Thermostat";
     case 3: return "Smart";
     default: return "Unknown";

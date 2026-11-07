@@ -1,12 +1,21 @@
-# Proflame X0A compatibility test firmware for the NiceMCU ESP32-C5.
+# Proflame X0A replacement firmware for the NiceMCU ESP32-C5.
 # GPIO4 = RX (IFC TX, green), GPIO5 = TX (IFC RX, brown), GND = yellow.
 # White (IFC supply, owner-corrected reading 3.3 V) stays disconnected; USB power.
-# Flame/fan/light values are the IFC's stored SETTINGS: they stay nonzero
-# while the fireplace is off. Burner activity requires Mode != Off.
-# READ-ONLY POLLING: every 5 s sends GET requests for registers 0x16, 0x17
-# and 0x18 only. The single exception is the manual 'Request Control' button,
-# which sends ONE SET 0x16 ownership request per press (no burner/flame/fan
-# commands, no retries, nothing at boot). No actuators exist.
+#
+# Feature parity with the proflame_connect_wifi integration where the UART
+# protocol supports it: power, mode (Off/Manual/Thermostat/Smart), flame,
+# fan, light, pilot; plus AUX and split flow. Room temperature and thermostat
+# setpoint have no documented UART register and are NOT implemented.
+#
+# Safety rules enforced below:
+# - Nothing is ever written at boot or reconnect. Periodic traffic is GET only.
+# - A command runs only from an explicit Home Assistant action, is sent once,
+#   and is never queued or replayed. A second command while one runs is refused.
+# - Before writing, the firmware requests control once if needed, verifies it
+#   was actually granted (the IFC echoes even when refusing), re-reads both
+#   state registers and rejects the command unless that read is fresh.
+# - Writes are read-modify-write from the fresh read; undocumented bits are kept.
+# - Each command is confirmed by reading the registers back afterwards.
 # Credentials come from Device Builder secrets.yaml; none are stored here.
 esphome:
   name: proflame-bench
@@ -21,15 +30,11 @@ esp32:
   framework:
     type: esp-idf
 
-# Same pattern as the other ESPHome devices: Wi-Fi from secrets.yaml.
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   reboot_timeout: 0s
 
-# Keys live only in the Device Builder secrets.yaml, so Device Builder can
-# authenticate Wi-Fi logs and OTA. The API key matches the one already
-# provisioned on the device and in Home Assistant.
 api:
   reboot_timeout: 0s
   encryption:
@@ -44,9 +49,11 @@ logger:
   baud_rate: 115200
   level: DEBUG
   logs:
-    # Keep component chatter down; UART traffic is logged by the debugger below.
     sensor: INFO
     text_sensor: INFO
+    number: INFO
+    select: INFO
+    switch: INFO
     api: INFO
     api.connection: INFO
     wifi: INFO
@@ -65,7 +72,6 @@ uart:
   parity: NONE
   stop_bits: 1
   debug:
-    # Logs every byte sent and received as hex for diagnosis.
     direction: BOTH
     dummy_receiver: true
     after:
@@ -76,13 +82,12 @@ uart:
           UARTDebug::log_hex(direction, bytes, ' ');
           if (direction != uart::UART_DIRECTION_RX) return;
           id(rx_count) += bytes.size();
+          // Ownership request reply. This IFC echoes even when refusing, so the
+          // outcome is decided by the next GET 0x16 control check.
           const auto set_reply = proflame_query::classify_control_set_reply(bytes.data(), bytes.size());
           if (set_reply != proflame_query::Result::INVALID) {
             id(last_reply_ms) = millis();
             id(link_seen) = true;
-            // This IFC echoes AD C1 A0 00 16 DA even when it keeps the remote in
-            // control (observed 2026-11-07), so the echo is NOT a grant. The
-            // outcome is decided by the next GET 0x16 control check.
             if (set_reply == proflame_query::Result::EXTERNAL_CONTROL) {
               id(control_verify_pending) = false;
               id(control_request_result).publish_state("Denied (remote in use)");
@@ -90,13 +95,17 @@ uart:
               id(control_verify_pending) = true;
               id(control_request_result).publish_state("Reply received; checking control");
             }
-            ESP_LOGI("proflame", "Control request reply received; verifying with next control check");
+            return;
+          }
+          if (proflame_query::is_state_set_echo(bytes.data(), bytes.size())) {
+            id(last_reply_ms) = millis();
+            ESP_LOGD("proflame", "State SET echo received (confirmation comes from read-back)");
             return;
           }
           proflame_query::Reply r{};
           if (!proflame_query::parse_get_reply(bytes.data(), bytes.size(), r)) {
             id(bad_frames) += 1;
-            ESP_LOGW("proflame", "Ignored %u byte(s): not a valid GET reply",
+            ESP_LOGW("proflame", "Ignored %u byte(s): not a valid reply",
                      static_cast<unsigned>(bytes.size()));
             return;
           }
@@ -104,88 +113,124 @@ uart:
           id(link_seen) = true;
           char raw[12];
           snprintf(raw, sizeof(raw), "%02X %02X %02X", r.payload[0], r.payload[1], r.payload[2]);
-          if (r.reg == proflame_query::REG_CONTROL) {
-            const auto c = proflame_query::control_state(r);
-            // The IFC returns all-zero state while the RF remote is in control
-            // (observed: fireplace burning, registers 00 00 00). Do not report it.
-            id(remote_in_control) = (c != proflame_query::Result::UART_CONTROL);
-            if (id(control_verify_pending)) {
-              id(control_verify_pending) = false;
-              const char *outcome = c == proflame_query::Result::UART_CONTROL ? "Granted (verified)" :
-                                    "Not granted (remote still in control)";
-              id(control_request_result).publish_state(outcome);
-              ESP_LOGI("proflame", "Control request outcome: %s", outcome);
+
+          if (r.reg != proflame_query::REG_CONTROL) {
+            // State bytes are held as PENDING. They are only accepted when the
+            // control checks immediately before AND after them both say UART;
+            // this rejects the all-zero replies the IFC gives the remote.
+            if (r.reg == proflame_query::REG_STATE1) {
+              id(state1_raw).publish_state(raw);
+              id(pend_s1) = r.payload[1];
+              id(pend_s1_ok) = id(last_ctl_uart);
+            } else {
+              id(state2_raw).publish_state(raw);
+              id(pend_s2) = r.payload[1];
+              id(pend_s2_ok) = id(last_ctl_uart);
             }
-            id(ifc_control).publish_state(
-                c == proflame_query::Result::UART_CONTROL ? "UART (ESP32/Wi-Fi side)" :
-                c == proflame_query::Result::EXTERNAL_CONTROL ? "External (remote)" :
-                std::string("Unknown value ") + raw);
-          } else if (id(remote_in_control)) {
-            if (r.reg == proflame_query::REG_STATE1) id(state1_raw).publish_state(raw);
-            else id(state2_raw).publish_state(raw);
-            if (id(fireplace_mode).state != "Unknown (remote in control)") {
-              id(fireplace_mode).publish_state("Unknown (remote in control)");
-              id(flame_level).publish_state(NAN);
-              id(night_light_level).publish_state(NAN);
-              id(comfort_fan_speed).publish_state(NAN);
-            }
-          } else if (r.reg == proflame_query::REG_STATE1) {
-            const auto s1 = proflame_query::decode_state1(r);
-            id(state1_raw).publish_state(raw);
-            id(fireplace_mode).publish_state(proflame_query::mode_name(s1.mode));
-            id(night_light_level).publish_state(s1.light);
-            id(continuous_pilot).publish_state(s1.continuous_pilot);
-            if (s1.flags != 0)
-              ESP_LOGD("proflame", "State 1 undocumented flag bits 2-3 = %u", s1.flags);
-          } else {
-            const auto s2 = proflame_query::decode_state2(r);
-            id(state2_raw).publish_state(raw);
-            id(flame_level).publish_state(s2.flame);
-            id(comfort_fan_speed).publish_state(s2.fan);
-            id(aux_output).publish_state(s2.aux);
-            id(split_flow).publish_state(s2.split_flow);
+            return;
           }
 
+          const auto c = proflame_query::control_state(r);
+          const bool uart = c == proflame_query::Result::UART_CONTROL;
+          id(ctl_seen) = true;
+          id(remote_in_control) = !uart;
+          id(ifc_control).publish_state(
+              uart ? "UART (ESP32/Wi-Fi side)" :
+              c == proflame_query::Result::EXTERNAL_CONTROL ? "External (remote)" :
+              std::string("Unknown value ") + raw);
+          if (id(control_verify_pending)) {
+            id(control_verify_pending) = false;
+            id(control_request_result).publish_state(
+                uart ? "Granted (verified)" : "Not granted (remote still in control)");
+          }
+          const bool commit = uart && id(last_ctl_uart) && id(pend_s1_ok) && id(pend_s2_ok);
+          id(last_ctl_uart) = uart;
+          id(pend_s1_ok) = false;
+          id(pend_s2_ok) = false;
+
+          if (!uart) {
+            id(have_state) = false;
+            if (!id(remote_published)) {
+              id(remote_published) = true;
+              id(fireplace_status).publish_state("Unknown (remote in control)");
+              id(flame_height).publish_state(NAN);
+              id(fan_speed).publish_state(NAN);
+              id(light_brightness).publish_state(NAN);
+            }
+            return;
+          }
+          id(remote_published) = false;
+          if (!commit) return;
+
+          // Commit a consistent pair of state bytes.
+          id(s1_byte) = id(pend_s1);
+          id(s2_byte) = id(pend_s2);
+          id(have_state) = true;
+          id(state_seen) = true;
+          const proflame_query::Reply r1{proflame_query::REG_STATE1, {0, id(s1_byte), 0}};
+          const proflame_query::Reply r2{proflame_query::REG_STATE2, {0, id(s2_byte), 0}};
+          const auto s1 = proflame_query::decode_state1(r1);
+          const auto s2 = proflame_query::decode_state2(r2);
+          if (s2.flame > 0 && s2.flame <= 6) id(stored_flame) = s2.flame;
+          if (s1.mode >= 1 && s1.mode <= 3 && !(s1.mode == 1 && s2.flame == 0)) id(stored_mode) = s1.mode;
+          const bool burning = s1.mode != 0 && !(s1.mode == 1 && s2.flame == 0);
+          id(fireplace_status).publish_state(s1.mode == 0 ? "Off" :
+              (s1.mode == 1 && s2.flame == 0) ? "Off (Manual, flame 0)" :
+              proflame_query::mode_name(s1.mode));
+          id(fireplace_power).publish_state(burning);
+          id(mode_select).publish_state(proflame_query::mode_name(s1.mode));
+          id(flame_height).publish_state(s2.flame);
+          id(fan_speed).publish_state(s2.fan);
+          id(light_brightness).publish_state(s1.light);
+          id(pilot_select).publish_state(s1.continuous_pilot ? "Continuous" : "Intermittent");
+          id(aux_switch).publish_state(s2.aux);
+          id(split_flow_switch).publish_state(s2.split_flow);
+
 globals:
-  - id: rx_count
-    type: uint32_t
-    restore_value: false
-    initial_value: '0'
-  - id: bad_frames
-    type: uint32_t
-    restore_value: false
-    initial_value: '0'
-  - id: last_reply_ms
-    type: uint32_t
-    restore_value: false
-    initial_value: '0'
-  - id: link_seen
-    type: bool
-    restore_value: false
-    initial_value: 'false'
-  - id: control_verify_pending
-    type: bool
-    restore_value: false
-    initial_value: 'false'
-  - id: remote_in_control
-    type: bool
-    restore_value: false
-    initial_value: 'true'
-  - id: stale_published
-    type: bool
-    restore_value: false
-    initial_value: 'false'
+  - {id: rx_count, type: uint32_t, restore_value: false, initial_value: '0'}
+  - {id: bad_frames, type: uint32_t, restore_value: false, initial_value: '0'}
+  - {id: last_reply_ms, type: uint32_t, restore_value: false, initial_value: '0'}
+  - {id: link_seen, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: stale_published, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: control_verify_pending, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: remote_in_control, type: bool, restore_value: false, initial_value: 'true'}
+  - {id: remote_published, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: last_ctl_uart, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: pend_s1, type: uint8_t, restore_value: false, initial_value: '0'}
+  - {id: pend_s2, type: uint8_t, restore_value: false, initial_value: '0'}
+  - {id: pend_s1_ok, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: pend_s2_ok, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: s1_byte, type: uint8_t, restore_value: false, initial_value: '0'}
+  - {id: s2_byte, type: uint8_t, restore_value: false, initial_value: '0'}
+  - {id: have_state, type: bool, restore_value: false, initial_value: 'false'}
+  # Per-command freshness flags: cleared before a read, set when it lands.
+  - {id: ctl_seen, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: state_seen, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: stored_flame, type: int, restore_value: false, initial_value: '1'}
+  - {id: stored_mode, type: int, restore_value: false, initial_value: '1'}
+  - {id: cmd_ok, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: new_s1, type: uint8_t, restore_value: false, initial_value: '0'}
+  - {id: new_s2, type: uint8_t, restore_value: false, initial_value: '0'}
+  - {id: send_s1, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: send_s2, type: bool, restore_value: false, initial_value: 'false'}
 
 text_sensor:
   - platform: template
+    id: fireplace_status
+    name: Fireplace Status
+    icon: mdi:fireplace
+  - platform: template
     id: ifc_control
     name: IFC Control
-  - platform: template
-    id: fireplace_mode
-    name: Fireplace Mode
+    entity_category: diagnostic
   - platform: template
     id: control_request_result
     name: Control Request Result
+    entity_category: diagnostic
+  - platform: template
+    id: cmd_result
+    name: Last Command Result
+    entity_category: diagnostic
   - platform: template
     id: state1_raw
     name: IFC State 1 Raw
@@ -205,27 +250,6 @@ sensor:
     update_interval: 30s
     entity_category: diagnostic
   - platform: template
-    id: flame_level
-    name: Flame Level Setting
-    accuracy_decimals: 0
-    icon: mdi:fire
-  - platform: template
-    id: night_light_level
-    name: Night Light Level Setting
-    accuracy_decimals: 0
-    icon: mdi:lightbulb
-  - platform: template
-    id: comfort_fan_speed
-    name: Comfort Fan Speed Setting
-    accuracy_decimals: 0
-    icon: mdi:fan
-  - platform: template
-    name: IFC RX Byte Count
-    entity_category: diagnostic
-    accuracy_decimals: 0
-    update_interval: 30s
-    lambda: return id(rx_count);
-  - platform: template
     name: IFC Invalid Frames
     entity_category: diagnostic
     accuracy_decimals: 0
@@ -241,60 +265,263 @@ binary_sensor:
     device_class: connectivity
     entity_category: diagnostic
     lambda: return id(link_seen) && (millis() - id(last_reply_ms)) < 15000;
+
+# Control entities. publish_state() from polling never triggers these actions;
+# only Home Assistant commands do.
+switch:
   - platform: template
-    id: continuous_pilot
-    name: Continuous Pilot
+    id: fireplace_power
+    name: Fireplace
+    icon: mdi:fireplace
+    restore_mode: DISABLED
+    turn_on_action:
+      # Like the original: last active mode, and stored flame if flame is 0.
+      - lambda: 'id(apply_cmd).execute(1, -1, -1, -1, -1, -1, -1, -1);'
+    turn_off_action:
+      - lambda: 'id(apply_cmd).execute(0, 0, -1, -1, -1, -1, -1, -1);'
   - platform: template
-    id: aux_output
+    id: aux_switch
     name: AUX Output
+    restore_mode: DISABLED
+    turn_on_action:
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 1, -1);'
+    turn_off_action:
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 0, -1);'
   - platform: template
-    id: split_flow
+    id: split_flow_switch
     name: Split Flow
+    restore_mode: DISABLED
+    turn_on_action:
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, -1, 1);'
+    turn_off_action:
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, -1, 0);'
 
-script:
-  - id: poll_ifc
-    mode: single
-    then:
+select:
+  - platform: template
+    id: mode_select
+    name: Mode
+    icon: mdi:thermostat
+    options: ["Off", "Manual", "Thermostat", "Smart"]
+    set_action:
       - lambda: |-
-          id(ifc_uart).write_array(proflame_query::GET_CONTROL, sizeof(proflame_query::GET_CONTROL));
-      - delay: 250ms
-      - lambda: |-
-          id(ifc_uart).write_array(proflame_query::GET_STATE1, sizeof(proflame_query::GET_STATE1));
-      - delay: 250ms
-      - lambda: |-
-          id(ifc_uart).write_array(proflame_query::GET_STATE2, sizeof(proflame_query::GET_STATE2));
+          int m = x == "Off" ? 0 : x == "Manual" ? 1 : x == "Thermostat" ? 2 : x == "Smart" ? 3 : -1;
+          if (m < 0) return;
+          id(apply_cmd).execute(-1, m, -1, -1, -1, -1, -1, -1);
+  - platform: template
+    id: pilot_select
+    name: Pilot
+    icon: mdi:candle
+    options: ["Intermittent", "Continuous"]
+    set_action:
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, x == "Continuous" ? 1 : 0, -1, -1);'
 
-interval:
-  - interval: 5s
-    then:
-      - script.execute: poll_ifc
-      - lambda: |-
-          // No valid reply for 15 s: report readings as unknown instead of stale.
-          const bool fresh = id(link_seen) && (millis() - id(last_reply_ms)) < 15000;
-          if (fresh) { id(stale_published) = false; return; }
-          if (!id(link_seen) || id(stale_published)) return;
-          id(stale_published) = true;
-          ESP_LOGW("proflame", "No valid IFC reply for 15 s; marking state unknown");
-          id(flame_level).publish_state(NAN);
-          id(night_light_level).publish_state(NAN);
-          id(comfort_fan_speed).publish_state(NAN);
-          id(fireplace_mode).publish_state("Unknown (no IFC reply)");
-          id(ifc_control).publish_state("Unknown (no IFC reply)");
+number:
+  - platform: template
+    id: flame_height
+    name: Flame Height
+    icon: mdi:fire
+    min_value: 0
+    max_value: 6
+    step: 1
+    mode: slider
+    set_action:
+      - lambda: 'id(apply_cmd).execute(-1, -1, static_cast<int>(x), -1, -1, -1, -1, -1);'
+  - platform: template
+    id: fan_speed
+    name: Fan Speed
+    icon: mdi:fan
+    min_value: 0
+    max_value: 6
+    step: 1
+    mode: slider
+    set_action:
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, static_cast<int>(x), -1, -1, -1, -1);'
+  - platform: template
+    id: light_brightness
+    name: Light
+    icon: mdi:lightbulb
+    min_value: 0
+    max_value: 6
+    step: 1
+    mode: slider
+    set_action:
+      - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, static_cast<int>(x), -1, -1, -1);'
 
 button:
   - platform: template
     name: Request Control
     icon: mdi:hand-back-right
+    entity_category: config
     on_press:
       - lambda: |-
+          if (id(apply_cmd).is_running() || id(poll_ifc).is_running()) return;
           id(control_request_result).publish_state("Waiting for reply");
-          ESP_LOGI("proflame", "Sending ONE control request (SET register 0x16)");
-          id(ifc_uart).write_array(proflame_query::REQUEST_CONTROL,
-                                   sizeof(proflame_query::REQUEST_CONTROL));
-      - delay: 1s
+          id(ifc_uart).write_array(proflame_query::REQUEST_CONTROL, sizeof(proflame_query::REQUEST_CONTROL));
+
+script:
+  # GET control, state 1, state 2, then control again. State is committed only
+  # if both control checks say UART. Trailing delay lets the last reply land.
+  - id: poll_ifc
+    mode: single
+    then:
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_CONTROL, 6);'
+      - delay: 250ms
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_STATE1, 6);'
+      - delay: 250ms
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_STATE2, 6);'
+      - delay: 250ms
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_CONTROL, 6);'
+      - delay: 200ms
+
+  # One user command. Parameters: -1 = leave unchanged.
+  # p_power: 1 = power on (stored mode; stored flame if flame is 0).
+  - id: apply_cmd
+    mode: single
+    parameters:
+      p_power: int
+      p_mode: int
+      p_flame: int
+      p_fan: int
+      p_light: int
+      p_pilot: int
+      p_aux: int
+      p_split: int
+    then:
+      - wait_until:
+          condition:
+            lambda: 'return !id(poll_ifc).is_running();'
+          timeout: 2s
+      - if:
+          condition:
+            lambda: 'return id(poll_ifc).is_running();'
+          then:
+            - lambda: 'id(cmd_result).publish_state("Rejected: busy, try again");'
+            - script.stop: apply_cmd
       - lambda: |-
-          if (id(control_request_result).state == "Waiting for reply") {
-            id(control_verify_pending) = false;
-            id(control_request_result).publish_state("No reply within 1 second");
-            ESP_LOGW("proflame", "No reply to control request within 1 second");
+          id(cmd_ok) = false;
+          id(cmd_result).publish_state("Working");
+          if (id(remote_in_control)) {
+            ESP_LOGI("proflame", "Command: requesting control once");
+            id(control_request_result).publish_state("Waiting for reply");
+            id(ifc_uart).write_array(proflame_query::REQUEST_CONTROL, 6);
           }
+      - delay: 300ms
+      - lambda: |-
+          // Fresh read for this command only.
+          id(ctl_seen) = false;
+          id(state_seen) = false;
+          id(ifc_uart).write_array(proflame_query::GET_CONTROL, 6);
+      - delay: 250ms
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_STATE1, 6);'
+      - delay: 250ms
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_STATE2, 6);'
+      - delay: 250ms
+      - lambda: 'id(ifc_uart).write_array(proflame_query::GET_CONTROL, 6);'
+      - delay: 250ms
+      - lambda: |-
+          if (!id(ctl_seen) || id(remote_in_control)) {
+            id(cmd_result).publish_state("Rejected: remote has control (turn off with remote, then retry)");
+            ESP_LOGW("proflame", "Command rejected: no verified UART control");
+            return;
+          }
+          if (!id(state_seen) || !id(have_state)) {
+            id(cmd_result).publish_state("Rejected: could not read current state");
+            ESP_LOGW("proflame", "Command rejected: no fresh verified state");
+            return;
+          }
+          const uint8_t cur1 = id(s1_byte), cur2 = id(s2_byte);
+          const proflame_query::Reply r1{proflame_query::REG_STATE1, {0, cur1, 0}};
+          const proflame_query::Reply r2{proflame_query::REG_STATE2, {0, cur2, 0}};
+          const auto s1 = proflame_query::decode_state1(r1);
+          const auto s2 = proflame_query::decode_state2(r2);
+          uint8_t b1 = cur1, b2 = cur2;
+          int mode = s1.mode, flame = s2.flame;
+
+          if (p_power == 1) {
+            mode = id(stored_mode);
+            b1 = proflame_query::with_mode(b1, mode);
+            if (flame == 0) b2 = proflame_query::with_flame(b2, id(stored_flame));
+          }
+          if (p_mode >= 0) {
+            b1 = proflame_query::with_mode(b1, p_mode);
+            if (p_mode == 1 && flame == 0) b2 = proflame_query::with_flame(b2, id(stored_flame));
+          }
+          if (p_flame >= 0) {
+            b2 = proflame_query::with_flame(b2, p_flame);
+            // As in the original integration: a nonzero flame while off turns it on.
+            if (p_flame > 0 && (b1 & 0x03) == 0) b1 = proflame_query::with_mode(b1, id(stored_mode) == 2 ? 2 : 1);
+          }
+          if (p_fan >= 0) b2 = proflame_query::with_fan(b2, p_fan);
+          if (p_light >= 0) b1 = proflame_query::with_light(b1, p_light);
+          if (p_pilot >= 0) b1 = proflame_query::with_pilot(b1, p_pilot == 1);
+          if (p_aux >= 0) b2 = proflame_query::with_aux(b2, p_aux == 1);
+          if (p_split >= 0) b2 = proflame_query::with_split(b2, p_split == 1);
+
+          id(new_s1) = b1;
+          id(new_s2) = b2;
+          id(send_s1) = b1 != cur1;
+          id(send_s2) = b2 != cur2;
+          if (!id(send_s1) && !id(send_s2)) {
+            id(cmd_result).publish_state("No change needed");
+            return;
+          }
+          id(cmd_ok) = true;
+          ESP_LOGI("proflame", "Command: state1 %02X->%02X%s, state2 %02X->%02X%s",
+                   cur1, b1, id(send_s1) ? "" : " (unchanged)",
+                   cur2, b2, id(send_s2) ? "" : " (unchanged)");
+          // Flame/fan first, then mode, matching the documented app sequence.
+          if (id(send_s2)) {
+            uint8_t f[6];
+            if (proflame_query::build_set(proflame_query::REG_STATE2, b2, f)) id(ifc_uart).write_array(f, 6);
+          }
+      - delay: 250ms
+      - lambda: |-
+          if (!id(cmd_ok) || !id(send_s1)) return;
+          uint8_t f[6];
+          if (proflame_query::build_set(proflame_query::REG_STATE1, id(new_s1), f)) id(ifc_uart).write_array(f, 6);
+      - delay: 400ms
+      # Read-back confirmation, same verified sequence.
+      - lambda: |-
+          if (!id(cmd_ok)) return;
+          id(ctl_seen) = false;
+          id(state_seen) = false;
+          id(ifc_uart).write_array(proflame_query::GET_CONTROL, 6);
+      - delay: 250ms
+      - lambda: 'if (id(cmd_ok)) id(ifc_uart).write_array(proflame_query::GET_STATE1, 6);'
+      - delay: 250ms
+      - lambda: 'if (id(cmd_ok)) id(ifc_uart).write_array(proflame_query::GET_STATE2, 6);'
+      - delay: 250ms
+      - lambda: 'if (id(cmd_ok)) id(ifc_uart).write_array(proflame_query::GET_CONTROL, 6);'
+      - delay: 250ms
+      - lambda: |-
+          if (!id(cmd_ok)) return;
+          const uint8_t mask1 = 0xF3;  // compare documented state-1 bits only
+          if (id(state_seen) && (id(s1_byte) & mask1) == (id(new_s1) & mask1) && id(s2_byte) == id(new_s2)) {
+            id(cmd_result).publish_state("Confirmed by read-back");
+            ESP_LOGI("proflame", "Command confirmed by read-back");
+          } else {
+            char msg[72];
+            snprintf(msg, sizeof(msg), "Not confirmed: read %02X/%02X%s, wanted %02X/%02X",
+                     id(s1_byte), id(s2_byte), id(state_seen) ? "" : " (no fresh read)",
+                     id(new_s1), id(new_s2));
+            id(cmd_result).publish_state(msg);
+            ESP_LOGW("proflame", "%s", msg);
+          }
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          if (!id(apply_cmd).is_running()) id(poll_ifc).execute();
+          const bool fresh = id(link_seen) && (millis() - id(last_reply_ms)) < 15000;
+          if (fresh) { id(stale_published) = false; return; }
+          if (!id(link_seen) || id(stale_published)) return;
+          id(stale_published) = true;
+          ESP_LOGW("proflame", "No valid IFC reply for 15 s; marking state unknown");
+          id(have_state) = false;
+          id(last_ctl_uart) = false;
+          id(flame_height).publish_state(NAN);
+          id(fan_speed).publish_state(NAN);
+          id(light_brightness).publish_state(NAN);
+          id(fireplace_status).publish_state("Unknown (no IFC reply)");
+          id(ifc_control).publish_state("Unknown (no IFC reply)");
