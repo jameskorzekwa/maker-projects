@@ -213,6 +213,7 @@ uart:
           const bool burning = s1.mode != 0 && !(s1.mode == 1 && s2.flame == 0);
           const bool manual_on = s1.mode == 1 && s2.flame > 0;
           id(cl_manual_on) = manual_on;
+          id(cl_mode) = s1.mode;
           if (!id(burn_seeded)) { id(burn_seeded) = true; id(prev_burning) = manual_on; }
           if (manual_on != id(prev_burning)) {
             id(tstat_switch_ms) = millis();
@@ -286,6 +287,7 @@ globals:
   - {id: prev_burning, type: bool, restore_value: false, initial_value: 'false'}
   - {id: burn_seeded, type: bool, restore_value: false, initial_value: 'false'}
   - {id: cl_manual_on, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: cl_mode, type: int, restore_value: false, initial_value: '0'}
   # Set when the user starts the thermostat from inactive: the first heat
   # decision may ignite immediately (the min cycle guards automatic cycling).
   - {id: tstat_fresh_start, type: bool, restore_value: false, initial_value: 'false'}
@@ -708,15 +710,22 @@ script:
             id(tstat_fresh_start) = false;
             id(tstat_flame) = want ? flame : 0;
             if (want) id(apply_cmd).execute(-1, 1, flame, -1, -1, -1, aux, -1, -1);
-            else id(apply_cmd).execute(-1, 0, -1, -1, -1, -1, aux, -1, -1);
+            else if (have_temp) id(apply_cmd).execute(-1, 1, 0, -1, -1, -1, aux, -1, -1);  // flame off only
+            else id(apply_cmd).execute(-1, 0, -1, -1, -1, -1, -1, -1, -1);  // fail safe: all off
           } else if (want && burning && id(tstat_mode) == 2 && flame != id(tstat_flame) && !recent_cmd &&
                      (now - id(tstat_cmd_ms)) >= 5u * 60u * 1000u) {
             id(tstat_flame) = flame;
             id(tstat_cmd_ms) = now;
             id(apply_cmd).execute(-1, -1, flame, -1, -1, -1, -1, -1, -1);
+          } else if (have_temp && !want && !burning && id(cl_mode) != 1 && !recent_cmd &&
+                     (now - id(light_cmd_ms)) >= 20000u) {
+            // Idle but fully off (or in a remote-only mode): go to Manual with
+            // flame 0 so the fan and light keep running.
+            id(light_cmd_ms) = now;
+            id(apply_cmd).execute(-1, 1, 0, -1, -1, -1, id(light_follows).state ? 1 : -1, -1, -1);
           } else if (id(light_follows).state && !id(aux_switch).state && !recent_cmd &&
                      (now - id(light_cmd_ms)) >= 20000u) {
-            // Thermostat active but idle: light on anyway.
+            // Thermostat active: light on.
             id(light_cmd_ms) = now;
             id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 1, -1, -1);
           }
