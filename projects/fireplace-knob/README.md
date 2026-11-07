@@ -6,29 +6,37 @@ alone, with no touch input.
 
 | Input | Action |
 | --- | --- |
-| Hold the knob (~0.9 s) | Fireplace on/off. A "Hold to turn ON/OFF" hint appears after 0.2 s. |
-| Short press | Next screen: **Set Temp → Fan Speed → Light → Set Temp …** |
-| Turn (Set Temp) | Set point ±1 °F per detent (55–85 °F). Sent 0.9 s after you stop turning. |
-| Turn (Fan Speed) | Fan 0 (OFF) to 6. Sent 0.6 s after you stop turning. |
-| Turn (Light) | Clockwise turns the light on; counter-clockwise turns it off. |
+| Hold the knob (~0.9 s) | Fireplace off, or on **in the mode chosen on the Mode screen**. A "Hold to turn ON/OFF" hint appears after 0.2 s. |
+| Short press | Next screen (list depends on the mode, below) |
+| Turn | Adjust the current screen |
 
-The top of every screen shows the fireplace state: an orange flame with **ON**,
-a grey flame with **OFF**, or **OFFLINE**/**UNAVAILABLE**. Three dots at the
-bottom show the current screen. The screen dims after 20 s and turns off after
-2 minutes, then returns to Set Temp. When the screen is dark, the first press
-or turn only wakes it. A long press always works.
+| Mode | Screens |
+| --- | --- |
+| Manual | Flame (1–6), Fan Speed, Light, Mode |
+| Thermostat | Set Temp, Fan Speed, Light, Mode. The flame cycles on demand. |
+| Smart | Set Temp, Fan Speed, Light, Mode. The flame scales with how far the room is below the set point. |
 
-### Temperature behaviour
+- **Set Temp:** ±1 °F per detent (55–85 °F), sent 0.9 s after you stop turning.
+  It is only stored, never ignites.
+- **Flame:** only while the fireplace is on. A flame above 0 lights an off
+  Proflame, so while off this screen shows "Hold knob to turn on".
+- **Fan Speed:** 0 (OFF) to 6, in every mode. The fan is never automatic. The
+  Proflame 2 IFC starts the blower about 5 minutes after the burner lights and
+  runs it for about 12 minutes after the burner goes out (SIT 584 IFC manual).
+  The knob shows the chosen speed, not whether the blower is running.
+- **Light:** clockwise on, counter-clockwise off.
+- **Mode:** Manual ↔ Thermostat ↔ Smart. Applied 1.2 s after you stop if the
+  fireplace is burning. If it is off, the choice is used at the next long-press
+  turn-on, because any preset change would light it.
+- The Proflame integrations report no set point (`null`) in Off/Manual. The
+  knob keeps its own last value, saved across reboots.
 
-- Setting a temperature calls `climate.set_temperature`. Neither fireplace
-  integration uses a set point in **Manual** (flame-height) mode. If the
-  fireplace is burning in Manual when you set a temperature, the knob also
-  switches it to the **Thermostat** preset.
-- If the fireplace is off, the set point is only stored. The knob never lights
-  a fireplace except through a long press.
-- The Proflame integrations report the set point as `null` in Off/Manual. The
-  knob therefore keeps its own last value, saved across reboots, and shows that
-  value until Home Assistant reports a real one.
+The top line shows the fireplace state, for example **ON · Thermostat**, a grey
+flame with **OFF**, or **OFFLINE**/**UNAVAILABLE**. The dots at the bottom show
+the current screen. The screen dims after 20 s, turns off after 2 minutes, and
+then returns to the mode's first screen. When the screen is dark, the first
+press or turn only wakes it. A long press always works. The knob follows mode
+changes made from the remote or HA.
 
 ## Parts
 
@@ -63,7 +71,7 @@ component, and this interface does not use touch.
 | File | Purpose |
 | --- | --- |
 | `esphome/fireplace-knob/base.yaml` | Hardware, UI, and behaviour. All entities are substitutions. |
-| `esphome/fireplace-knob-living-room.yaml` | Living room: `proflame_connect_wifi` entities (`switch.living_room_fireplace`, `climate.living_room_fireplace_mode`, `number.living_room_fireplace_fan_speed`, `switch.living_room_fireplace_light`). |
+| `esphome/fireplace-knob-living-room.yaml` | Living room: `proflame_connect_wifi` entities (`switch.living_room_fireplace`, `climate.living_room_fireplace_mode`, `number.living_room_fireplace_flame_height`, `number.living_room_fireplace_fan_speed`, `switch.living_room_fireplace_light`). |
 | `esphome/fireplace-knob-basement.yaml` | Basement: ESP32 X0A controller entities (`*.basement_fireplace_*`), 0.5° steps. Not deployed. |
 
 `base.yaml` sits in a subdirectory so the Device Builder does not list it as a
@@ -122,4 +130,5 @@ over USB.
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-07 | Mode screen (Manual/Thermostat/Smart) with per-mode screen lists, a Flame screen for Manual, and Fan in every mode. OTA installed. |
 | 2026-11-07 | Hardware feedback: header icons overlapped their titles, so the icon + text rows are now auto-centred flex rows. The panel drifted and glitched, so the firmware now uses PSRAM XIP, `LCD_RGB_RESTART_IN_VSYNC`, IRAM-safe RGB ISR, 64-byte cache lines, and a 16 MHz pclk. OTA installed; drift fix awaiting confirmation. |

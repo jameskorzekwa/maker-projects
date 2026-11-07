@@ -8,6 +8,7 @@ substitutions:
   fireplace_name: Living Room
   fireplace_switch: switch.living_room_fireplace
   climate_entity: climate.living_room_fireplace_mode
+  flame_number: number.living_room_fireplace_flame_height
   fan_number: number.living_room_fireplace_fan_speed
   light_switch: switch.living_room_fireplace_light
   temp_step: "1.0"

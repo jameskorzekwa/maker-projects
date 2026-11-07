@@ -2,9 +2,15 @@
 #
 # Controls one fireplace through Home Assistant:
 #   Long press (hold)  -> fireplace on/off
-#   Short press        -> next screen: Set Temp -> Fan Speed -> Light -> ...
+#   Short press        -> next screen. Screens depend on the mode:
+#                           Manual:     Flame, Fan Speed, Light, Mode
+#                           Thermostat: Set Temp, Fan Speed, Light, Mode
+#                           Smart:      Set Temp, Fan Speed, Light, Mode
 #   Turn               -> adjust the value on the current screen
-#                         (Light: clockwise = on, counter-clockwise = off)
+#                         (Light: clockwise = on, counter-clockwise = off;
+#                          Mode: Manual <-> Thermostat <-> Smart)
+# Only a long press ever lights the fireplace: while it is off, the Mode
+# screen just picks the mode it will light in, and Flame is locked.
 #
 # Which fireplace it controls is set entirely by the substitutions below; the
 # per-fireplace files (../fireplace-knob-living-room.yaml, ...) include this
@@ -30,6 +36,7 @@ substitutions:
   # ---- Home Assistant entities (override per fireplace) ----
   fireplace_switch: switch.living_room_fireplace
   climate_entity: climate.living_room_fireplace_mode
+  flame_number: number.living_room_fireplace_flame_height
   fan_number: number.living_room_fireplace_fan_speed
   light_switch: switch.living_room_fireplace_light
 
@@ -39,7 +46,7 @@ substitutions:
   temp_max: "85"
   temp_default: "70"        # used until HA reports a set point
   temp_format: "%.0f"       # "%.1f" for 0.5-degree steps
-  thermostat_preset: Thermostat  # preset used when a temp is set while burning in Manual
+  flame_max: "6"
   fan_max: "6"
   rotation_sign: "1"        # set to "-1" if the knob turns the wrong way
   long_press: 700ms
@@ -241,15 +248,36 @@ display:
 # ------------------------------------------------------------------
 # State
 # ------------------------------------------------------------------
+# Screen ids (the visible set depends on the selected mode, see page_list):
+#   0 = Set Temp, 1 = Flame, 2 = Fan Speed, 3 = Light, 4 = Mode
+#   Manual:     Flame, Fan, Light, Mode
+#   Thermostat: Set Temp, Fan, Light, Mode     (IFC regulates the flame)
+#   Smart:      Set Temp, Fan Speed, Light, Mode (flame scales with demand)
+# The fan is never automatic: the user picks the speed in every mode, and the
+# Proflame 2 IFC itself delays it ~5 min after ignition and runs it ~12 min
+# after the burner goes out.
 globals:
-  - id: page              # 0 = Set Temp, 1 = Fan Speed, 2 = Light
+  - id: page              # current screen id; -1 = first screen of the list
     type: int
+    initial_value: "-1"
+  - id: mode_sel          # 0 = Manual, 1 = Thermostat, 2 = Smart
+    type: int
+    restore_value: true
     initial_value: "0"
+  - id: mode_pending
+    type: bool
+    initial_value: "false"
   - id: setpoint          # what the knob shows / last sent
     type: float
     restore_value: true
     initial_value: "${temp_default}"
   - id: temp_pending      # user is turning; ignore HA echoes until sent
+    type: bool
+    initial_value: "false"
+  - id: flame_target
+    type: int
+    initial_value: "0"
+  - id: flame_pending
     type: bool
     initial_value: "false"
   - id: fan_target
@@ -300,6 +328,13 @@ text_sensor:
     entity_id: ${climate_entity}
     attribute: preset_mode
     on_value:
+      # Follow the fireplace's real mode (remote, HA, automations). "Off" is
+      # ignored so the knob remembers which mode to light it in next time.
+      - lambda: |-
+          if (id(mode_pending)) return;
+          if (x == "Manual") id(mode_sel) = 0;
+          else if (x == "Thermostat") id(mode_sel) = 1;
+          else if (x == "Smart") id(mode_sel) = 2;
       - script.execute: render
 
 sensor:
@@ -317,6 +352,13 @@ sensor:
     entity_id: ${climate_entity}
     attribute: current_temperature
     on_value:
+      - script.execute: render
+  - platform: homeassistant
+    id: ha_flame
+    entity_id: ${flame_number}
+    on_value:
+      - lambda: |-
+          if (!std::isnan(x) && !id(flame_pending)) id(flame_target) = (int) lroundf(x);
       - script.execute: render
   - platform: homeassistant
     id: ha_fan
@@ -414,7 +456,13 @@ script:
       - lambda: |-
           id(wake)->execute();
           if (id(press_woke)) return;   // that press only woke the screen
-          id(page) = (id(page) + 1) % 3;
+          int L[5]; int n = 0; const int m = id(mode_sel);
+          L[n++] = (m == 0) ? 1 : 0;      // Flame (Manual) or Set Temp
+          L[n++] = 2;                     // Fan (every mode)
+          L[n++] = 3; L[n++] = 4;         // Light, Mode
+          int idx = -1;
+          for (int i = 0; i < n; i++) if (L[i] == id(page)) idx = i;
+          id(page) = L[(idx + 1) % n];    // not in list -> idx -1 -> first
           id(render)->execute();
 
   - id: show_toast
@@ -425,6 +473,8 @@ script:
           lv_obj_remove_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
           id(toast_until_ms) = millis() + ms;
 
+  # On: light it in the mode chosen on the Mode screen (Manual uses the last
+  # flame height). This is the only path that ever ignites the fireplace.
   - id: toggle_fireplace
     then:
       - if:
@@ -437,11 +487,19 @@ script:
                 data:
                   entity_id: ${fireplace_switch}
           else:
-            - script.execute: {id: show_toast, text: "Turning ON", ms: 2500}
+            - lambda: |-
+                static const char *M[] = {"Turning ON\nManual", "Turning ON\nThermostat", "Turning ON\nSmart"};
+                id(show_toast)->execute(M[id(mode_sel)], 2500);
             - homeassistant.action:
-                action: switch.turn_on
+                action: climate.set_preset_mode
                 data:
-                  entity_id: ${fireplace_switch}
+                  entity_id: ${climate_entity}
+                data_template:
+                  preset_mode: "{{ m }}"
+                variables:
+                  m: !lambda |-
+                    static const char *M[] = {"Manual", "Thermostat", "Smart"};
+                    return std::string(M[id(mode_sel)]);
 
   - id: knob_turn
     parameters: {dir: int}
@@ -450,15 +508,26 @@ script:
           bool was_off = id(screen_level) == 2;
           id(wake)->execute();
           if (was_off) return;
+          const bool fp_on = id(ha_fireplace).state == "on";
+          if (id(page) < 0) id(render)->execute();   // resolve first screen
           switch (id(page)) {
-            case 0: {
+            case 0: {  // Set Temp: always allowed; never ignites
               float t = id(setpoint) + dir * ${temp_step};
               id(setpoint) = std::min((float) ${temp_max}, std::max((float) ${temp_min}, t));
               id(temp_pending) = true;
               id(send_temp)->execute();
               break;
             }
-            case 1: {
+            case 1: {  // Flame (Manual): a flame > 0 would light an off fireplace
+              if (!fp_on) { id(show_toast)->execute("Hold knob to\nturn on first", 2000); break; }
+              int f = std::min(${flame_max}, std::max(1, id(flame_target) + dir));
+              if (f == id(flame_target)) break;
+              id(flame_target) = f;
+              id(flame_pending) = true;
+              id(send_flame)->execute();
+              break;
+            }
+            case 2: {
               int f = std::min(${fan_max}, std::max(0, id(fan_target) + dir));
               if (f == id(fan_target)) break;
               id(fan_target) = f;
@@ -466,13 +535,20 @@ script:
               id(send_fan)->execute();
               break;
             }
-            case 2: {
+            case 3: {
               bool want = dir > 0;
               bool cur = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
               if (want == cur) break;
               id(light_target) = want;
               id(light_pending) = true;
               id(send_light)->execute();
+              break;
+            }
+            case 4: {  // Mode: applied now if burning, else used at next turn-on
+              int m = std::min(2, std::max(0, id(mode_sel) + dir));
+              if (m == id(mode_sel)) break;
+              id(mode_sel) = m;
+              if (fp_on) { id(mode_pending) = true; id(send_mode)->execute(); }
               break;
             }
           }
@@ -491,20 +567,50 @@ script:
             temperature: "{{ t }}"
           variables:
             t: !lambda 'return id(setpoint);'
-      # A set point does nothing in Manual (flame-height) mode, so while the
-      # fireplace is burning in Manual, switch it to thermostat control.
-      # Never ignites a fireplace that is off.
+      - delay: 4s
+      - lambda: 'id(temp_pending) = false;'
+      - script.execute: render
+
+  - id: send_mode
+    mode: restart
+    then:
+      - delay: 1200ms
       - if:
           condition:
-            lambda: 'return id(ha_fireplace).state == "on" && id(ha_preset).state == "Manual";'
+            lambda: 'return id(ha_fireplace).state == "on";'
           then:
             - homeassistant.action:
                 action: climate.set_preset_mode
                 data:
                   entity_id: ${climate_entity}
-                  preset_mode: ${thermostat_preset}
+                data_template:
+                  preset_mode: "{{ m }}"
+                variables:
+                  m: !lambda |-
+                    static const char *M[] = {"Manual", "Thermostat", "Smart"};
+                    return std::string(M[id(mode_sel)]);
+      - delay: 5s
+      - lambda: 'id(mode_pending) = false;'
+      - script.execute: render
+
+  - id: send_flame
+    mode: restart
+    then:
+      - delay: 600ms
+      - if:
+          condition:
+            lambda: 'return id(ha_fireplace).state == "on";'
+          then:
+            - homeassistant.action:
+                action: number.set_value
+                data:
+                  entity_id: ${flame_number}
+                data_template:
+                  value: "{{ v }}"
+                variables:
+                  v: !lambda 'return id(flame_target);'
       - delay: 4s
-      - lambda: 'id(temp_pending) = false;'
+      - lambda: 'id(flame_pending) = false;'
       - script.execute: render
 
   - id: send_fan
@@ -547,68 +653,122 @@ script:
   - id: render
     then:
       - lambda: |-
-          static const uint32_t ORANGE = 0xFF7A1A, CYAN = 0x38BDF8, YELLOW = 0xFACC15,
-                                GREY = 0x5A5A5A, DIM = 0x2A2A2A, WHITE = 0xFFFFFF,
-                                SUB = 0x9A9A9A;
+          static const uint32_t ORANGE = 0xFF7A1A, RED = 0xFF4A2A, CYAN = 0x38BDF8,
+                                YELLOW = 0xFACC15, PURPLE = 0xA78BFA, GREY = 0x5A5A5A,
+                                DIM = 0x2A2A2A, WHITE = 0xFFFFFF, SUB = 0x9A9A9A;
           char buf[48];
           const bool connected = api::global_api_server->is_connected();
           const std::string fp = id(ha_fireplace).state;
           const bool fp_on = fp == "on";
           const bool fp_known = fp == "on" || fp == "off";
+          const int m = id(mode_sel);
+
+          // ---- screens available in this mode ----
+          int L[5]; int n = 0;
+          L[n++] = (m == 0) ? 1 : 0;
+          L[n++] = 2;
+          L[n++] = 3; L[n++] = 4;
+          int idx = -1;
+          for (int i = 0; i < n; i++) if (L[i] == id(page)) idx = i;
+          if (idx < 0) { idx = 0; id(page) = L[0]; }
+          const int p = id(page);
 
           // ---- status row ----
+          static const char *MODE_NAMES[] = {"MANUAL", "THERMOSTAT", "SMART"};
           lv_label_set_text(id(status_icon), fp_on ? "\U000F0238" : "\U000F1722");
           lv_obj_set_style_text_color(id(status_icon), lv_color_hex(fp_on ? ORANGE : GREY), 0);
           if (!connected)      lv_label_set_text(id(status_text), "OFFLINE");
           else if (!fp_known)  lv_label_set_text(id(status_text), "UNAVAILABLE");
-          else                 lv_label_set_text(id(status_text), fp_on ? "ON" : "OFF");
+          else if (fp_on)      { static const char *MC[] = {"Manual", "Thermostat", "Smart"};
+                                 snprintf(buf, sizeof(buf), "ON \u00B7 %s", MC[m]); lv_label_set_text(id(status_text), buf); }
+          else                 lv_label_set_text(id(status_text), "OFF");
           lv_obj_set_style_text_color(id(status_text), lv_color_hex(fp_on ? ORANGE : SUB), 0);
 
           // ---- page ----
-          static const char *TITLES[] = {"SET TEMP", "FAN SPEED", "LIGHT"};
-          static const char *ICONS[] = {"\U000F050F", "\U000F0210", "\U000F0335"};
-          const int p = id(page);
+          static const char *TITLES[] = {"SET TEMP", "FLAME", "FAN SPEED", "LIGHT", "MODE"};
+          static const char *ICONS[] = {"\U000F050F", "\U000F0238", "\U000F0210", "\U000F0335", "\U000F1542"};
           lv_label_set_text(id(title_label), TITLES[p]);
           lv_label_set_text(id(title_icon), ICONS[p]);
-
-          uint32_t accent;
-          if (p == 0) {
-            accent = ORANGE;
-            snprintf(buf, sizeof(buf), "${temp_format}\u00B0", id(setpoint));
-            lv_label_set_text(id(value_label), buf);
-            lv_arc_set_range(id(ring), (int32_t) (${temp_min} * 10), (int32_t) (${temp_max} * 10));
-            lv_arc_set_value(id(ring), (int32_t) lroundf(id(setpoint) * 10));
-            float room = id(ha_room_temp).state;
-            if (id(temp_pending))      snprintf(buf, sizeof(buf), "Setting...");
-            else if (std::isnan(room)) snprintf(buf, sizeof(buf), "Room --");
-            else                       snprintf(buf, sizeof(buf), "Room %.0f\u00B0", room);
-            lv_label_set_text(id(sub_label), buf);
-          } else if (p == 1) {
-            accent = CYAN;
-            int f = id(fan_target);
-            if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
-            lv_label_set_text(id(value_label), buf);
-            lv_arc_set_range(id(ring), 0, ${fan_max});
-            lv_arc_set_value(id(ring), f);
-            lv_label_set_text(id(sub_label), id(fan_pending) ? "Setting..." : "Speed 0 - ${fan_max}");
+          if (p == 4) {
+            lv_obj_add_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
           } else {
-            accent = YELLOW;
-            bool lon = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
-            lv_label_set_text(id(value_label), lon ? "ON" : "OFF");
-            lv_arc_set_range(id(ring), 0, 1);
-            lv_arc_set_value(id(ring), lon ? 1 : 0);
-            lv_label_set_text(id(title_icon), lon ? "\U000F0335" : "\U000F0336");
-            lv_label_set_text(id(sub_label), "Turn right: on   left: off");
+            lv_obj_remove_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
+          }
+
+          uint32_t accent = ORANGE;
+          switch (p) {
+            case 0: {
+              accent = ORANGE;
+              snprintf(buf, sizeof(buf), "${temp_format}\u00B0", id(setpoint));
+              lv_label_set_text(id(value_label), buf);
+              lv_arc_set_range(id(ring), (int32_t) (${temp_min} * 10), (int32_t) (${temp_max} * 10));
+              lv_arc_set_value(id(ring), (int32_t) lroundf(id(setpoint) * 10));
+              float room = id(ha_room_temp).state;
+              if (id(temp_pending))      snprintf(buf, sizeof(buf), "Setting...");
+              else if (std::isnan(room)) snprintf(buf, sizeof(buf), "Room --");
+              else                       snprintf(buf, sizeof(buf), "Room %.0f\u00B0", room);
+              lv_label_set_text(id(sub_label), buf);
+              break;
+            }
+            case 1: {
+              accent = RED;
+              int f = fp_on ? id(flame_target) : 0;
+              if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
+              lv_label_set_text(id(value_label), buf);
+              lv_arc_set_range(id(ring), 0, ${flame_max});
+              lv_arc_set_value(id(ring), f);
+              lv_label_set_text(id(sub_label), !fp_on ? "Hold knob to turn on"
+                                : id(flame_pending) ? "Setting..." : "Flame 1 - ${flame_max}");
+              break;
+            }
+            case 2: {
+              accent = CYAN;
+              int f = id(fan_target);
+              if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
+              lv_label_set_text(id(value_label), buf);
+              lv_arc_set_range(id(ring), 0, ${fan_max});
+              lv_arc_set_value(id(ring), f);
+              lv_label_set_text(id(sub_label), id(fan_pending) ? "Setting..." : "Speed 0 - ${fan_max}");
+              break;
+            }
+            case 3: {
+              accent = YELLOW;
+              bool lon = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
+              lv_label_set_text(id(value_label), lon ? "ON" : "OFF");
+              lv_arc_set_range(id(ring), 0, 1);
+              lv_arc_set_value(id(ring), lon ? 1 : 0);
+              lv_label_set_text(id(title_icon), lon ? "\U000F0335" : "\U000F0336");
+              lv_label_set_text(id(sub_label), "Turn right: on   left: off");
+              break;
+            }
+            case 4: {
+              accent = PURPLE;
+              static const char *HINT[] = {"You set flame + fan", "Auto flame, you set fan", "Smart flame, you set fan"};
+              lv_label_set_text(id(mode_label), MODE_NAMES[m]);
+              lv_arc_set_range(id(ring), 0, 3);
+              lv_arc_set_value(id(ring), m + 1);
+              lv_label_set_text(id(sub_label), id(mode_pending) ? "Setting..."
+                                : fp_on ? HINT[m] : "Used at next turn-on");
+              break;
+            }
           }
           if (!connected) lv_label_set_text(id(sub_label), "Connecting to Home Assistant");
 
           lv_obj_set_style_arc_color(id(ring), lv_color_hex(accent), LV_PART_INDICATOR);
           lv_obj_set_style_text_color(id(title_icon), lv_color_hex(accent), 0);
           lv_obj_set_style_text_color(id(value_label), lv_color_hex(connected ? WHITE : GREY), 0);
+          lv_obj_set_style_text_color(id(mode_label), lv_color_hex(connected ? WHITE : GREY), 0);
 
-          lv_obj_t *dots[] = {id(dot0), id(dot1), id(dot2)};
-          for (int i = 0; i < 3; i++)
-            lv_obj_set_style_bg_color(dots[i], lv_color_hex(i == p ? accent : DIM), 0);
+          // ---- page dots, centred for 3 or 4 screens ----
+          lv_obj_t *dots[] = {id(dot0), id(dot1), id(dot2), id(dot3)};
+          for (int i = 0; i < 4; i++) {
+            if (i >= n) { lv_obj_add_flag(dots[i], LV_OBJ_FLAG_HIDDEN); continue; }
+            lv_obj_remove_flag(dots[i], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_x(dots[i], (int32_t) ((2 * i - (n - 1)) * 14));
+            lv_obj_set_style_bg_color(dots[i], lv_color_hex(i == idx ? accent : DIM), 0);
+          }
 
 interval:
   - interval: 250ms
@@ -628,7 +788,7 @@ interval:
           } else if (id(screen_level) == 1 && idle >= ${off_after_s}) {
             id(screen_level) = 2;
             id(display_backlight).turn_off().perform();
-            id(page) = 0;           // wake up on Set Temp
+            id(page) = -1;          // wake up on the mode's first screen
             id(render)->execute();
           }
 
@@ -641,6 +801,11 @@ font:
     size: 150
     bpp: 4
     glyphs: "0123456789.-\u00B0OFN"
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_mode
+    size: 64
+    bpp: 4
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
   - file: {type: gfonts, family: Roboto, weight: 500}
     id: font_title
     size: 30
@@ -666,6 +831,8 @@ font:
     bpp: 4
     glyphs:
       - "\U000F050F"  # thermometer
+      - "\U000F0238"  # fire
+      - "\U000F1542"  # tune-variant
       - "\U000F0210"  # fan
       - "\U000F0335"  # lightbulb
       - "\U000F0336"  # lightbulb-outline
@@ -732,7 +899,7 @@ lvgl:
               - label:
                   id: status_text
                   text: "OFF"
-                  text_font: font_title
+                  text_font: font_sub
                   text_color: 0x9A9A9A
 
         - obj:
@@ -773,6 +940,17 @@ lvgl:
             text: "--"
             text_font: font_value
             text_color: 0xFFFFFF
+
+        - label:
+            id: mode_label
+            align: CENTER
+            y: 12
+            width: 400
+            text_align: CENTER
+            text: "MANUAL"
+            text_font: font_mode
+            text_color: 0xFFFFFF
+            hidden: true
 
         - label:
             id: sub_label
@@ -818,13 +996,24 @@ lvgl:
             border_width: 0
             bg_color: 0x2A2A2A
             bg_opa: COVER
+        - obj:
+            id: dot3
+            align: CENTER
+            x: 42
+            y: 172
+            width: 14
+            height: 14
+            radius: 7
+            border_width: 0
+            bg_color: 0x2A2A2A
+            bg_opa: COVER
 
         - obj:
             id: toast
             align: CENTER
             width: 400
-            height: 130
-            radius: 65
+            height: 150
+            radius: 75
             bg_color: 0x111111
             bg_opa: 92%
             border_color: 0xFF7A1A
@@ -834,6 +1023,7 @@ lvgl:
               - label:
                   id: toast_label
                   align: CENTER
+                  text_align: CENTER
                   text: ""
                   text_font: font_toast
                   text_color: 0xFFFFFF

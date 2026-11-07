@@ -9,6 +9,7 @@ substitutions:
   fireplace_name: Basement
   fireplace_switch: switch.basement_fireplace_fireplace
   climate_entity: climate.basement_fireplace_thermostat
+  flame_number: number.basement_fireplace_flame_height
   fan_number: number.basement_fireplace_fan_speed
   light_switch: switch.basement_fireplace_light
   temp_step: "0.5"
