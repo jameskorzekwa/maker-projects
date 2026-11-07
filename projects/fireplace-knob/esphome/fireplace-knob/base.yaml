@@ -679,8 +679,10 @@ script:
           lv_obj_set_style_text_color(id(status_icon), lv_color_hex(fp_on ? ORANGE : GREY), 0);
           if (!connected)      lv_label_set_text(id(status_text), "OFFLINE");
           else if (!fp_known)  lv_label_set_text(id(status_text), "UNAVAILABLE");
-          else if (fp_on)      { static const char *MC[] = {"Manual", "Thermostat", "Smart"};
-                                 snprintf(buf, sizeof(buf), "ON \u00B7 %s", MC[m]); lv_label_set_text(id(status_text), buf); }
+          else if (fp_on)      { // Orange flame = on; just the mode name keeps the row narrow
+                                 // enough for the top of the circle (~235 px inside the ring).
+                                 static const char *MC[] = {"Manual", "Thermostat", "Smart"};
+                                 lv_label_set_text(id(status_text), MC[m]); }
           else                 lv_label_set_text(id(status_text), "OFF");
           lv_obj_set_style_text_color(id(status_text), lv_color_hex(fp_on ? ORANGE : SUB), 0);
 
@@ -803,7 +805,7 @@ font:
     glyphs: "0123456789.-\u00B0OFN"
   - file: {type: gfonts, family: Roboto, weight: 700}
     id: font_mode
-    size: 64
+    size: 48
     bpp: 4
     glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
   - file: {type: gfonts, family: Roboto, weight: 500}
@@ -876,7 +878,7 @@ lvgl:
         - obj:
             id: status_row
             align: CENTER
-            y: -160
+            y: -150
             width: SIZE_CONTENT
             height: SIZE_CONTENT
             bg_opa: TRANSP
@@ -947,6 +949,7 @@ lvgl:
             y: 12
             width: 400
             text_align: CENTER
+            long_mode: CLIP
             text: "MANUAL"
             text_font: font_mode
             text_color: 0xFFFFFF

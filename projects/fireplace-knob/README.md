@@ -31,7 +31,7 @@ alone, with no touch input.
 - The Proflame integrations report no set point (`null`) in Off/Manual. The
   knob keeps its own last value, saved across reboots.
 
-The top line shows the fireplace state, for example **ON · Thermostat**, a grey
+The top line shows the fireplace state: an orange flame with the mode name (for example **Thermostat**) when on, a grey
 flame with **OFF**, or **OFFLINE**/**UNAVAILABLE**. The dots at the bottom show
 the current screen. The screen dims after 20 s, turns off after 2 minutes, and
 then returns to the mode's first screen. When the screen is dark, the first
