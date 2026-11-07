@@ -286,6 +286,10 @@ globals:
   - {id: prev_burning, type: bool, restore_value: false, initial_value: 'false'}
   - {id: burn_seeded, type: bool, restore_value: false, initial_value: 'false'}
   - {id: cl_manual_on, type: bool, restore_value: false, initial_value: 'false'}
+  # Set when the user starts the thermostat from inactive: the first heat
+  # decision may ignite immediately (the min cycle guards automatic cycling).
+  - {id: tstat_fresh_start, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: light_cmd_ms, type: uint32_t, restore_value: false, initial_value: '0'}
   # Remote's room temperature (register 0x1F), used only as a fallback.
   - {id: remote_temp_f, type: float, restore_value: false, initial_value: 'NAN'}
   - {id: remote_temp_ms, type: uint32_t, restore_value: false, initial_value: '0'}
@@ -690,11 +694,13 @@ script:
           }
           // Turning OFF is never held back once the min on-time has passed,
           // and is immediate when the temperature is lost.
-          const bool may_switch = want ? cycle_ok : (cycle_ok || !have_temp);
+          const bool may_switch = want ? (cycle_ok || id(tstat_fresh_start)) : (cycle_ok || !have_temp);
+          if (!want) id(tstat_fresh_start) = false;
           const int aux = id(light_follows).state ? 1 : -1;  // light stays on while active
           if (want != burning && may_switch && !recent_cmd) {
             id(tstat_expect) = want ? 1 : 0;
             id(tstat_cmd_ms) = now;
+            id(tstat_fresh_start) = false;
             id(tstat_flame) = want ? flame : 0;
             if (want) id(apply_cmd).execute(-1, 1, flame, -1, -1, -1, aux, -1, -1);
             else id(apply_cmd).execute(-1, 0, -1, -1, -1, -1, aux, -1, -1);
@@ -703,6 +709,11 @@ script:
             id(tstat_flame) = flame;
             id(tstat_cmd_ms) = now;
             id(apply_cmd).execute(-1, -1, flame, -1, -1, -1, -1, -1, -1);
+          } else if (id(light_follows).state && !id(aux_switch).state && !recent_cmd &&
+                     (now - id(light_cmd_ms)) >= 20000u) {
+            // Thermostat active but idle: light on anyway.
+            id(light_cmd_ms) = now;
+            id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 1, -1, -1);
           }
           char msg[72];
           const bool fallback = id(room_temp_source).state == "Fireplace remote (fallback)";
@@ -720,6 +731,7 @@ script:
       m: int
     then:
       - lambda: |-
+          if (id(tstat_mode) == 0) id(tstat_fresh_start) = true;
           id(tstat_mode) = m;
           id(tstat_expect) = -1;
           id(pending_off) = false;
