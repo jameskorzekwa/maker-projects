@@ -1096,7 +1096,7 @@ lvgl:
         - label:
             id: sleep_temp
             align: CENTER
-            y: 10
+            y: 5                 # identical to main_temp so a tap does not move it
             width: 420
             text_align: CENTER
             text: "--"
