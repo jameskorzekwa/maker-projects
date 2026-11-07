@@ -1,0 +1,160 @@
+#include "../esphome/ifc_query.h"
+#include <cassert>
+#include <array>
+#include <cstring>
+#include <initializer_list>
+
+using namespace proflame_query;
+
+static uint8_t xor5(const uint8_t *f) {
+  uint8_t c = 0;
+  for (int i = 0; i < 5; ++i) c ^= f[i];
+  return c;
+}
+
+int main() {
+  // Request frames: GET only, valid checksums, expected registers.
+  for (const uint8_t *req : {GET_CONTROL, GET_STATE1, GET_STATE2}) {
+    assert(req[0] == 0x5E);
+    assert(xor5(req) == req[5]);
+  }
+  assert(GET_CONTROL[4] == 0x16 && GET_STATE1[4] == 0x17 && GET_STATE2[4] == 0x18);
+
+  // Live reply observed from James's fireplace on 2026-11-07.
+  const uint8_t live[] = {0xAE, 0xC1, 0xA0, 0x00, 0x16, 0xD9};
+  assert(classify(live, 6) == Result::UART_CONTROL);
+  const uint8_t ext[] = {0xAE, 0, 0, 0, 0x16, 0xB8};
+  assert(classify(ext, 6) == Result::EXTERNAL_CONTROL);
+  const uint8_t odd[] = {0xAE, 1, 0, 0, 0x16, 0xB9};
+  assert(classify(odd, 6) == Result::UNKNOWN_VALUE);
+
+  // Documented example: AE 00 61 00 17 D8 = mode ON, night light 6.
+  const uint8_t s1[] = {0xAE, 0x00, 0x61, 0x00, 0x17, 0xD8};
+  Reply r{};
+  assert(parse_get_reply(s1, 6, r) && r.reg == REG_STATE1);
+  State1 a = decode_state1(r);
+  assert(a.mode == 1 && a.light == 6 && !a.continuous_pilot);
+  assert(std::strcmp(mode_name(a.mode), "Manual") == 0);
+
+  // Live: AE 00 04 00 17 BD read while the fireplace was physically OFF.
+  const uint8_t live_off[] = {0xAE, 0x00, 0x04, 0x00, 0x17, 0xBD};
+  assert(parse_get_reply(live_off, 6, r));
+  a = decode_state1(r);
+  assert(a.mode == 0 && a.flags == 1 && a.light == 0 && !a.continuous_pilot);
+  assert(std::strcmp(mode_name(a.mode), "Off") == 0);
+
+  // State 1 with continuous pilot, mode OFF, light 0.
+  uint8_t s1p[] = {0xAE, 0x00, 0x80, 0x00, 0x17, 0};
+  s1p[5] = xor5(s1p);
+  assert(parse_get_reply(s1p, 6, r));
+  a = decode_state1(r);
+  assert(a.mode == 0 && a.light == 0 && a.continuous_pilot);
+
+  // Documented example: AE 00 00 00 18 B6 = everything off.
+  const uint8_t s2off[] = {0xAE, 0x00, 0x00, 0x00, 0x18, 0xB6};
+  assert(parse_get_reply(s2off, 6, r) && r.reg == REG_STATE2);
+  State2 b = decode_state2(r);
+  assert(b.flame == 0 && b.fan == 0 && !b.aux && !b.split_flow);
+
+  // Flame 3, AUX on, fan 5, split flow on: 1 101 1 011 = 0xDB.
+  uint8_t s2[] = {0xAE, 0x00, 0xDB, 0x00, 0x18, 0};
+  s2[5] = xor5(s2);
+  assert(parse_get_reply(s2, 6, r));
+  b = decode_state2(r);
+  assert(b.flame == 3 && b.aux && b.fan == 5 && b.split_flow);
+
+  // Rejections: wrong length, bad checksum, SET echo, unknown register, null.
+  assert(!parse_get_reply(nullptr, 0, r));
+  for (size_t n = 0; n < 6; ++n) assert(!parse_get_reply(s1, n, r));
+  for (size_t pos = 0; pos < 6; ++pos) {
+    uint8_t d[6];
+    std::memcpy(d, s1, 6);
+    d[pos] ^= 0x01;
+    assert(!parse_get_reply(d, 6, r));
+  }
+  const uint8_t set_echo[] = {0xAD, 0x00, 0x01, 0x00, 0x17, 0xBB};
+  assert(!parse_get_reply(set_echo, 6, r));
+  uint8_t other[] = {0xAE, 0, 0, 0, 0x19, 0};
+  other[5] = xor5(other);
+  assert(!parse_get_reply(other, 6, r));
+  const uint8_t seven[] = {0xAE, 0x00, 0x61, 0x00, 0x17, 0xD8, 0x00};
+  assert(!parse_get_reply(seven, 7, r));
+  assert(classify(s1, 6) == Result::INVALID);  // state reply is not an ownership reply
+
+  // Control request: exact documented frame, valid checksum, register 0x16 only.
+  assert(REQUEST_CONTROL[0] == 0x5D && REQUEST_CONTROL[4] == 0x16);
+  assert(xor5(REQUEST_CONTROL) == REQUEST_CONTROL[5]);
+  const uint8_t granted[] = {0xAD, 0xC1, 0xA0, 0x00, 0x16, 0xDA};
+  const uint8_t denied[] = {0xAD, 0x00, 0x00, 0x00, 0x16, 0xBB};
+  assert(classify_control_set_reply(granted, 6) == Result::UART_CONTROL);
+  assert(classify_control_set_reply(denied, 6) == Result::EXTERNAL_CONTROL);
+  assert(classify_control_set_reply(live, 6) == Result::INVALID);       // GET reply, not SET
+  assert(classify_control_set_reply(set_echo, 6) == Result::INVALID);   // register 0x17
+  uint8_t bad[6];
+  std::memcpy(bad, granted, 6);
+  bad[5] ^= 1;
+  assert(classify_control_set_reply(bad, 6) == Result::INVALID);
+
+  // ---- Encoding ----
+  // Documented SET examples: 5D 00 01 00 17 4B (mode ON) and 5D 00 80 00 18 C5.
+  uint8_t f[6];
+  assert(build_set(REG_STATE1, with_mode(0x00, 1), f));
+  const uint8_t doc1[] = {0x5D, 0x00, 0x01, 0x00, 0x17, 0x4B};
+  assert(std::memcmp(f, doc1, 6) == 0);
+  assert(build_set(REG_STATE2, with_split(0x00, true), f));
+  const uint8_t doc2[] = {0x5D, 0x00, 0x80, 0x00, 0x18, 0xC5};
+  assert(std::memcmp(f, doc2, 6) == 0);
+  // Each setter changes only its own field, for every possible input byte.
+  for (int b = 0; b < 256; ++b) {
+    const uint8_t v = static_cast<uint8_t>(b);
+    for (int x = 0; x <= 6; ++x) {
+      assert((with_light(v, x) & ~0x70) == (v & ~0x70) && ((with_light(v, x) >> 4) & 7) == x);
+      assert((with_flame(v, x) & ~0x07) == (v & ~0x07) && (with_flame(v, x) & 7) == x);
+      assert((with_fan(v, x) & ~0x70) == (v & ~0x70) && ((with_fan(v, x) >> 4) & 7) == x);
+    }
+    for (int m = 0; m < 4; ++m)
+      assert((with_mode(v, m) & ~0x03) == (v & ~0x03) && (with_mode(v, m) & 3) == m);
+    for (bool on : {false, true}) {
+      assert((with_pilot(v, on) & 0x7F) == (v & 0x7F) && bool(with_pilot(v, on) & 0x80) == on);
+      assert((with_split(v, on) & 0x7F) == (v & 0x7F) && bool(with_split(v, on) & 0x80) == on);
+      assert((with_aux(v, on) & ~0x08) == (v & ~0x08) && bool(with_aux(v, on) & 0x08) == on);
+    }
+  }
+  // Observed off byte 0x04 keeps undocumented bit 2 when turned on.
+  assert(with_mode(0x04, 1) == 0x05);
+  // A level reported as 7 is untouched by an unrelated change (AUX toggle).
+  assert((with_aux(0x07, true) & 0x07) == 7);
+  // Levels clamp to 0-6.
+  assert(with_flame(0, 9) == 6 && with_fan(0, -3) == 0 && with_light(0, 7) == 0x60);
+  // build_set refuses ownership and unknown registers; checksums valid.
+  assert(!build_set(0x16, 0, f) && !build_set(0x19, 0, f));
+  assert(build_set(REG_STATE2, 0x5C, f) && xor5(f) == f[5]);
+  // SET echoes recognised only for state registers with valid checksum.
+  assert(is_state_set_echo(set_echo, 6));          // documented AD 00 01 00 17 BB
+  assert(!is_state_set_echo(doc1, 6));             // a request is not an echo
+  assert(!is_state_set_echo(granted, 6));          // ownership echo is separate
+  assert(!parse_get_reply(doc1, 6, r));  // echo is never treated as state
+  // ---- Thermostat registers (live scan values) ----
+  for (const uint8_t *req : {GET_SETPOINT, GET_ROOM_TEMP, GET_SETPOINT_MIRROR})
+    assert(req[0] == 0x5E && xor5(req) == req[5]);
+  const uint8_t sp73[] = {0xAE, 0x00, 0x49, 0x00, 0x1E, 0xF9};   // after remote 71 -> 73
+  const uint8_t sp71[] = {0xAE, 0x00, 0x47, 0x00, 0x1E, 0xF7};   // before
+  const uint8_t mir73[] = {0xAE, 0x00, 0x49, 0x00, 0x21, 0xC6};
+  const uint8_t room[] = {0xAE, 0x02, 0x9E, 0x00, 0x1F, 0x2D};   // 670 = 67.0 F
+  assert(parse_get_reply(sp73, 6, r) && r.reg == REG_SETPOINT && setpoint_f(r) == 73);
+  assert(parse_get_reply(sp71, 6, r) && setpoint_f(r) == 71);
+  assert(parse_get_reply(mir73, 6, r) && r.reg == REG_SETPOINT_MIRROR && setpoint_f(r) == 73);
+  assert(parse_get_reply(room, 6, r) && r.reg == REG_ROOM_TEMP && room_temp_f(r) == 67.0f);
+  uint8_t g[6];
+  assert(build_setpoint(73, g));
+  const uint8_t want73[] = {0x5D, 0x00, 0x49, 0x00, 0x1E, static_cast<uint8_t>(0x5D ^ 0x49 ^ 0x1E)};
+  assert(std::memcmp(g, want73, 6) == 0 && xor5(g) == g[5]);
+  assert(build_setpoint(41, g) && build_setpoint(95, g));
+  assert(!build_setpoint(40, g) && !build_setpoint(96, g) && !build_setpoint(-5, g) && !build_setpoint(300, g));
+  assert(is_state_set_echo(std::array<uint8_t, 6>{0xAD, 0, 0x49, 0, 0x1E, static_cast<uint8_t>(0xAD ^ 0x49 ^ 0x1E)}.data(), 6));
+  // Registers outside the known set are still rejected.
+  uint8_t r20[] = {0xAE, 0, 0, 0, 0x20, 0};
+  r20[5] = xor5(r20);
+  assert(!parse_get_reply(r20, 6, r));
+  return 0;
+}

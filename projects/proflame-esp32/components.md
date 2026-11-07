@@ -5,8 +5,8 @@ confirmed availability, not that fit, electrical ratings or condition were teste
 
 | # | Component | Spec / acceptable substitute | Qty | Status | Source / option | Order ref | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | ESP32 board | NiceMCU ESP32-C5 | 1 | have | Owner confirmed | — | Exact model unverified; do not assume the NiceMCU 2.8IPS model. 4 MB build allocation; verify actual flash ≥4 MB before flashing |
-| 2 | USB data cable | Cable matching board's data-capable USB socket | 1 | have | Owner confirmed | — | Data link unverified; macOS ioreg 2026-11-06 returned controllers only, no USB serial port; not a cable-failure diagnosis |
+| 1 | ESP32 board | NiceMCU ESP32-C5 | 1 | have | Owner confirmed | — | C5rev1.0 runtime-confirmed; 4 MB flash, native USB. Exact PCB pinout unverified. |
+| 2 | USB data cable | Cable matching board's data-capable USB socket | 1 | have | Owner confirmed | — | Data link verified via successful flash; macOS ioreg 2026-11-06 returned controllers only, no USB serial port (pre-flash). Not a cable-failure diagnosis. |
 | 3 | USB supply | Reputable regulated 5 V supply sized to board specification | 1 | have | Owner confirmed | — | USB power only; never connect 5 V to IFC |
 | 4 | IFC pigtail | JST XH 2.5 mm, XHP-4-compatible housing and crimped leads | 1 | have | Owner confirmed | — | Verify actual IFC fit and each pin; colors are not evidence |
 | 5 | Wire/connectors | Insulated low-voltage signal leads and secure board terminations | 1 set | have | Owner confirmed | — | Gauge, temperature rating and final length pending mounting plan |
@@ -14,9 +14,9 @@ confirmed availability, not that fit, electrical ratings or condition were teste
 | 7 | Enclosure/strain relief | Nonconductive enclosure with cable retention, suitable temperature rating | 1 set | have | Owner confirmed | — | Location outside hot compartment not yet selected |
 | 8 | Multimeter | DC voltage and continuity; appropriate for the work | 1 | have | Owner confirmed | — | Do not use resistance/continuity on energized equipment |
 | 9 | Assembly tools | Wire stripper/cutter; soldering iron/solder or appropriate crimps as chosen | 1 set | need | Confirm exact termination method and tools | — | No soldering/crimping purchase until harness design verified |
-| 10 | Mock UART interface | USB-UART adapter with verified 3.3 V TX/RX logic | 1 | to-buy | Amazon candidates below | — | Owner did not select UART test equipment; not required for USB-only test |
+| 10 | Mock UART interface | USB-UART adapter with verified 3.3 V TX/RX logic | 1 | to-buy | Amazon candidates below | — | Still needed for planned mock testing, not for current network bench |
 | 11 | Logic analyzer | 3.3 V-compatible input, UART decode ≥9600 baud | 1 | need | Optional if mock adapter captures suffice | — | Defer purchase pending test design |
-| 12 | Host computer | USB-capable computer for flashing and mock tests | 1 | have | Owner confirmed | — | bee2 cannot flash laptop-attached USB directly |
+| 12 | Host computer | USB-capable computer for flashing and mock tests | 1 | have | Owner confirmed | — | Flashed on laptop through pinned SSH from bee2 |
 | 13 | OEM dongle and handheld remote | Existing matched system | 1 set | need | Existing installation; retain and identify | — | Model labels and rollback check pending |
 
 ## Purchase-history check
@@ -28,25 +28,20 @@ proof of non-ownership. Personal order dates, order numbers and email contents
 are intentionally not published in this public repository. There are no new
 project orders.
 
-## Amazon-first mock-interface candidates — NOT approved electrical substitutes
+No mock UART interface or logic analyzer purchases were made; the network-bench
+firmware is deployed via USB Improv and does not require a mock UART adapter.
+Future mock testing may require these items; tests against a mock precede IFC
+connection. The previous Amazon-first candidates remain unapproved electrically:
 
-Anonymous search snapshot 2026-11-06; prices/delivery may differ by account and
-location. A 3.3 V *power output* does not establish 3.3 V *TX logic*. Verify the
-datasheet and measure the actual adapter before using it; leave adapter power
-leads disconnected when the peer is separately powered. These are candidates,
-not an instruction to connect them to the IFC.
-
-| Option | Price | Rating / reviews | Fit uncertainty |
+| Option | Price on 2026-11-06 | Rating / reviews | Fit uncertainty |
 | --- | --- | --- | --- |
-| [HiLetgo CP2102](https://www.amazon.com/dp/B00LODGRV8) | $7.39 | 4.5 / 948 | Search title does not specify TX voltage; must verify |
-| [CP2102 three-pack](https://www.amazon.com/dp/B0FJRTL572) | $9.99 | 4.4 / 101 | 3.3 V/5 V output claim may refer to power, not logic |
-| [CP2102 cable](https://www.amazon.com/dp/B0GWDS3VR2) | $9.99 | 4.4 / 52 | Title explicitly claims 3.3 V TTL, but includes a 5 V power lead: isolate it |
+| [HiLetgo CP2102](https://www.amazon.com/dp/B00LODGRV8) | $7.39 | 4.5 / 948 | TX voltage must be verified |
+| [CP2102 three-pack](https://www.amazon.com/dp/B0FJRTL572) | $9.99 | 4.4 / 101 | Power-output claim does not establish logic voltage |
+| [CP2102 cable](https://www.amazon.com/dp/B0GWDS3VR2) | $9.99 | 4.4 / 52 | Title claims 3.3 V TTL; isolate its 5 V power lead |
 
-Immediate USB-only preparation: **$0 additional parts if confirmed items are
-suitable**. Later mock-interface allowance: $7.39–$9.99 before tax/shipping,
-excluding any still-unconfirmed tools. No final connected-build cost yet.
-No purchases made. Before buying, confirm rows 9 and 11 and verify the
-adapter's logic levels. Reconcile future orders from 2026-11-06 onward.
+Anonymous prices exclude tax/shipping and may change. No new hardware was
+purchased for this network-bench step. Confirm tool availability and electrical
+fit before purchasing; reconcile future orders from 2026-11-06 onward.
 
 ## C5 reference docs
 
