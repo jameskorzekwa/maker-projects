@@ -20,7 +20,7 @@
 # Credentials come from Device Builder secrets.yaml; none are stored here.
 esphome:
   name: proflame-bench
-  friendly_name: Proflame USB Bench
+  friendly_name: Basement Fireplace
   min_version: 2026.10.2
   includes:
     - ifc_query.h
@@ -168,7 +168,8 @@ uart:
             id(control_request_result).publish_state(
                 uart ? "Granted (verified)" : "Not granted (remote still in control)");
           }
-          const bool commit = uart && id(last_ctl_uart) && id(pend_s1_ok) && id(pend_s2_ok);
+          const bool was_uart = id(last_ctl_uart);
+          const bool commit = uart && was_uart && id(pend_s1_ok) && id(pend_s2_ok);
           id(last_ctl_uart) = uart;
           id(pend_s1_ok) = false;
           id(pend_s2_ok) = false;
@@ -176,6 +177,17 @@ uart:
           if (!uart) {
             id(have_state) = false;
             if (c != proflame_query::Result::EXTERNAL_CONTROL) return;  // unknown value: pause only
+            // Only an actual takeover (UART -> remote) cancels; if the remote
+            // already had control, the next command requests it instead.
+            if (!was_uart) {
+              if (!id(remote_published)) {
+                id(remote_published) = true;
+                id(fireplace_status).publish_state("Unknown (remote in control)");
+                id(flame_height).publish_state(NAN);
+                id(fan_speed).publish_state(NAN);
+              }
+              return;
+            }
             if (id(tstat_mode) > 0 && id(cl_burning)) {
               ESP_LOGW("proflame", "Remote took control while the thermostat was heating");
               id(cmd_result).publish_state("ALERT: remote took control while thermostat heating");
@@ -292,6 +304,7 @@ globals:
   # decision may ignite immediately (the min cycle guards automatic cycling).
   - {id: tstat_fresh_start, type: bool, restore_value: false, initial_value: 'false'}
   - {id: light_cmd_ms, type: uint32_t, restore_value: false, initial_value: '0'}
+  - {id: ctl_req_ms, type: uint32_t, restore_value: false, initial_value: '0'}
   # Remote's room temperature (register 0x1F), used only as a fallback.
   - {id: remote_temp_f, type: float, restore_value: false, initial_value: 'NAN'}
   - {id: remote_temp_ms, type: uint32_t, restore_value: false, initial_value: '0'}
@@ -340,14 +353,6 @@ text_sensor:
     entity_category: diagnostic
 
 sensor:
-  # Thermostat input: the main floor thermostat's temperature from Home
-  # Assistant (degrees F). Re-published in C for the climate entity.
-  - platform: homeassistant
-    id: ha_room_temp_f
-    entity_id: sensor.main_floor_temperature
-    internal: true
-    on_value:
-      - script.execute: update_room_temp
   - platform: template
     id: room_temperature
     name: Room Temperature
@@ -622,21 +627,19 @@ script:
     max_runs: 3
     then:
       - lambda: |-
-          const float ha = id(ha_room_temp_f).state;
-          const bool ha_ok = api::global_api_server != nullptr &&
-                             api::global_api_server->is_connected_with_state_subscription() && !std::isnan(ha);
-          // The remote value is only trusted while the IFC link is delivering it.
-          // ...and only if its value has changed within the last 2 hours, so a
-          // stale report can't keep the burner on indefinitely.
+          // Basement fireplace: the ONLY source is the handheld remote's room
+          // temperature report to the IFC (register 0x1F). The basement IFC
+          // (older board) does not provide 0x1F, so this is unavailable there
+          // and the thermostat stays off. The value is trusted only while the
+          // IFC keeps delivering it and it changed within the last 2 hours.
           const uint32_t now = millis();
           const bool remote_ok = id(remote_temp_seen) && (now - id(remote_temp_ms)) < 60000u &&
                                  (now - id(remote_change_ms)) < 2u * 3600u * 1000u &&
                                  !std::isnan(id(remote_temp_f));
           float f = NAN;
-          const char *src = id(remote_temp_seen) && !remote_ok && !ha_ok ?
-                            "Unavailable (remote reading stale)" : "Unavailable";
-          if (ha_ok) { f = ha; src = "Main floor thermostat"; }
-          else if (remote_ok) { f = id(remote_temp_f); src = "Fireplace remote (fallback)"; }
+          const char *src = id(remote_temp_seen) ? "Unavailable (remote reading stale)" :
+                            "Unavailable (this controller does not report the remote temperature)";
+          if (remote_ok) { f = id(remote_temp_f); src = "Fireplace remote"; }
           id(effective_temp_f) = f;
           if (id(room_temp_source).state != src) id(room_temp_source).publish_state(src);
           id(room_temperature).publish_state(std::isnan(f) ? NAN : (f - 32.0f) * 5.0f / 9.0f);
@@ -652,7 +655,14 @@ script:
           if (id(tstat_mode) == 0) { id(tstat_status) = id(tstat_status) == "Starting" ? "Inactive" : id(tstat_status); id(tstat_heating) = false; return; }
           if (id(apply_cmd).is_running()) return;
           if (!id(have_state)) { id(tstat_status) = "Waiting for fireplace state"; return; }
-          if (id(remote_in_control)) { id(tstat_status) = "Paused: remote in control"; return; }
+          if (id(remote_in_control)) {
+            if (!id(apply_cmd).is_running() && (millis() - id(ctl_req_ms)) >= 60000u) {
+              id(ctl_req_ms) = millis();
+              id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, -1, -1, -1);  // request control
+            }
+            id(tstat_status) = "Waiting for control (turn the fireplace off with the remote if it is on)";
+            return;
+          }
           // Main floor thermostat, falling back to the remote's reading. Only a
           // Home Assistant state subscription counts as connected (B4).
           const float room = id(effective_temp_f);
@@ -723,14 +733,9 @@ script:
             // flame 0 so the fan and light keep running.
             id(light_cmd_ms) = now;
             id(apply_cmd).execute(-1, 1, 0, -1, -1, -1, id(light_follows).state ? 1 : -1, -1, -1);
-          } else if (id(light_follows).state && !id(aux_switch).state && !recent_cmd &&
-                     (now - id(light_cmd_ms)) >= 20000u) {
-            // Thermostat active: light on.
-            id(light_cmd_ms) = now;
-            id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 1, -1, -1);
           }
           char msg[72];
-          const bool fallback = id(room_temp_source).state == "Fireplace remote (fallback)";
+          const bool fallback = false;
           if (!have_temp) snprintf(msg, sizeof(msg), "Off: room temperature unavailable");
           else snprintf(msg, sizeof(msg), "%s: room %.1f F%s, target %.1f F%s",
                         burning ? "Heating" : "Idle", room, fallback ? " (remote)" : "", target,
@@ -751,6 +756,17 @@ script:
           id(pending_off) = false;
           id(tstat_status) = "Starting";
           id(publish_climate).execute();
+          // Acquire control first if the remote has it (same verified path as
+          // every other command; changes nothing on the fireplace by itself).
+          // Requests control first if needed (apply_cmd does that), and turns
+          // the light on once when Light Follows Fireplace is enabled.
+          id(tstat_status) = id(remote_in_control) ? "Requesting control" : "Starting";
+          id(ctl_req_ms) = millis();
+          id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, id(light_follows).state ? 1 : -1, -1, -1);
+      - wait_until:
+          condition:
+            lambda: 'return !id(apply_cmd).is_running();'
+          timeout: 10s
       - script.execute: update_room_temp
       - script.execute: tstat_eval
 
@@ -782,8 +798,11 @@ script:
 
   # One user command. Parameters: -1 = leave unchanged.
   # p_power: 1 = power on (stored mode; stored flame if flame is 0).
+  # Queued: a command arriving while another runs is executed afterwards
+  # (each run reads fresh state first), instead of being dropped.
   - id: apply_cmd
-    mode: single
+    mode: queued
+    max_runs: 3
     parameters:
       p_power: int
       p_mode: int

@@ -1,8 +1,9 @@
 # X0A wiring
 
-**Verified working on 2026-11-07** (Montigo P52DF-F, green-print Proflame 2 IFC).
-James measured **3.3 V** white-to-yellow; an earlier 6.26 V reading was a
-measurement error and was retracted.
+**Verified working on 2026-11-07**, first on the living room Montigo P52DF-F and
+now on the basement unit. The white supply wire is not connected: it carries
+6.24 V (battery-backed) on the living room controller and 3.24 V on the basement
+controller.
 
 ![X0A to C5 wiring](wiring.svg)
 
@@ -16,7 +17,7 @@ the red SW1 button on the right:
 
 | Position left → right | Wire | IFC function | ESP32-C5 |
 | --- | --- | --- | --- |
-| 1 | White | 3.3 V output | **Not connected**, insulated |
+| 1 | White | Supply output (6.24 V living room, 3.24 V basement) | **Not connected**, insulated |
 | 2 | Green | TX (IFC output) | **GPIO4** (UART RX) |
 | 3 | Brown | RX (IFC input) | **GPIO5** (UART TX) |
 | 4, filled-dot end | Yellow | Ground | **GND** |
@@ -48,8 +49,8 @@ rightmost filled dot. Wire colors above are from James's photographs.
 - [Espressif ESP32-C5 datasheet](https://documentation.espressif.com/esp32-c5_datasheet_en.html): GPIO4/5 permit GPIO-matrix UART routing; they are also external JTAG MTCK/MTDO. Do not simultaneously use pad JTAG. Native USB uses GPIO13/14.
 
 Manufacturer sources establish OEM compatibility, not approval of this DIY
-interface. The mapping was confirmed on this fireplace by James's 3.3 V supply
-measurement and working communication; signal levels were not scope-measured.
+interface. The mapping was confirmed by working communication on both
+controllers; signal levels were not scope-measured.
 The OEM dongle's ISO1/ISO2 markings are consistent with ACPL-074L optocouplers;
 the direct connection works without isolation on this unit.
 

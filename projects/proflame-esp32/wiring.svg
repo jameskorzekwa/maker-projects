@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="850" viewBox="0 0 1280 850" role="img" aria-labelledby="title desc">
   <title id="title">Proflame X0A to NiceMCU ESP32-C5 UART wiring</title>
-  <desc id="desc">Installed X0A wire-entry view, red SW1 to the right. White power unused, green IFC TX to GPIO4 RX, brown IFC RX to GPIO5 TX, yellow ground to ESP ground. ESP powered separately by USB. Verified working on the Montigo P52DF-F on 2026-11-07; owner measured 3.3 V white-to-yellow.</desc>
+  <desc id="desc">Installed X0A wire-entry view, red SW1 to the right. White power unused, green IFC TX to GPIO4 RX, brown IFC RX to GPIO5 TX, yellow ground to ESP ground. ESP powered separately by USB. Verified working 2026-11-07; white supply is 6.24 V (living room) / 3.24 V (basement).</desc>
   <rect width="1280" height="850" fill="#f8fafc"/>
   <g font-family="Arial, sans-serif" fill="#172033">
     <text x="40" y="48" font-size="28" font-weight="bold">Proflame X0A → NiceMCU ESP32-C5</text>
@@ -14,7 +14,7 @@
     <text x="65" y="262" font-size="16">Wire-entry view as installed in your photo; SW1 is to the right.</text>
     <rect x="85" y="285" width="480" height="70" rx="5" fill="#ffffff" stroke="#334155" stroke-width="2"/>
     <g font-size="17" text-anchor="middle">
-      <text x="145" y="310">White</text><text x="145" y="336">3.3V OUT</text>
+      <text x="145" y="310">White</text><text x="145" y="336">SUPPLY</text>
       <text x="265" y="310">Green</text><text x="265" y="336">IFC TX</text>
       <text x="385" y="310">Brown</text><text x="385" y="336">IFC RX</text>
       <text x="505" y="310">Yellow</text><text x="505" y="336">GND ●</text>
@@ -53,7 +53,7 @@
     <text x="45" y="638" font-size="18" font-weight="bold">Orientation matters: the unplugged connector's mating-face view is mirrored.</text>
     <text x="45" y="668" font-size="17">JST XH 4-position housing (XHP-4). Colors refer to your existing cable, not a wiring standard.</text>
     <text x="45" y="698" font-size="17">Source: Bonaparte ProFlame 2 UART documentation + your X0A filled-dot / wire photographs.</text>
-    <text x="45" y="728" font-size="17">Verified 2026-11-07: owner measured 3.3 V white-to-yellow; serial link and full control working.</text>
+    <text x="45" y="728" font-size="17">Verified 2026-11-07: white carries 6.24 V (living room) / 3.24 V (basement) - leave unconnected.</text>
     <text x="45" y="758" font-size="17">GPIO4/5: valid C5 UART pins; do not use external pad JTAG simultaneously. Keep USB GPIO13/14 free.</text>
     <text x="45" y="798" font-size="18" font-weight="bold">Firmware: full fireplace control from Home Assistant (see README).</text>
   </g>
