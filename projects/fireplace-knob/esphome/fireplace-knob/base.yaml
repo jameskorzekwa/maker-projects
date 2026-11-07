@@ -1,16 +1,23 @@
 # Fireplace knob - Elecrow CrowPanel 2.1" ESP32-S3 rotary display (480x480).
 #
-# Controls one fireplace through Home Assistant:
-#   Long press (hold)  -> fireplace on/off
-#   Short press        -> next screen. Screens depend on the mode:
-#                           Manual:     Flame, Fan Speed, Light, Mode
-#                           Thermostat: Set Temp, Fan Speed, Light, Mode
-#                           Smart:      Set Temp, Fan Speed, Light, Mode
-#   Turn               -> adjust the value on the current screen
-#                         (Light: clockwise = on, counter-clockwise = off;
-#                          Mode: Manual <-> Thermostat <-> Smart)
-# Only a long press ever lights the fireplace: while it is off, the Mode
-# screen just picks the mode it will light in, and Flame is locked.
+# Controls one fireplace through Home Assistant.
+#
+#   Sleep      room temperature at the Sleep brightness. Tap -> Main.
+#              Turn -> Set Point (first click already counts). Hold -> on/off.
+#   Main       room temperature, set point, mode, on/off. Tap -> Settings.
+#              Turn -> Set Point.
+#   Set Point  turn = set temperature (Manual while burning: flame height).
+#              Tap or 10 s idle -> Main. Never lights the fireplace.
+#   Settings   turn = choose Power / Mode / Fan / Light / Flame / Brightness /
+#              Back, tap = open. Flame is listed only in Manual while burning.
+#   Edit       turn = change, tap -> Settings. Fan, light, flame and the set
+#              point are sent ~1 s after the knob stops; Power and Mode are
+#              sent when you tap (a timeout discards them). Brightness has
+#              two steps: Awake, then Sleep.
+#   Anywhere   hold ~0.9 s = fireplace on/off (on = the selected mode).
+#              20 s without input -> Sleep.
+#
+# Only a long press (or Power in Settings) ever lights the fireplace.
 #
 # Which fireplace it controls is set entirely by the substitutions below; the
 # per-fireplace files (../fireplace-knob-living-room.yaml, ...) include this
@@ -39,6 +46,10 @@ substitutions:
   flame_number: number.living_room_fireplace_flame_height
   fan_number: number.living_room_fireplace_fan_speed
   light_switch: switch.living_room_fireplace_light
+  # Optional alternative room-temperature sensor, selectable from the knob's
+  # HA device page ("Room Temperature Source").
+  alt_temp_entity: sensor.main_floor_temperature
+  alt_temp_label: "Living room"
 
   # ---- Behaviour ----
   temp_step: "1.0"          # degrees per knob detent
@@ -50,14 +61,17 @@ substitutions:
   fan_max: "6"
   rotation_sign: "1"        # set to "-1" if the knob turns the wrong way
   long_press: 700ms
-  dim_after_s: "20"
-  off_after_s: "120"
-  dim_brightness: "0.15"
+  setpoint_timeout_s: "10"  # Set Point -> Main
+  sleep_after_s: "20"       # any screen -> Sleep
+  awake_brightness_default: "100"
+  sleep_brightness_default: "25"
 
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
   min_version: 2026.10.2
+  includes:
+    - fireplace-knob/knob_helpers.h
   on_boot:
     # After the PCF8574 (setup priority 900), before the ST7701S driver (800):
     # the panel must be powered and out of reset before its init sequence.
@@ -75,10 +89,10 @@ esphome:
         - output.turn_on: tp_intr
     - priority: -100
       then:
-        - lambda: 'id(last_activity_ms) = millis();'
-        - light.turn_on:
-            id: display_backlight
-            brightness: 100%
+        - lambda: |-
+            id(last_activity_ms) = millis();
+            id(page) = 0;
+            id(apply_backlight)->execute();
         - script.execute: render
 
 esp32:
@@ -168,7 +182,7 @@ output:
 light:
   - platform: monochromatic
     id: display_backlight
-    name: Display Backlight
+    internal: true
     output: bl_pwm
     restore_mode: ALWAYS_ON
     default_transition_length: 250ms
@@ -248,30 +262,36 @@ display:
 # ------------------------------------------------------------------
 # State
 # ------------------------------------------------------------------
-# Screen ids (the visible set depends on the selected mode, see page_list):
-#   0 = Set Temp, 1 = Flame, 2 = Fan Speed, 3 = Light, 4 = Mode
-#   Manual:     Flame, Fan, Light, Mode
-#   Thermostat: Set Temp, Fan, Light, Mode     (IFC regulates the flame)
-#   Smart:      Set Temp, Fan Speed, Light, Mode (flame scales with demand)
-# The fan is never automatic: the user picks the speed in every mode, and the
-# Proflame 2 IFC itself delays it ~5 min after ignition and runs it ~12 min
-# after the burner goes out.
+# page: 0 Sleep, 1 Main, 2 Set Point, 3 Settings,
+#       4 Power, 5 Mode, 6 Fan, 7 Light, 8 Flame, 9 Brightness (edit screens)
 globals:
-  - id: page              # current screen id; -1 = first screen of the list
+  - id: page
     type: int
-    initial_value: "-1"
-  - id: mode_sel          # 0 = Manual, 1 = Thermostat, 2 = Smart
+    initial_value: "0"
+  - id: settings_sel        # highlighted row in Settings
+    type: int
+    initial_value: "0"
+  - id: bright_step         # Brightness edit: 0 = Awake, 1 = Sleep
+    type: int
+    initial_value: "0"
+  - id: mode_sel            # 0 Manual, 1 Thermostat, 2 Smart (committed)
     type: int
     restore_value: true
+    initial_value: "1"
+  - id: mode_edit           # value being chosen on the Mode screen
+    type: int
     initial_value: "0"
+  - id: power_edit          # value being chosen on the Power screen
+    type: bool
+    initial_value: "false"
   - id: mode_pending
     type: bool
     initial_value: "false"
-  - id: setpoint          # what the knob shows / last sent
+  - id: setpoint            # what the knob shows / last sent
     type: float
     restore_value: true
     initial_value: "${temp_default}"
-  - id: temp_pending      # user is turning; ignore HA echoes until sent
+  - id: temp_pending
     type: bool
     initial_value: "false"
   - id: flame_target
@@ -295,18 +315,61 @@ globals:
   - id: long_fired
     type: bool
     initial_value: "false"
-  - id: press_woke        # the current press started on a dark screen
+  - id: press_from_sleep    # the current press started on the Sleep screen
     type: bool
     initial_value: "false"
   - id: last_activity_ms
     type: uint32_t
     initial_value: "0"
-  - id: screen_level      # 0 = full, 1 = dimmed, 2 = off
-    type: int
-    initial_value: "0"
   - id: toast_until_ms
     type: uint32_t
     initial_value: "0"
+
+# ------------------------------------------------------------------
+# Home Assistant: settings exposed on the device page
+# ------------------------------------------------------------------
+number:
+  - platform: template
+    id: awake_brightness
+    name: Awake Brightness
+    icon: mdi:brightness-7
+    entity_category: config
+    unit_of_measurement: "%"
+    min_value: 10
+    max_value: 100
+    step: 5
+    initial_value: ${awake_brightness_default}
+    restore_value: true
+    optimistic: true
+    set_action:
+      - lambda: 'id(apply_backlight)->execute();'
+  - platform: template
+    id: sleep_brightness
+    name: Sleep Brightness
+    icon: mdi:brightness-4
+    entity_category: config
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 5
+    initial_value: ${sleep_brightness_default}
+    restore_value: true
+    optimistic: true
+    set_action:
+      - lambda: 'id(apply_backlight)->execute();'
+
+select:
+  - platform: template
+    id: temp_source
+    name: Room Temperature Source
+    icon: mdi:home-thermometer-outline
+    entity_category: config
+    options: ["Fireplace", "${alt_temp_label}"]
+    initial_option: "Fireplace"
+    restore_value: true
+    optimistic: true
+    set_action:
+      - script.execute: render
 
 # ------------------------------------------------------------------
 # Home Assistant state mirrors
@@ -351,6 +414,11 @@ sensor:
     id: ha_room_temp
     entity_id: ${climate_entity}
     attribute: current_temperature
+    on_value:
+      - script.execute: render
+  - platform: homeassistant
+    id: ha_alt_temp
+    entity_id: ${alt_temp_entity}
     on_value:
       - script.execute: render
   - platform: homeassistant
@@ -403,7 +471,7 @@ binary_sensor:
     on_press:
       - lambda: |-
           id(long_fired) = false;
-          id(press_woke) = id(screen_level) == 2;
+          id(press_from_sleep) = id(page) == 0;
       - script.execute: long_press_timer
     on_release:
       - script.stop: long_press_timer
@@ -414,7 +482,7 @@ binary_sensor:
             - lambda: |-
                 id(toast_until_ms) = 0;
                 lv_obj_add_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
-            - script.execute: short_press
+            - script.execute: tap
 
 button:
   - platform: restart
@@ -425,19 +493,42 @@ button:
 # Behaviour
 # ------------------------------------------------------------------
 script:
-  # Wake the screen and restart the idle timer. Callers check whether the
-  # screen was dark first, so an input that only wakes it changes nothing.
+  # Backlight for the current screen (Sleep brightness on page 0, otherwise
+  # Awake). While editing the Sleep brightness the screen previews it.
+  - id: apply_backlight
+    then:
+      - lambda: |-
+          float pct = id(awake_brightness).state;
+          if (id(page) == 0 || (id(page) == 9 && id(bright_step) == 1)) pct = id(sleep_brightness).state;
+          if (std::isnan(pct)) pct = 100;
+          auto call = id(display_backlight).turn_on();
+          call.set_brightness(pct / 100.0f);
+          call.perform();
+
+  # Switch screen. Entering an edit screen seeds its temporary value.
+  - id: go
+    parameters: {to: int}
+    then:
+      - lambda: |-
+          const bool fp_on = id(ha_fireplace).state == "on";
+          id(page) = to;
+          switch (to) {
+            case 3: break;
+            case 4: id(power_edit) = fp_on; break;
+            case 5: id(mode_edit) = id(mode_sel); break;
+            case 9: id(bright_step) = 0; break;
+          }
+          id(apply_backlight)->execute();
+          id(render)->execute();
+          lv_obj_t *scr = id(page_value)->obj;
+          if (to == 0) scr = id(page_sleep)->obj;
+          else if (to == 1) scr = id(page_main)->obj;
+          else if (to == 3) scr = id(page_settings)->obj;
+          if (lv_screen_active() != scr) lv_screen_load(scr);
+
   - id: wake
     then:
       - lambda: 'id(last_activity_ms) = millis();'
-      - if:
-          condition:
-            lambda: 'return id(screen_level) != 0;'
-          then:
-            - lambda: 'id(screen_level) = 0;'
-            - light.turn_on:
-                id: display_backlight
-                brightness: 100%
 
   - id: long_press_timer
     mode: restart
@@ -445,25 +536,12 @@ script:
       - script.execute: wake
       - delay: 200ms
       - lambda: |-
+          if (id(page) == 0) id(go)->execute(1);
           bool on = id(ha_fireplace).state == "on";
           id(show_toast)->execute(on ? "Hold to turn OFF" : "Hold to turn ON", 2000);
       - delay: ${long_press}
       - lambda: 'id(long_fired) = true;'
       - script.execute: toggle_fireplace
-
-  - id: short_press
-    then:
-      - lambda: |-
-          id(wake)->execute();
-          if (id(press_woke)) return;   // that press only woke the screen
-          int L[5]; int n = 0; const int m = id(mode_sel);
-          L[n++] = (m == 0) ? 1 : 0;      // Flame (Manual) or Set Temp
-          L[n++] = 2;                     // Fan (every mode)
-          L[n++] = 3; L[n++] = 4;         // Light, Mode
-          int idx = -1;
-          for (int i = 0; i < n; i++) if (L[i] == id(page)) idx = i;
-          id(page) = L[(idx + 1) % n];    // not in list -> idx -1 -> first
-          id(render)->execute();
 
   - id: show_toast
     parameters: {text: string, ms: int}
@@ -473,8 +551,99 @@ script:
           lv_obj_remove_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
           id(toast_until_ms) = millis() + ms;
 
-  # On: light it in the mode chosen on the Mode screen (Manual uses the last
-  # flame height). This is the only path that ever ignites the fireplace.
+  # Rows of the Settings list for the current state. Returns the count and
+  # fills ids: 4 Power, 5 Mode, 6 Fan, 7 Light, 8 Flame, 9 Brightness, 1 Back.
+  - id: tap
+    then:
+      - lambda: |-
+          id(wake)->execute();
+          const bool fp_on = id(ha_fireplace).state == "on";
+          const int p = id(page);
+          if (id(press_from_sleep)) { id(go)->execute(1); return; }   // just wake
+          switch (p) {
+            case 0: id(go)->execute(1); break;
+            case 1: id(settings_sel) = 0; id(go)->execute(3); break;
+            case 2: id(go)->execute(1); break;
+            case 3: {
+              int rows[8]; int n = settings_rows(rows, fp_on, id(mode_sel));
+              int sel = std::min(id(settings_sel), n - 1);
+              id(go)->execute(rows[sel]);
+              break;
+            }
+            case 4:
+              if (id(power_edit) != fp_on) id(toggle_fireplace)->execute();
+              id(go)->execute(3);
+              break;
+            case 5:
+              if (id(mode_edit) != id(mode_sel)) {
+                id(mode_sel) = id(mode_edit);
+                if (fp_on) { id(mode_pending) = true; id(send_mode)->execute(); }
+              }
+              id(go)->execute(3);
+              break;
+            case 9:
+              if (id(bright_step) == 0) { id(bright_step) = 1; id(apply_backlight)->execute(); id(render)->execute(); }
+              else id(go)->execute(3);
+              break;
+            default: id(go)->execute(3); break;   // Fan, Light, Flame
+          }
+
+  - id: knob_turn
+    parameters: {dir: int}
+    then:
+      - lambda: |-
+          id(wake)->execute();
+          const bool fp_on = id(ha_fireplace).state == "on";
+          int p = id(page);
+          if (p == 0 || p == 1) { id(go)->execute(2); p = 2; }   // first click counts
+          switch (p) {
+            case 2: {
+              if (id(mode_sel) == 0 && fp_on) {        // Manual: flame height
+                int f = std::min(${flame_max}, std::max(1, id(flame_target) + dir));
+                if (f != id(flame_target)) { id(flame_target) = f; id(flame_pending) = true; id(send_flame)->execute(); }
+              } else {
+                float t = id(setpoint) + dir * ${temp_step};
+                id(setpoint) = std::min((float) ${temp_max}, std::max((float) ${temp_min}, t));
+                id(temp_pending) = true;
+                id(send_temp)->execute();
+              }
+              break;
+            }
+            case 3: {
+              int rows[8]; int n = settings_rows(rows, fp_on, id(mode_sel));
+              id(settings_sel) = std::min(n - 1, std::max(0, id(settings_sel) + dir));
+              break;
+            }
+            case 4: id(power_edit) = dir > 0; break;
+            case 5: id(mode_edit) = std::min(2, std::max(0, id(mode_edit) + dir)); break;
+            case 6: {
+              int f = std::min(${fan_max}, std::max(0, id(fan_target) + dir));
+              if (f != id(fan_target)) { id(fan_target) = f; id(fan_pending) = true; id(send_fan)->execute(); }
+              break;
+            }
+            case 7: {
+              bool want = dir > 0;
+              bool cur = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
+              if (want != cur) { id(light_target) = want; id(light_pending) = true; id(send_light)->execute(); }
+              break;
+            }
+            case 8: {
+              if (!fp_on) { id(show_toast)->execute("Hold knob to\nturn on first", 2000); break; }
+              int f = std::min(${flame_max}, std::max(1, id(flame_target) + dir));
+              if (f != id(flame_target)) { id(flame_target) = f; id(flame_pending) = true; id(send_flame)->execute(); }
+              break;
+            }
+            case 9: {
+              auto *n = id(bright_step) == 0 ? (number::Number *) id(awake_brightness) : (number::Number *) id(sleep_brightness);
+              float lo = id(bright_step) == 0 ? 10 : 0;
+              float v = std::min(100.0f, std::max(lo, n->state + dir * 5));
+              if (v != n->state) n->make_call().set_value(v).perform();
+              break;
+            }
+          }
+          id(render)->execute();
+
+  # On: light it in the selected mode (Manual uses the last flame height).
   - id: toggle_fireplace
     then:
       - if:
@@ -501,59 +670,6 @@ script:
                     static const char *M[] = {"Manual", "Thermostat", "Smart"};
                     return std::string(M[id(mode_sel)]);
 
-  - id: knob_turn
-    parameters: {dir: int}
-    then:
-      - lambda: |-
-          bool was_off = id(screen_level) == 2;
-          id(wake)->execute();
-          if (was_off) return;
-          const bool fp_on = id(ha_fireplace).state == "on";
-          if (id(page) < 0) id(render)->execute();   // resolve first screen
-          switch (id(page)) {
-            case 0: {  // Set Temp: always allowed; never ignites
-              float t = id(setpoint) + dir * ${temp_step};
-              id(setpoint) = std::min((float) ${temp_max}, std::max((float) ${temp_min}, t));
-              id(temp_pending) = true;
-              id(send_temp)->execute();
-              break;
-            }
-            case 1: {  // Flame (Manual): a flame > 0 would light an off fireplace
-              if (!fp_on) { id(show_toast)->execute("Hold knob to\nturn on first", 2000); break; }
-              int f = std::min(${flame_max}, std::max(1, id(flame_target) + dir));
-              if (f == id(flame_target)) break;
-              id(flame_target) = f;
-              id(flame_pending) = true;
-              id(send_flame)->execute();
-              break;
-            }
-            case 2: {
-              int f = std::min(${fan_max}, std::max(0, id(fan_target) + dir));
-              if (f == id(fan_target)) break;
-              id(fan_target) = f;
-              id(fan_pending) = true;
-              id(send_fan)->execute();
-              break;
-            }
-            case 3: {
-              bool want = dir > 0;
-              bool cur = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
-              if (want == cur) break;
-              id(light_target) = want;
-              id(light_pending) = true;
-              id(send_light)->execute();
-              break;
-            }
-            case 4: {  // Mode: applied now if burning, else used at next turn-on
-              int m = std::min(2, std::max(0, id(mode_sel) + dir));
-              if (m == id(mode_sel)) break;
-              id(mode_sel) = m;
-              if (fp_on) { id(mode_pending) = true; id(send_mode)->execute(); }
-              break;
-            }
-          }
-          id(render)->execute();
-
   # Debounced: one HA call after the knob stops turning.
   - id: send_temp
     mode: restart
@@ -574,21 +690,16 @@ script:
   - id: send_mode
     mode: restart
     then:
-      - delay: 1200ms
-      - if:
-          condition:
-            lambda: 'return id(ha_fireplace).state == "on";'
-          then:
-            - homeassistant.action:
-                action: climate.set_preset_mode
-                data:
-                  entity_id: ${climate_entity}
-                data_template:
-                  preset_mode: "{{ m }}"
-                variables:
-                  m: !lambda |-
-                    static const char *M[] = {"Manual", "Thermostat", "Smart"};
-                    return std::string(M[id(mode_sel)]);
+      - homeassistant.action:
+          action: climate.set_preset_mode
+          data:
+            entity_id: ${climate_entity}
+          data_template:
+            preset_mode: "{{ m }}"
+          variables:
+            m: !lambda |-
+              static const char *M[] = {"Manual", "Thermostat", "Smart"};
+              return std::string(M[id(mode_sel)]);
       - delay: 5s
       - lambda: 'id(mode_pending) = false;'
       - script.execute: render
@@ -654,122 +765,193 @@ script:
     then:
       - lambda: |-
           static const uint32_t ORANGE = 0xFF7A1A, RED = 0xFF4A2A, CYAN = 0x38BDF8,
-                                YELLOW = 0xFACC15, PURPLE = 0xA78BFA, GREY = 0x5A5A5A,
-                                DIM = 0x2A2A2A, WHITE = 0xFFFFFF, SUB = 0x9A9A9A;
-          char buf[48];
+                                YELLOW = 0xFACC15, PURPLE = 0xA78BFA, GREEN = 0x4ADE80,
+                                GREY = 0x5A5A5A, DIM = 0x333333, WHITE = 0xFFFFFF,
+                                SUB = 0x9A9A9A;
+          static const char *MODE_UP[] = {"MANUAL", "THERMOSTAT", "SMART"};
+          static const char *MODE_MC[] = {"Manual", "Thermostat", "Smart"};
+          char buf[64];
           const bool connected = api::global_api_server->is_connected();
           const std::string fp = id(ha_fireplace).state;
           const bool fp_on = fp == "on";
           const bool fp_known = fp == "on" || fp == "off";
           const int m = id(mode_sel);
-
-          // ---- screens available in this mode ----
-          int L[5]; int n = 0;
-          L[n++] = (m == 0) ? 1 : 0;
-          L[n++] = 2;
-          L[n++] = 3; L[n++] = 4;
-          int idx = -1;
-          for (int i = 0; i < n; i++) if (L[i] == id(page)) idx = i;
-          if (idx < 0) { idx = 0; id(page) = L[0]; }
           const int p = id(page);
+          const bool manual_flame = (m == 0 && fp_on);
 
-          // ---- status row ----
-          static const char *MODE_NAMES[] = {"MANUAL", "THERMOSTAT", "SMART"};
-          lv_label_set_text(id(status_icon), fp_on ? "\U000F0238" : "\U000F1722");
-          lv_obj_set_style_text_color(id(status_icon), lv_color_hex(fp_on ? ORANGE : GREY), 0);
-          if (!connected)      lv_label_set_text(id(status_text), "OFFLINE");
-          else if (!fp_known)  lv_label_set_text(id(status_text), "UNAVAILABLE");
-          else if (fp_on)      { // Orange flame = on; just the mode name keeps the row narrow
-                                 // enough for the top of the circle (~235 px inside the ring).
-                                 static const char *MC[] = {"Manual", "Thermostat", "Smart"};
-                                 lv_label_set_text(id(status_text), MC[m]); }
-          else                 lv_label_set_text(id(status_text), "OFF");
-          lv_obj_set_style_text_color(id(status_text), lv_color_hex(fp_on ? ORANGE : SUB), 0);
+          // ---- room temperature (selected source, fallback to fireplace) ----
+          float room = id(ha_room_temp).state;
+          bool alt = id(temp_source).current_option() == "${alt_temp_label}";
+          if (alt && !std::isnan(id(ha_alt_temp).state)) room = id(ha_alt_temp).state;
+          if (std::isnan(room)) snprintf(buf, sizeof(buf), "--");
+          else snprintf(buf, sizeof(buf), "%.0f\u00B0", room);
+          lv_label_set_text(id(sleep_temp), buf);
+          lv_label_set_text(id(main_temp), buf);
+          lv_obj_set_style_text_color(id(sleep_temp), lv_color_hex(connected ? WHITE : GREY), 0);
+          lv_obj_set_style_text_color(id(main_temp), lv_color_hex(connected ? WHITE : GREY), 0);
 
-          // ---- page ----
-          static const char *TITLES[] = {"SET TEMP", "FLAME", "FAN SPEED", "LIGHT", "MODE"};
-          static const char *ICONS[] = {"\U000F050F", "\U000F0238", "\U000F0210", "\U000F0335", "\U000F1542"};
-          lv_label_set_text(id(title_label), TITLES[p]);
-          lv_label_set_text(id(title_icon), ICONS[p]);
-          if (p == 4) {
-            lv_obj_add_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_remove_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
-          } else {
-            lv_obj_remove_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
+          // ---- status rows (same content on Main, Value and Settings) ----
+          const char *st_icon = fp_on ? "\U000F0238" : "\U000F1722";
+          const char *st_text = !connected ? "OFFLINE" : !fp_known ? "UNAVAILABLE" : fp_on ? MODE_MC[m] : "OFF";
+          lv_obj_t *sicons[] = {id(status_icon_m), id(status_icon_v), id(status_icon_s)};
+          lv_obj_t *stexts[] = {id(status_text_m), id(status_text_v), id(status_text_s)};
+          for (int i = 0; i < 3; i++) {
+            lv_label_set_text(sicons[i], st_icon);
+            lv_obj_set_style_text_color(sicons[i], lv_color_hex(fp_on ? ORANGE : GREY), 0);
+            lv_label_set_text(stexts[i], st_text);
+            lv_obj_set_style_text_color(stexts[i], lv_color_hex(fp_on ? ORANGE : SUB), 0);
           }
 
-          uint32_t accent = ORANGE;
-          switch (p) {
-            case 0: {
-              accent = ORANGE;
-              snprintf(buf, sizeof(buf), "${temp_format}\u00B0", id(setpoint));
-              lv_label_set_text(id(value_label), buf);
-              lv_arc_set_range(id(ring), (int32_t) (${temp_min} * 10), (int32_t) (${temp_max} * 10));
-              lv_arc_set_value(id(ring), (int32_t) lroundf(id(setpoint) * 10));
-              float room = id(ha_room_temp).state;
-              if (id(temp_pending))      snprintf(buf, sizeof(buf), "Setting...");
-              else if (std::isnan(room)) snprintf(buf, sizeof(buf), "Room --");
-              else                       snprintf(buf, sizeof(buf), "Room %.0f\u00B0", room);
-              lv_label_set_text(id(sub_label), buf);
-              break;
-            }
-            case 1: {
-              accent = RED;
-              int f = fp_on ? id(flame_target) : 0;
-              if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
-              lv_label_set_text(id(value_label), buf);
-              lv_arc_set_range(id(ring), 0, ${flame_max});
-              lv_arc_set_value(id(ring), f);
-              lv_label_set_text(id(sub_label), !fp_on ? "Hold knob to turn on"
-                                : id(flame_pending) ? "Setting..." : "Flame 1 - ${flame_max}");
-              break;
-            }
-            case 2: {
-              accent = CYAN;
-              int f = id(fan_target);
-              if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
-              lv_label_set_text(id(value_label), buf);
-              lv_arc_set_range(id(ring), 0, ${fan_max});
-              lv_arc_set_value(id(ring), f);
-              lv_label_set_text(id(sub_label), id(fan_pending) ? "Setting..." : "Speed 0 - ${fan_max}");
-              break;
-            }
-            case 3: {
-              accent = YELLOW;
-              bool lon = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
-              lv_label_set_text(id(value_label), lon ? "ON" : "OFF");
-              lv_arc_set_range(id(ring), 0, 1);
-              lv_arc_set_value(id(ring), lon ? 1 : 0);
-              lv_label_set_text(id(title_icon), lon ? "\U000F0335" : "\U000F0336");
-              lv_label_set_text(id(sub_label), "Turn right: on   left: off");
-              break;
-            }
-            case 4: {
-              accent = PURPLE;
-              static const char *HINT[] = {"You set flame + fan", "Auto flame, you set fan", "Smart flame, you set fan"};
-              lv_label_set_text(id(mode_label), MODE_NAMES[m]);
-              lv_arc_set_range(id(ring), 0, 3);
-              lv_arc_set_value(id(ring), m + 1);
-              lv_label_set_text(id(sub_label), id(mode_pending) ? "Setting..."
-                                : fp_on ? HINT[m] : "Used at next turn-on");
-              break;
+          // ---- Sleep ----
+          if (fp_on) lv_obj_remove_flag(id(sleep_flame), LV_OBJ_FLAG_HIDDEN);
+          else lv_obj_add_flag(id(sleep_flame), LV_OBJ_FLAG_HIDDEN);
+
+          // ---- Main ----
+          if (!connected) snprintf(buf, sizeof(buf), "Connecting to Home Assistant");
+          else if (manual_flame) snprintf(buf, sizeof(buf), "Flame %d", id(flame_target));
+          else snprintf(buf, sizeof(buf), "Set ${temp_format}\u00B0", id(setpoint));
+          lv_label_set_text(id(main_set), buf);
+          lv_obj_set_style_text_color(id(main_set), lv_color_hex(fp_on ? ORANGE : SUB), 0);
+          snprintf(buf, sizeof(buf), "Fan %d  \u00B7  Light %s", id(fan_target),
+                   (id(light_pending) ? id(light_target) : id(ha_light).state == "on") ? "on" : "off");
+          lv_label_set_text(id(main_info), buf);
+          lv_label_set_text(id(main_hint), manual_flame ? "Tap: settings   Turn: flame" : "Tap: settings   Turn: set temp");
+
+          // ---- Settings list ----
+          if (p == 3) {
+            static const char *NAMES[] = {"", "Back", "", "", "Power", "Mode", "Fan", "Light", "Flame", "Brightness"};
+            int rows[8]; int n = settings_rows(rows, fp_on, m);
+            int sel = std::min(id(settings_sel), n - 1);
+            id(settings_sel) = sel;
+            lv_obj_t *R[] = {id(row_m2), id(row_m1), id(row_0), id(row_p1), id(row_p2)};
+            for (int k = -2; k <= 2; k++) {
+              int i = sel + k;
+              lv_obj_t *lbl = R[k + 2];
+              if (i < 0 || i >= n) { lv_label_set_text(lbl, ""); continue; }
+              int r = rows[i];
+              if (k != 0) { lv_label_set_text(lbl, NAMES[r]); continue; }
+              char val[32] = "";
+              switch (r) {
+                case 4: snprintf(val, sizeof(val), "%s", fp_on ? "ON" : "OFF"); break;
+                case 5: snprintf(val, sizeof(val), "%s", MODE_MC[m]); break;
+                case 6: if (id(fan_target) > 0) snprintf(val, sizeof(val), "%d", id(fan_target)); else snprintf(val, sizeof(val), "Off"); break;
+                case 7: snprintf(val, sizeof(val), "%s", (id(light_pending) ? id(light_target) : id(ha_light).state == "on") ? "On" : "Off"); break;
+                case 8: snprintf(val, sizeof(val), "%d", id(flame_target)); break;
+                case 9: snprintf(val, sizeof(val), "%.0f%%", id(awake_brightness).state); break;
+              }
+              if (val[0]) snprintf(buf, sizeof(buf), "%s   %s", NAMES[r], val);
+              else snprintf(buf, sizeof(buf), "%s", NAMES[r]);
+              lv_label_set_text(lbl, buf);
             }
           }
-          if (!connected) lv_label_set_text(id(sub_label), "Connecting to Home Assistant");
 
-          lv_obj_set_style_arc_color(id(ring), lv_color_hex(accent), LV_PART_INDICATOR);
-          lv_obj_set_style_text_color(id(title_icon), lv_color_hex(accent), 0);
-          lv_obj_set_style_text_color(id(value_label), lv_color_hex(connected ? WHITE : GREY), 0);
-          lv_obj_set_style_text_color(id(mode_label), lv_color_hex(connected ? WHITE : GREY), 0);
-
-          // ---- page dots, centred for 3 or 4 screens ----
-          lv_obj_t *dots[] = {id(dot0), id(dot1), id(dot2), id(dot3)};
-          for (int i = 0; i < 4; i++) {
-            if (i >= n) { lv_obj_add_flag(dots[i], LV_OBJ_FLAG_HIDDEN); continue; }
-            lv_obj_remove_flag(dots[i], LV_OBJ_FLAG_HIDDEN);
-            lv_obj_set_x(dots[i], (int32_t) ((2 * i - (n - 1)) * 14));
-            lv_obj_set_style_bg_color(dots[i], lv_color_hex(i == idx ? accent : DIM), 0);
+          // ---- Value page (Set Point + edit screens) ----
+          if (p == 2 || p >= 4) {
+            uint32_t accent = ORANGE;
+            const char *title = ""; const char *icon = "";
+            bool show_mode_label = false;
+            switch (p) {
+              case 2:
+                if (manual_flame) {
+                  accent = RED; title = "FLAME"; icon = "\U000F0238";
+                  snprintf(buf, sizeof(buf), "%d", id(flame_target));
+                  lv_label_set_text(id(value_label), buf);
+                  lv_arc_set_range(id(ring), 0, ${flame_max});
+                  lv_arc_set_value(id(ring), id(flame_target));
+                  lv_label_set_text(id(sub_label), id(flame_pending) ? "Setting..." : "Flame 1 - ${flame_max}");
+                } else {
+                  accent = ORANGE; title = "SET TEMP"; icon = "\U000F050F";
+                  snprintf(buf, sizeof(buf), "${temp_format}\u00B0", id(setpoint));
+                  lv_label_set_text(id(value_label), buf);
+                  lv_arc_set_range(id(ring), (int32_t) (${temp_min} * 10), (int32_t) (${temp_max} * 10));
+                  lv_arc_set_value(id(ring), (int32_t) lroundf(id(setpoint) * 10));
+                  if (id(temp_pending))      snprintf(buf, sizeof(buf), "Setting...");
+                  else if (!fp_on)           snprintf(buf, sizeof(buf), "Saved for next turn-on");
+                  else if (std::isnan(room)) snprintf(buf, sizeof(buf), "Room --");
+                  else                       snprintf(buf, sizeof(buf), "Room %.0f\u00B0", room);
+                  lv_label_set_text(id(sub_label), buf);
+                }
+                break;
+              case 4: {
+                accent = GREEN; title = "POWER"; icon = "\U000F0425";
+                lv_label_set_text(id(value_label), id(power_edit) ? "ON" : "OFF");
+                lv_arc_set_range(id(ring), 0, 1);
+                lv_arc_set_value(id(ring), id(power_edit) ? 1 : 0);
+                if (id(power_edit) != fp_on) snprintf(buf, sizeof(buf), "Tap to turn %s", id(power_edit) ? "on" : "off");
+                else snprintf(buf, sizeof(buf), "Turn right: on   left: off");
+                lv_label_set_text(id(sub_label), buf);
+                break;
+              }
+              case 5: {
+                accent = PURPLE; title = "MODE"; icon = "\U000F1542"; show_mode_label = true;
+                static const char *HINT[] = {"You set flame + fan", "Auto flame, you set fan", "Smart flame, you set fan"};
+                lv_label_set_text(id(mode_label), MODE_UP[id(mode_edit)]);
+                lv_arc_set_range(id(ring), 0, 3);
+                lv_arc_set_value(id(ring), id(mode_edit) + 1);
+                if (id(mode_edit) != m) snprintf(buf, sizeof(buf), "Tap to apply");
+                else if (fp_on) snprintf(buf, sizeof(buf), "%s", HINT[m]);
+                else snprintf(buf, sizeof(buf), "Used at next turn-on");
+                lv_label_set_text(id(sub_label), buf);
+                break;
+              }
+              case 6: {
+                accent = CYAN; title = "FAN SPEED"; icon = "\U000F0210";
+                int f = id(fan_target);
+                if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
+                lv_label_set_text(id(value_label), buf);
+                lv_arc_set_range(id(ring), 0, ${fan_max});
+                lv_arc_set_value(id(ring), f);
+                lv_label_set_text(id(sub_label), id(fan_pending) ? "Setting..." : "Speed 0 - ${fan_max}");
+                break;
+              }
+              case 7: {
+                accent = YELLOW; title = "LIGHT";
+                bool lon = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
+                icon = lon ? "\U000F0335" : "\U000F0336";
+                lv_label_set_text(id(value_label), lon ? "ON" : "OFF");
+                lv_arc_set_range(id(ring), 0, 1);
+                lv_arc_set_value(id(ring), lon ? 1 : 0);
+                lv_label_set_text(id(sub_label), "Turn right: on   left: off");
+                break;
+              }
+              case 8: {
+                accent = RED; title = "FLAME"; icon = "\U000F0238";
+                int f = fp_on ? id(flame_target) : 0;
+                if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
+                lv_label_set_text(id(value_label), buf);
+                lv_arc_set_range(id(ring), 0, ${flame_max});
+                lv_arc_set_value(id(ring), f);
+                lv_label_set_text(id(sub_label), !fp_on ? "Hold knob to turn on"
+                                  : id(flame_pending) ? "Setting..." : "Flame 1 - ${flame_max}");
+                break;
+              }
+              case 9: {
+                accent = WHITE; icon = "\U000F00E0";
+                bool sl = id(bright_step) == 1;
+                title = sl ? "SLEEP BRIGHTNESS" : "BRIGHTNESS";
+                float v = sl ? id(sleep_brightness).state : id(awake_brightness).state;
+                snprintf(buf, sizeof(buf), "%.0f", v);
+                lv_label_set_text(id(value_label), buf);
+                lv_arc_set_range(id(ring), 0, 100);
+                lv_arc_set_value(id(ring), (int32_t) v);
+                lv_label_set_text(id(sub_label), sl ? "Tap to finish" : "Tap for sleep brightness");
+                break;
+              }
+            }
+            lv_label_set_text(id(title_label), title);
+            lv_label_set_text(id(title_icon), icon);
+            if (show_mode_label) {
+              lv_obj_add_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
+              lv_obj_remove_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
+            } else {
+              lv_obj_remove_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
+              lv_obj_add_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
+            }
+            if (!connected) lv_label_set_text(id(sub_label), "Connecting to Home Assistant");
+            lv_obj_set_style_arc_color(id(ring), lv_color_hex(accent), LV_PART_INDICATOR);
+            lv_obj_set_style_text_color(id(title_icon), lv_color_hex(accent), 0);
+            lv_obj_set_style_text_color(id(value_label), lv_color_hex(connected ? WHITE : GREY), 0);
+            lv_obj_set_style_text_color(id(mode_label), lv_color_hex(connected ? WHITE : GREY), 0);
           }
 
 interval:
@@ -781,17 +963,12 @@ interval:
             id(toast_until_ms) = 0;
             lv_obj_add_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
           }
+          if (id(knob_button).state) return;   // a hold in progress never times out
           const uint32_t idle = (now - id(last_activity_ms)) / 1000;
-          if (id(screen_level) == 0 && idle >= ${dim_after_s}) {
-            id(screen_level) = 1;
-            auto call = id(display_backlight).turn_on();
-            call.set_brightness(${dim_brightness});
-            call.perform();
-          } else if (id(screen_level) == 1 && idle >= ${off_after_s}) {
-            id(screen_level) = 2;
-            id(display_backlight).turn_off().perform();
-            id(page) = -1;          // wake up on the mode's first screen
-            id(render)->execute();
+          if (id(page) != 0 && idle >= ${sleep_after_s}) {
+            id(go)->execute(0);                 // discards unapplied Power/Mode edits
+          } else if (id(page) == 2 && idle >= ${setpoint_timeout_s}) {
+            id(go)->execute(1);
           }
 
 # ------------------------------------------------------------------
@@ -809,12 +986,20 @@ font:
     bpp: 4
     glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
   - file: {type: gfonts, family: Roboto, weight: 500}
+    id: font_menu
+    size: 40
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 500}
     id: font_title
     size: 30
     bpp: 4
   - file: {type: gfonts, family: Roboto, weight: 400}
     id: font_sub
     size: 26
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 400}
+    id: font_hint
+    size: 20
     bpp: 4
   - file: {type: gfonts, family: Roboto, weight: 700}
     id: font_toast
@@ -838,6 +1023,26 @@ font:
       - "\U000F0210"  # fan
       - "\U000F0335"  # lightbulb
       - "\U000F0336"  # lightbulb-outline
+      - "\U000F0425"  # power
+      - "\U000F00E0"  # brightness-7
+
+# Status row (flame + mode/OFF) used at the top of Main, Value and Settings.
+.status_row: &status_row
+  align: CENTER
+  y: -150
+  width: SIZE_CONTENT
+  height: SIZE_CONTENT
+  bg_opa: TRANSP
+  border_width: 0
+  pad_all: 0
+  scrollable: false
+  layout:
+    type: flex
+    flex_flow: ROW
+    flex_align_main: CENTER
+    flex_align_cross: CENTER
+    flex_align_track: CENTER
+    pad_column: 8
 
 lvgl:
   displays: [panel]
@@ -846,8 +1051,105 @@ lvgl:
   default_font: font_sub
   scrollable: false
   scrollbar_mode: "OFF"
+  top_layer:
+    widgets:
+      - obj:
+          id: toast
+          align: CENTER
+          width: 400
+          height: 150
+          radius: 75
+          bg_color: 0x111111
+          bg_opa: 92%
+          border_color: 0xFF7A1A
+          border_width: 3
+          hidden: true
+          widgets:
+            - label:
+                id: toast_label
+                align: CENTER
+                text_align: CENTER
+                text: ""
+                text_font: font_toast
+                text_color: 0xFFFFFF
   pages:
-    - id: main_page
+    # ================= Sleep =================
+    - id: page_sleep
+      bg_color: 0x000000
+      widgets:
+        - label:
+            id: sleep_flame
+            align: CENTER
+            y: -120
+            text: "\U000F0238"
+            text_font: font_icons_small
+            text_color: 0xFF7A1A
+            hidden: true
+        - label:
+            id: sleep_temp
+            align: CENTER
+            y: 10
+            width: 420
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+
+    # ================= Main =================
+    - id: page_main
+      bg_color: 0x000000
+      widgets:
+        - obj:
+            <<: *status_row
+            id: status_row_m
+            widgets:
+              - label: {id: status_icon_m, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: status_text_m, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
+        - label:
+            align: CENTER
+            y: -98
+            text: "ROOM"
+            text_font: font_title
+            text_color: 0x6A6A6A
+        - label:
+            id: main_temp
+            align: CENTER
+            y: 5
+            width: 420
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+        - label:
+            id: main_set
+            align: CENTER
+            y: 112
+            width: 380
+            text_align: CENTER
+            text: ""
+            text_font: font_title
+            text_color: 0xFF7A1A
+        - label:
+            id: main_info
+            align: CENTER
+            y: 150
+            width: 340
+            text_align: CENTER
+            text: ""
+            text_font: font_hint
+            text_color: 0x9A9A9A
+        - label:
+            id: main_hint
+            align: CENTER
+            y: 190
+            width: 300
+            text_align: CENTER
+            text: "Tap: settings   Turn: set temp"
+            text_font: font_hint
+            text_color: 0x4A4A4A
+
+    # ================= Set Point + edit screens =================
+    - id: page_value
       bg_color: 0x000000
       widgets:
         - arc:
@@ -872,38 +1174,12 @@ lvgl:
             knob:
               bg_opa: TRANSP
               pad_all: 0
-
-        # Icon + text rows are flex containers sized to their content and
-        # centred as a unit, so they stay centred whatever the text width.
         - obj:
-            id: status_row
-            align: CENTER
-            y: -150
-            width: SIZE_CONTENT
-            height: SIZE_CONTENT
-            bg_opa: TRANSP
-            border_width: 0
-            pad_all: 0
-            scrollable: false
-            layout:
-              type: flex
-              pad_column: 8
-              flex_flow: ROW
-              flex_align_main: CENTER
-              flex_align_cross: CENTER
-              flex_align_track: CENTER
+            <<: *status_row
+            id: status_row_v
             widgets:
-              - label:
-                  id: status_icon
-                  text: "\U000F1722"
-                  text_font: font_icons_small
-                  text_color: 0x5A5A5A
-              - label:
-                  id: status_text
-                  text: "OFF"
-                  text_font: font_sub
-                  text_color: 0x9A9A9A
-
+              - label: {id: status_icon_v, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: status_text_v, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
         - obj:
             id: title_row
             align: CENTER
@@ -916,23 +1192,14 @@ lvgl:
             scrollable: false
             layout:
               type: flex
-              pad_column: 12
               flex_flow: ROW
               flex_align_main: CENTER
               flex_align_cross: CENTER
               flex_align_track: CENTER
+              pad_column: 12
             widgets:
-              - label:
-                  id: title_icon
-                  text: "\U000F050F"
-                  text_font: font_icons
-                  text_color: 0xFF7A1A
-              - label:
-                  id: title_label
-                  text: "SET TEMP"
-                  text_font: font_title
-                  text_color: 0xCFCFCF
-
+              - label: {id: title_icon, text: "\U000F050F", text_font: font_icons, text_color: 0xFF7A1A}
+              - label: {id: title_label, text: "SET TEMP", text_font: font_title, text_color: 0xCFCFCF}
         - label:
             id: value_label
             align: CENTER
@@ -942,7 +1209,6 @@ lvgl:
             text: "--"
             text_font: font_value
             text_color: 0xFFFFFF
-
         - label:
             id: mode_label
             align: CENTER
@@ -954,7 +1220,6 @@ lvgl:
             text_font: font_mode
             text_color: 0xFFFFFF
             hidden: true
-
         - label:
             id: sub_label
             align: CENTER
@@ -966,67 +1231,42 @@ lvgl:
             text_font: font_sub
             text_color: 0x9A9A9A
 
+    # ================= Settings =================
+    - id: page_settings
+      bg_color: 0x000000
+      widgets:
         - obj:
-            id: dot0
-            align: CENTER
-            x: -28
-            y: 172
-            width: 14
-            height: 14
-            radius: 7
-            border_width: 0
-            bg_color: 0xFF7A1A
-            bg_opa: COVER
-        - obj:
-            id: dot1
-            align: CENTER
-            x: 0
-            y: 172
-            width: 14
-            height: 14
-            radius: 7
-            border_width: 0
-            bg_color: 0x2A2A2A
-            bg_opa: COVER
-        - obj:
-            id: dot2
-            align: CENTER
-            x: 28
-            y: 172
-            width: 14
-            height: 14
-            radius: 7
-            border_width: 0
-            bg_color: 0x2A2A2A
-            bg_opa: COVER
-        - obj:
-            id: dot3
-            align: CENTER
-            x: 42
-            y: 172
-            width: 14
-            height: 14
-            radius: 7
-            border_width: 0
-            bg_color: 0x2A2A2A
-            bg_opa: COVER
-
-        - obj:
-            id: toast
-            align: CENTER
-            width: 400
-            height: 150
-            radius: 75
-            bg_color: 0x111111
-            bg_opa: 92%
-            border_color: 0xFF7A1A
-            border_width: 3
-            hidden: true
+            <<: *status_row
+            id: status_row_s
             widgets:
-              - label:
-                  id: toast_label
-                  align: CENTER
-                  text_align: CENTER
-                  text: ""
-                  text_font: font_toast
-                  text_color: 0xFFFFFF
+              - label: {id: status_icon_s, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: status_text_s, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
+        - label:
+            align: CENTER
+            y: -104
+            text: "SETTINGS"
+            text_font: font_title
+            text_color: 0x6A6A6A
+        - label: {id: row_m2, align: CENTER, y: -58, width: 360, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A}
+        - label: {id: row_m1, align: CENTER, y: -26, width: 380, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
+        - obj:
+            align: CENTER
+            y: 24
+            width: 400
+            height: 64
+            radius: 32
+            bg_color: 0x1A1A1A
+            bg_opa: COVER
+            border_color: 0xFF7A1A
+            border_width: 2
+        - label: {id: row_0, align: CENTER, y: 24, width: 380, text_align: CENTER, text: "", text_font: font_menu, text_color: 0xFFFFFF}
+        - label: {id: row_p1, align: CENTER, y: 76, width: 380, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
+        - label: {id: row_p2, align: CENTER, y: 108, width: 360, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A}
+        - label:
+            align: CENTER
+            y: 170
+            width: 300
+            text_align: CENTER
+            text: "Turn: choose   Tap: open"
+            text_font: font_hint
+            text_color: 0x4A4A4A

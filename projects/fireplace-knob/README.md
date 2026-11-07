@@ -4,39 +4,50 @@ A round 2.1-inch rotary display that controls a gas fireplace through Home
 Assistant. It runs ESPHome with an LVGL interface and works with the knob
 alone, with no touch input.
 
-| Input | Action |
-| --- | --- |
-| Hold the knob (~0.9 s) | Fireplace off, or on **in the mode chosen on the Mode screen**. A "Hold to turn ON/OFF" hint appears after 0.2 s. |
-| Short press | Next screen (list depends on the mode, below) |
-| Turn | Adjust the current screen |
+## Screens
 
-| Mode | Screens |
-| --- | --- |
-| Manual | Flame (1–6), Fan Speed, Light, Mode |
-| Thermostat | Set Temp, Fan Speed, Light, Mode. The flame cycles on demand. |
-| Smart | Set Temp, Fan Speed, Light, Mode. The flame scales with how far the room is below the set point. |
+```
+SLEEP --tap--> MAIN --tap--> SETTINGS --tap on item--> EDIT (Power/Mode/Fan/Light/Flame/Brightness)
+  |             |  ^            |  ^                        |
+  | turn        |  | tap/10 s   |  +---------- tap ---------+
+  v             |  |            +-- "Back" + tap --> MAIN
+SET POINT <--turn+  |
+  +-----------------+
+Any screen: 20 s with no input --> SLEEP.  Hold ~0.9 s anywhere: fireplace on/off.
+```
 
-- **Set Temp:** ±1 °F per detent (55–85 °F), sent 0.9 s after you stop turning.
-  It is only stored, never ignites.
-- **Flame:** only while the fireplace is on. A flame above 0 lights an off
-  Proflame, so while off this screen shows "Hold knob to turn on".
-- **Fan Speed:** 0 (OFF) to 6, in every mode. The fan is never automatic. The
-  Proflame 2 IFC starts the blower about 5 minutes after the burner lights and
-  runs it for about 12 minutes after the burner goes out (SIT 584 IFC manual).
-  The knob shows the chosen speed, not whether the blower is running.
-- **Light:** clockwise on, counter-clockwise off.
-- **Mode:** Manual ↔ Thermostat ↔ Smart. Applied 1.2 s after you stop if the
-  fireplace is burning. If it is off, the choice is used at the next long-press
-  turn-on, because any preset change would light it.
-- The Proflame integrations report no set point (`null`) in Off/Manual. The
+| Screen | Shows | Turn | Tap |
+| --- | --- | --- | --- |
+| **Sleep** | Room temperature at the Sleep brightness; a small orange flame when the fireplace is on | Opens Set Point; the first click already changes the value | Main |
+| **Main** | Room temperature, set point (or flame height in Manual), mode, fan and light state | Set Point | Settings |
+| **Set Point** | Set temperature (Manual while burning: flame height) | ±1 °F (or ±1 flame) | Main (also after 10 s idle) |
+| **Settings** | Power, Mode, Fan, Light, Flame, Brightness, Back. Flame appears only in Manual while burning | Choose a row | Open it (Back → Main) |
+| **Power** | ON/OFF | Choose | Apply and return to Settings |
+| **Mode** | Manual / Thermostat / Smart | Choose | Apply and return to Settings. While off, only picks the mode for the next turn-on |
+| **Fan / Light / Flame** | Fan 0–6, light on/off, flame 1–6 | Change (sent ~1 s after you stop) | Settings |
+| **Brightness** | Awake brightness, then Sleep brightness (previewed live) | ±5 % | Next step, then Settings |
+
+- Only a long press, or Power in Settings, ever lights the fireplace. Set
+  Point while the fireplace is off just stores the value ("Saved for next
+  turn-on"); Flame is locked while off.
+- Power and Mode changes are discarded if the screen times out before you tap.
+- The Proflame 2 IFC handles the fan delays itself: the blower starts about
+  5 minutes after the burner lights and runs about 12 minutes after it goes
+  out. The knob shows the chosen speed, not whether the blower is running.
+- The knob follows mode changes made from the remote or HA.
+- The Proflame integrations report no set point (`null`) in Off/Manual, so the
   knob keeps its own last value, saved across reboots.
 
-The top line shows the fireplace state: an orange flame with the mode name (for example **Thermostat**) when on, a grey
-flame with **OFF**, or **OFFLINE**/**UNAVAILABLE**. The dots at the bottom show
-the current screen. The screen dims after 20 s, turns off after 2 minutes, and
-then returns to the mode's first screen. When the screen is dark, the first
-press or turn only wakes it. A long press always works. The knob follows mode
-changes made from the remote or HA.
+### Home Assistant device page (Configuration)
+
+| Entity | Purpose |
+| --- | --- |
+| **Awake Brightness** (10–100 %, default 100) | Backlight on every screen except Sleep |
+| **Sleep Brightness** (0–100 %, default 25) | Backlight on the Sleep screen; set to 0 for a dark screen at night |
+| **Room Temperature Source** | `Fireplace` (the remote's reading, default) or `Living room` (`sensor.main_floor_temperature`). Falls back to the fireplace reading if the chosen sensor is unavailable. The option list is compiled into the firmware (`alt_temp_entity`/`alt_temp_label` substitutions); adding a sensor needs a rebuild. |
+
+All three are remembered across reboots and can be changed from the knob
+(Brightness) or by HA automations.
 
 ## Parts
 
@@ -70,7 +81,7 @@ component, and this interface does not use touch.
 
 | File | Purpose |
 | --- | --- |
-| `esphome/fireplace-knob/base.yaml` | Hardware, UI, and behaviour. All entities are substitutions. |
+| `esphome/fireplace-knob/base.yaml` + `knob_helpers.h` | Hardware, UI, and behaviour. All entities are substitutions. |
 | `esphome/fireplace-knob-living-room.yaml` | Living room: `proflame_connect_wifi` entities (`switch.living_room_fireplace`, `climate.living_room_fireplace_mode`, `number.living_room_fireplace_flame_height`, `number.living_room_fireplace_fan_speed`, `switch.living_room_fireplace_light`). |
 | `esphome/fireplace-knob-basement.yaml` | Basement: ESP32 X0A controller entities (`*.basement_fireplace_*`), 0.5° steps. Not deployed. |
 
@@ -108,27 +119,31 @@ over USB.
 
 ## Testing
 
-1. Before connecting to Home Assistant, the screen should show the ring, the
-   grey flame, and **OFFLINE / Connecting to Home Assistant**. This confirms
-   that the panel initialisation and backlight work.
-2. Turn the knob on Set Temp. Clockwise should raise the number. If it lowers
-   the number, set `rotation_sign: "-1"`.
-3. Short-press through all three screens, then hold to switch the fireplace on
-   and off. Confirm each change in Home Assistant.
-4. Turn the fan up and down, and switch the light on and off. Check each Home
-   Assistant entity.
+1. Before connecting to Home Assistant, the Sleep screen shows `--` and Main
+   shows **OFFLINE**. This confirms that the panel initialisation and backlight
+   work.
+2. From Sleep, turn the knob: Set Point should open and the value should move
+   on that first click. Clockwise should raise it; if not, set
+   `rotation_sign: "-1"`. Wait 10 s: it should return to Main, and 10 s later
+   go to Sleep.
+3. Tap through Main → Settings → each item and back. Hold to switch the
+   fireplace on and off. Confirm each change in Home Assistant.
+4. Change the fan, light, mode and brightness. Check the HA entities and the
+   two brightness sliders on the device page.
 
 ## Safety Notes
 
 - The knob only calls Home Assistant actions. Fireplace safety, including the
   IFC, the pilot, and the remote taking priority, remains with the fireplace
   controller.
-- A long press is the only input that can light the fireplace.
+- A long press (or Power in Settings) is the only input that can light the
+  fireplace.
 
 ## Revisions
 
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-07 | New UI: Sleep/Main/Set Point/Settings flow, Brightness and Room Temperature Source settings in HA. OTA installed. |
 | 2026-11-07 | Mode screen (Manual/Thermostat/Smart) with per-mode screen lists, a Flame screen for Manual, and Fan in every mode. OTA installed. |
 | 2026-11-07 | Hardware feedback: header icons overlapped their titles, so the icon + text rows are now auto-centred flex rows. The panel drifted and glitched, so the firmware now uses PSRAM XIP, `LCD_RGB_RESTART_IN_VSYNC`, IRAM-safe RGB ISR, 64-byte cache lines, and a 16 MHz pclk. OTA installed; drift fix awaiting confirmation. |
