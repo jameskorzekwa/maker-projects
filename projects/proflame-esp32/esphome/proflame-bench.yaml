@@ -480,6 +480,9 @@ climate:
             return;
           }
           id(tstat_target_f) = roundf(f * 2.0f) / 2.0f;
+          // A target change by the user applies immediately (one decision),
+          // in either direction; the min cycle only limits automatic cycling.
+          if (id(tstat_mode) > 0) id(tstat_fresh_start) = true;
           id(publish_climate).execute();
           if (id(tstat_mode) > 0) id(tstat_eval).execute();
 
@@ -694,8 +697,10 @@ script:
           }
           // Turning OFF is never held back once the min on-time has passed,
           // and is immediate when the temperature is lost.
-          const bool may_switch = want ? (cycle_ok || id(tstat_fresh_start)) : (cycle_ok || !have_temp);
-          if (!want) id(tstat_fresh_start) = false;
+          const bool user_change = id(tstat_fresh_start);
+          const bool may_switch = cycle_ok || user_change || (!want && !have_temp);
+          // One-shot: consumed by this decision whether or not it switches.
+          if (want == burning) id(tstat_fresh_start) = false;
           const int aux = id(light_follows).state ? 1 : -1;  // light stays on while active
           if (want != burning && may_switch && !recent_cmd) {
             id(tstat_expect) = want ? 1 : 0;
