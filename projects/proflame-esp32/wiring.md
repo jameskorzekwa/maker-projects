@@ -47,13 +47,11 @@ rightmost filled dot. Wire colors above are from James's photographs.
 - [ESPHome Proflame component hardware instructions](https://github.com/kaechele/esphome-proflame2#hardware-setup): XHP-4 and direct crossed UART. Same author as Bonaparte, not independent measurement.
 - [Espressif ESP32-C5 datasheet](https://documentation.espressif.com/esp32-c5_datasheet_en.html): GPIO4/5 permit GPIO-matrix UART routing; they are also external JTAG MTCK/MTDO. Do not simultaneously use pad JTAG. Native USB uses GPIO13/14.
 
-The former direct wiring was **source-derived and is now withdrawn**. The loaded
-supply measurement contradicts its 3.3 V assumption. Manufacturer sources establish OEM compatibility, not approval of
-this DIY interface. Exact signal levels, grounding/isolation requirements and
-NiceMCU header assignments have not been measured. The OEM dongle's ISO1/ISO2
-markings are consistent with ACPL-074L optocouplers, but that alone neither proves
-nor disproves a need for isolation at X0A. Do not energize uncertain wiring based
-on color alone; resolve electrical/board differences before connection.
+Manufacturer sources establish OEM compatibility, not approval of this DIY
+interface. The mapping was confirmed on this fireplace by James's 3.3 V supply
+measurement and working communication; signal levels were not scope-measured.
+The OEM dongle's ISO1/ISO2 markings are consistent with ACPL-074L optocouplers;
+the direct connection works without isolation on this unit.
 
 ## Firmware
 
