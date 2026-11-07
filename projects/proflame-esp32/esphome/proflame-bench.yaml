@@ -4,7 +4,8 @@
 #
 # Feature parity with the proflame_connect_wifi integration where the UART
 # protocol supports it: power, mode (Off/Manual/Thermostat/Smart), flame,
-# fan, light, pilot; plus AUX and split flow. Room temperature and thermostat
+# fan, light (wired to AUX on this fireplace), pilot; plus split flow and
+# the unused IFC lamp output level. Room temperature and thermostat
 # setpoint have no documented UART register and are NOT implemented.
 #
 # Safety rules enforced below:
@@ -279,9 +280,12 @@ switch:
       - lambda: 'id(apply_cmd).execute(1, -1, -1, -1, -1, -1, -1, -1);'
     turn_off_action:
       - lambda: 'id(apply_cmd).execute(0, 0, -1, -1, -1, -1, -1, -1);'
+  # On this fireplace (Montigo P52DF-F) the physical light is wired to the IFC
+  # AUX relay, so AUX is exposed as the on/off Light. Verified 2026-11-07.
   - platform: template
     id: aux_switch
-    name: AUX Output
+    name: Light
+    icon: mdi:lightbulb
     restore_mode: DISABLED
     turn_on_action:
       - lambda: 'id(apply_cmd).execute(-1, -1, -1, -1, -1, -1, 1, -1);'
@@ -336,10 +340,14 @@ number:
     mode: slider
     set_action:
       - lambda: 'id(apply_cmd).execute(-1, -1, -1, static_cast<int>(x), -1, -1, -1, -1);'
+  # IFC lamp (night light) output, 0-6. Accepted by the IFC but nothing is
+  # connected to it on this fireplace, so it is hidden by default.
   - platform: template
     id: light_brightness
-    name: Light
-    icon: mdi:lightbulb
+    name: Lamp Output Level (unused)
+    icon: mdi:lightbulb-outline
+    entity_category: config
+    disabled_by_default: true
     min_value: 0
     max_value: 6
     step: 1
