@@ -79,18 +79,27 @@ esphome:
   on_boot:
     # After the PCF8574 (setup priority 900), before the ST7701S driver (800):
     # the panel must be powered and out of reset before its init sequence.
+    # Same order and timing as Elecrow's factory Board21.h: power, then a
+    # real LCD reset pulse (P4 low 100 ms), then the touch reset. Without the
+    # low pulse the panel comes up as coloured noise after a cold power-up
+    # (seen 2026-11-07); soft reboots do not recover it.
+    # Done in ONE blocking lambda: `delay:` actions in on_boot do not hold up
+    # the rest of setup, so with separate steps the display driver sent its
+    # init while the panel was still in reset (black screen, 2026-11-07).
     - priority: 850
       then:
-        - output.turn_on: lcd_power
-        - output.turn_off: display_reset
-        - delay: 100ms
-        - output.turn_on: tp_reset
-        - delay: 100ms
-        - output.turn_off: tp_reset
-        - delay: 120ms
-        - output.turn_on: tp_reset
-        - delay: 120ms
-        - output.turn_on: tp_intr
+        - lambda: |-
+            id(lcd_power).turn_on();
+            delay(50);
+            id(display_reset).turn_on();     // asserted (pin low)
+            delay(100);
+            id(display_reset).turn_off();    // released (pin high)
+            delay(100);
+            id(tp_reset).turn_off();
+            delay(100);
+            id(tp_reset).turn_on();
+            delay(100);
+            id(tp_intr).turn_on();
     - priority: -100
       then:
         - lambda: |-
@@ -225,6 +234,7 @@ display:
     pclk_inverted: true
     init_sequence:
       - [0x01]
+      - delay 120ms                # ST7701S needs >5 ms after SW reset; be generous
       - [0xFF, 0x77, 0x01, 0x00, 0x00, 0x10]
       - [0xCC, 0x10]
       - [0xCD, 0x08]

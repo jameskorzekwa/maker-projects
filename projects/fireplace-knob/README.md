@@ -144,6 +144,7 @@ over USB.
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-07 | Cold-boot fix: the boot sequence now pulses the LCD reset low for 100 ms (as Elecrow's factory `Board21.h` does) in one blocking lambda before the display driver runs. Without the pulse a power-cycled panel showed coloured noise; with the pulse as separate `delay:` steps the driver initialised the panel while it was still in reset (black). |
 | 2026-11-07 | Display Off: Sleep + fireplace off for 30 s turns the backlight off and enables Wi-Fi modem sleep (`esp_wifi_set_ps`). Battery research recorded in `power.md`. |
 | 2026-11-07 | Sleep after 10 s; HA-connected check uses the state-subscription test and is re-polled, so OFFLINE no longer sticks after a reconnect; Main never wraps. |
 | 2026-11-07 | New UI: Sleep/Main/Set Point/Settings flow, Brightness and Room Temperature Source settings in HA. OTA installed. |
