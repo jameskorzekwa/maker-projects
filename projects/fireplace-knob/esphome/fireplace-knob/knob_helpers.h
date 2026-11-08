@@ -1,5 +1,14 @@
 #pragma once
 
+#include <esp_wifi.h>
+
+// Wi-Fi modem power save while the display is off. ESPHome applies its own
+// (configured) mode again on every reconnect, which is fine: this is only
+// an optimisation while idle.
+static inline void knob_wifi_power_save(bool low) {
+  esp_wifi_set_ps(low ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE);
+}
+
 // Rows of the knob's Settings list for the current fireplace state.
 // Page ids: 4 Power, 5 Mode, 6 Fan, 7 Light, 8 Flame, 9 Brightness, 1 Back.
 // Flame is listed only in Manual while the fireplace is burning; in the

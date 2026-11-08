@@ -16,6 +16,9 @@
 #              two steps: Awake, then Sleep.
 #   Anywhere   hold ~0.9 s = fireplace on/off (on = the selected mode).
 #              10 s without input -> Sleep.
+#   Display Off  Sleep + fireplace off for 30 s -> backlight fully off and
+#              Wi-Fi modem power save. Tap/turn/hold behave exactly as on
+#              Sleep (no reboot). The fireplace turning on lights it again.
 #
 # Only a long press (or Power in Settings) ever lights the fireplace.
 #
@@ -63,6 +66,7 @@ substitutions:
   long_press: 700ms
   setpoint_timeout_s: "10"  # Set Point -> Main
   sleep_after_s: "10"       # any screen -> Sleep
+  display_off_after_s: "30" # Sleep + fireplace off -> backlight off
   awake_brightness_default: "100"
   sleep_brightness_default: "25"
 
@@ -327,6 +331,12 @@ globals:
   - id: last_connected      # HA connection state as last drawn
     type: bool
     initial_value: "false"
+  - id: display_off         # Sleep with the backlight fully off
+    type: bool
+    initial_value: "false"
+  - id: sleep_since_ms
+    type: uint32_t
+    initial_value: "0"
 
 # ------------------------------------------------------------------
 # Home Assistant: settings exposed on the device page
@@ -501,9 +511,11 @@ script:
   - id: apply_backlight
     then:
       - lambda: |-
+          if (id(display_off)) { id(display_backlight).turn_off().perform(); return; }
           float pct = id(awake_brightness).state;
           if (id(page) == 0 || (id(page) == 9 && id(bright_step) == 1)) pct = id(sleep_brightness).state;
           if (std::isnan(pct)) pct = 100;
+          if (pct <= 0) { id(display_backlight).turn_off().perform(); return; }
           auto call = id(display_backlight).turn_on();
           call.set_brightness(pct / 100.0f);
           call.perform();
@@ -515,6 +527,7 @@ script:
       - lambda: |-
           const bool fp_on = id(ha_fireplace).state == "on";
           id(page) = to;
+          if (to == 0) id(sleep_since_ms) = millis();
           switch (to) {
             case 3: break;
             case 4: id(power_edit) = fp_on; break;
@@ -531,7 +544,13 @@ script:
 
   - id: wake
     then:
-      - lambda: 'id(last_activity_ms) = millis();'
+      - lambda: |-
+          id(last_activity_ms) = millis();
+          if (id(display_off)) {
+            id(display_off) = false;
+            knob_wifi_power_save(false);
+            id(apply_backlight)->execute();
+          }
 
   - id: long_press_timer
     mode: restart
@@ -972,6 +991,19 @@ interval:
           if (api::global_api_server->is_connected_with_state_subscription() != id(last_connected))
             id(render)->execute();
           if (id(knob_button).state) return;   // a hold in progress never times out
+          const bool fp_on = id(ha_fireplace).state == "on";
+          // Display Off: Sleep + fireplace off for a while -> backlight off and
+          // Wi-Fi modem sleep. The fireplace turning on brings the screen back.
+          if (id(display_off) && fp_on) {
+            id(display_off) = false;
+            knob_wifi_power_save(false);
+            id(apply_backlight)->execute();
+          } else if (id(page) == 0 && !id(display_off) && !fp_on &&
+                     (now - id(sleep_since_ms)) >= ${display_off_after_s}u * 1000u) {
+            id(display_off) = true;
+            knob_wifi_power_save(true);
+            id(apply_backlight)->execute();
+          }
           const uint32_t idle = (now - id(last_activity_ms)) / 1000;
           if (id(page) != 0 && idle >= ${sleep_after_s}) {
             id(go)->execute(0);                 // discards unapplied Power/Mode edits

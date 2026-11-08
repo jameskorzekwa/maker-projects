@@ -14,11 +14,12 @@ SLEEP --tap--> MAIN --tap--> SETTINGS --tap on item--> EDIT (Power/Mode/Fan/Ligh
 SET POINT <--turn+  |
   +-----------------+
 Any screen: 10 s with no input --> SLEEP.  Hold ~0.9 s anywhere: fireplace on/off.
+SLEEP + fireplace off for 30 s --> DISPLAY OFF (backlight off, Wi-Fi modem sleep; tap/turn/hold as on Sleep).
 ```
 
 | Screen | Shows | Turn | Tap |
 | --- | --- | --- | --- |
-| **Sleep** | Room temperature at the Sleep brightness; a small orange flame when the fireplace is on | Opens Set Point; the first click already changes the value | Main |
+| **Sleep** | Room temperature at the Sleep brightness; a small orange flame when the fireplace is on. After 30 s with the fireplace off the backlight turns fully off (Display Off) until touched or the fireplace turns on | Opens Set Point; the first click already changes the value | Main |
 | **Main** | Room temperature, set point (or flame height in Manual), mode, fan and light state | Set Point | Settings |
 | **Set Point** | Set temperature (Manual while burning: flame height) | ±1 °F (or ±1 flame) | Main (10 s idle goes to Sleep) |
 | **Settings** | Power, Mode, Fan, Light, Flame, Brightness, Back. Flame appears only in Manual while burning | Choose a row | Open it (Back → Main) |
@@ -143,6 +144,7 @@ over USB.
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-07 | Display Off: Sleep + fireplace off for 30 s turns the backlight off and enables Wi-Fi modem sleep (`esp_wifi_set_ps`). Battery research recorded in `power.md`. |
 | 2026-11-07 | Sleep after 10 s; HA-connected check uses the state-subscription test and is re-polled, so OFFLINE no longer sticks after a reconnect; Main never wraps. |
 | 2026-11-07 | New UI: Sleep/Main/Set Point/Settings flow, Brightness and Room Temperature Source settings in HA. OTA installed. |
 | 2026-11-07 | Mode screen (Manual/Thermostat/Smart) with per-mode screen lists, a Flame screen for Manual, and Fan in every mode. OTA installed. |
