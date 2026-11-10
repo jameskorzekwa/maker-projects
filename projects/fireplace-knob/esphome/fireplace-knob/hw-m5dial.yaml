@@ -96,6 +96,7 @@ display:
 
 sensor:
   - platform: max17043
+    id: gauge
     i2c_id: port_a
     address: 0x36
     update_interval: 30s
@@ -113,6 +114,23 @@ sensor:
       entity_category: diagnostic
       accuracy_decimals: 2
 
+  # MAX17048 CRATE register (0x16): charge/discharge rate, 0.208 %/h per LSB,
+  # signed. The Dial's charger has no status pin, so this is how we know.
+  - platform: template
+    id: battery_rate
+    name: Battery Charge Rate
+    unit_of_measurement: "%/h"
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      uint16_t raw;
+      if (!id(gauge).read_byte_16(0x16, &raw)) return NAN;
+      float rate = (int16_t) raw * 0.208f;
+      id(battery_charging) = rate > 0.5f;
+      id(render)->execute();
+      return rate;
+
   - platform: rotary_encoder
     id: knob
     internal: true
@@ -128,6 +146,12 @@ sensor:
       - script.execute: {id: knob_turn, dir: !lambda 'return -(${rotation_sign});'}
 
 binary_sensor:
+  - platform: template
+    name: Battery Charging
+    device_class: battery_charging
+    entity_category: diagnostic
+    lambda: 'return id(battery_charging);'
+
   - platform: gpio
     id: knob_button
     internal: true

@@ -229,6 +229,9 @@ globals:
   - id: battery_pct         # NaN when the board has no fuel gauge
     type: float
     initial_value: "NAN"
+  - id: battery_charging
+    type: bool
+    initial_value: "false"
 
 # ------------------------------------------------------------------
 # Home Assistant: settings exposed on the device page
@@ -754,11 +757,12 @@ script:
             if (std::isnan(b)) lv_obj_add_flag(id(main_batt), LV_OBJ_FLAG_HIDDEN);
             else {
               lv_obj_remove_flag(id(main_batt), LV_OBJ_FLAG_HIDDEN);
-              const char *ic = b <= 15 ? "\U000F10CD" : b <= 35 ? "\U000F007B" : b <= 65 ? "\U000F007E" : b <= 90 ? "\U000F0081" : "\U000F0079";
+              const char *ic = id(battery_charging) ? "\U000F0084"
+                               : b <= 15 ? "\U000F10CD" : b <= 35 ? "\U000F007B" : b <= 65 ? "\U000F007E" : b <= 90 ? "\U000F0081" : "\U000F0079";
               lv_label_set_text(id(batt_icon), ic);
               snprintf(buf, sizeof(buf), "%.0f%%", b);
               lv_label_set_text(id(batt_text), buf);
-              uint32_t col = b <= 15 ? RED : b <= 35 ? YELLOW : GREEN;
+              uint32_t col = id(battery_charging) ? CYAN : b <= 15 ? RED : b <= 35 ? YELLOW : GREEN;
               lv_obj_set_style_text_color(id(batt_icon), lv_color_hex(col), 0);
               lv_obj_set_style_text_color(id(batt_text), lv_color_hex(b <= 15 ? RED : SUB), 0);
             }

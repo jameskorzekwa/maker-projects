@@ -67,6 +67,7 @@ font:
       - "\U000F007E"  # battery-50
       - "\U000F007B"  # battery-20
       - "\U000F10CD"  # battery-alert-variant-outline
+      - "\U000F0084"  # battery-charging
       - "\U000F0425"  # power
       - "\U000F00E0"  # brightness-7
       - "\U000F004D"  # arrow-left (Back)
@@ -88,6 +89,7 @@ font:
       - "\U000F007E"  # battery-50
       - "\U000F007B"  # battery-20
       - "\U000F10CD"  # battery-alert-variant-outline
+      - "\U000F0084"  # battery-charging
       - "\U000F0425"  # power
       - "\U000F00E0"  # brightness-7
       - "\U000F004D"  # arrow-left (Back)
