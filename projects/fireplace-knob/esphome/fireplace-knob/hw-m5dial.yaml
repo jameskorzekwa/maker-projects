@@ -116,6 +116,7 @@ sensor:
 
   # MAX17048 CRATE register (0x16): charge/discharge rate, 0.208 %/h per LSB,
   # signed. The Dial's charger has no status pin, so this is how we know.
+  # It is a ~1 min average; the 1 s voltage-step detector below reacts first.
   - platform: template
     id: battery_rate
     name: Battery Charge Rate
@@ -127,8 +128,11 @@ sensor:
       uint16_t raw;
       if (!id(gauge).read_byte_16(0x16, &raw)) return NAN;
       float rate = (int16_t) raw * 0.208f;
-      id(battery_charging) = rate > 0.5f;
-      id(render)->execute();
+      // Backstop for the 1 s detector: a clearly positive rate means charging,
+      // a clearly negative one means on battery. Near zero (full on USB, or
+      // idle) leave the fast detector's verdict alone.
+      if (rate > 1.0f && !id(battery_charging)) { id(battery_charging) = true; id(render)->execute(); }
+      if (rate < -1.0f && id(battery_charging)) { id(battery_charging) = false; id(render)->execute(); }
       return rate;
 
   - platform: rotary_encoder
@@ -144,6 +148,38 @@ sensor:
       - script.execute: {id: knob_turn, dir: !lambda 'return ${rotation_sign};'}
     on_anticlockwise:
       - script.execute: {id: knob_turn, dir: !lambda 'return -(${rotation_sign});'}
+
+globals:
+  - id: vhist            # last 6 one-second cell-voltage samples (ring)
+    type: float[6]
+    initial_value: "{0, 0, 0, 0, 0, 0}"
+  - id: vidx
+    type: int
+    initial_value: "0"
+  - id: vcount
+    type: int
+    initial_value: "0"
+
+interval:
+  # Fast charger-state detection from the cell voltage: unplugging USB drops
+  # the terminal voltage by tens of mV within a second (charge current stops,
+  # then the Dial's own load pulls it down); plugging in does the opposite.
+  - interval: 1s
+    then:
+      - lambda: |-
+          uint16_t raw;
+          if (!id(gauge).read_byte_16(0x02, &raw)) return;
+          const float v = (raw >> 4) * 1.25f / 1000.0f;
+          float *h = id(vhist);
+          const int n = id(vcount);
+          const float oldest = h[id(vidx)];             // sample from 6 s ago (ring is full)
+          h[id(vidx)] = v; id(vidx) = (id(vidx) + 1) % 6;
+          if (n < 6) { id(vcount) = n + 1; return; }
+          const float d = v - oldest;
+          bool changed = false;
+          if (d <= -0.030f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
+          if (d >= +0.030f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
+          if (changed) { id(power_off_tried) = false; id(render)->execute(); }
 
 binary_sensor:
   - platform: template
