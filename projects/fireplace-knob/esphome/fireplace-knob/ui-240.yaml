@@ -1,0 +1,303 @@
+# UI package for 240x240 round displays (M5Stack Dial). Same widget ids as
+# ui-480.yaml so common.yaml's render script drives both, but laid out for a
+# screen less than half the size: bigger relative type, no hint lines, three
+# settings rows instead of five (the hidden rows keep their ids).
+
+font:
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_value
+    size: 80
+    bpp: 4
+    glyphs: "0123456789.-\u00B0OFN"
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_mode
+    size: 30
+    bpp: 4
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  - file: {type: gfonts, family: Roboto, weight: 500}
+    id: font_menu
+    size: 24
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 500}
+    id: font_title
+    size: 18
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 400}
+    id: font_sub
+    size: 16
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 400}
+    id: font_hint
+    size: 12
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_toast
+    size: 22
+    bpp: 4
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_icons_small
+    size: 22
+    bpp: 4
+    glyphs:
+      - "\U000F0238"  # fire
+      - "\U000F1722"  # fire-off
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_icons
+    size: 26
+    bpp: 4
+    glyphs:
+      - "\U000F050F"  # thermometer
+      - "\U000F0238"  # fire
+      - "\U000F1542"  # tune-variant
+      - "\U000F0210"  # fan
+      - "\U000F0335"  # lightbulb
+      - "\U000F0336"  # lightbulb-outline
+      - "\U000F0425"  # power
+      - "\U000F00E0"  # brightness-7
+
+.status_row: &status_row
+  align: CENTER
+  y: -82
+  width: SIZE_CONTENT
+  height: SIZE_CONTENT
+  bg_opa: TRANSP
+  border_width: 0
+  pad_all: 0
+  scrollable: false
+  layout:
+    type: flex
+    flex_flow: ROW
+    flex_align_main: CENTER
+    flex_align_cross: CENTER
+    flex_align_track: CENTER
+    pad_column: 5
+
+lvgl:
+  displays: [panel]
+  buffer_size: 25%
+  bg_color: 0x000000
+  default_font: font_sub
+  scrollable: false
+  scrollbar_mode: "OFF"
+  top_layer:
+    widgets:
+      - obj:
+          id: toast
+          align: CENTER
+          width: 200
+          height: 84
+          radius: 42
+          bg_color: 0x111111
+          bg_opa: 92%
+          border_color: 0xFF7A1A
+          border_width: 2
+          hidden: true
+          widgets:
+            - label:
+                id: toast_label
+                align: CENTER
+                text_align: CENTER
+                text: ""
+                text_font: font_toast
+                text_color: 0xFFFFFF
+  pages:
+    # ================= Sleep =================
+    - id: page_sleep
+      bg_color: 0x000000
+      widgets:
+        - label:
+            id: sleep_flame
+            align: CENTER
+            y: -62
+            text: "\U000F0238"
+            text_font: font_icons_small
+            text_color: 0xFF7A1A
+            hidden: true
+        - label:
+            id: sleep_temp
+            align: CENTER
+            y: 4
+            width: 220
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+
+    # ================= Main =================
+    - id: page_main
+      bg_color: 0x000000
+      widgets:
+        - obj:
+            <<: *status_row
+            id: status_row_m
+            widgets:
+              - label: {id: status_icon_m, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: status_text_m, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
+        - label:
+            align: CENTER
+            y: -52
+            text: "ROOM"
+            text_font: font_hint
+            text_color: 0x6A6A6A
+        - label:
+            id: main_temp
+            align: CENTER
+            y: 4
+            width: 220
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+        - label:
+            id: main_set
+            align: CENTER
+            y: 58
+            width: 200
+            text_align: CENTER
+            long_mode: CLIP
+            text: ""
+            text_font: font_title
+            text_color: 0xFF7A1A
+        - label:
+            id: main_info
+            align: CENTER
+            y: 82
+            width: 170
+            text_align: CENTER
+            long_mode: CLIP
+            text: ""
+            text_font: font_hint
+            text_color: 0x9A9A9A
+        - label:
+            id: main_hint
+            align: CENTER
+            y: 100
+            width: 120
+            text_align: CENTER
+            text: ""
+            text_font: font_hint
+            text_color: 0x4A4A4A
+            hidden: true
+
+    # ================= Set Point + edit screens =================
+    - id: page_value
+      bg_color: 0x000000
+      widgets:
+        - arc:
+            id: ring
+            align: CENTER
+            width: 232
+            height: 232
+            start_angle: 135
+            end_angle: 45
+            min_value: 0
+            max_value: 100
+            value: 0
+            adjustable: false
+            clickable: false
+            arc_color: 0x1C1C1C
+            arc_width: 12
+            arc_rounded: true
+            indicator:
+              arc_color: 0xFF7A1A
+              arc_width: 12
+              arc_rounded: true
+            knob:
+              bg_opa: TRANSP
+              pad_all: 0
+        - obj:
+            <<: *status_row
+            id: status_row_v
+            widgets:
+              - label: {id: status_icon_v, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: status_text_v, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
+        - obj:
+            id: title_row
+            align: CENTER
+            y: -50
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout:
+              type: flex
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+              pad_column: 6
+            widgets:
+              - label: {id: title_icon, text: "\U000F050F", text_font: font_icons, text_color: 0xFF7A1A}
+              - label: {id: title_label, text: "SET TEMP", text_font: font_title, text_color: 0xCFCFCF}
+        - label:
+            id: value_label
+            align: CENTER
+            y: 8
+            width: 200
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+        - label:
+            id: mode_label
+            align: CENTER
+            y: 6
+            width: 210
+            text_align: CENTER
+            long_mode: CLIP
+            text: "MANUAL"
+            text_font: font_mode
+            text_color: 0xFFFFFF
+            hidden: true
+        - label:
+            id: sub_label
+            align: CENTER
+            y: 60
+            width: 190
+            text_align: CENTER
+            long_mode: DOT
+            text: ""
+            text_font: font_sub
+            text_color: 0x9A9A9A
+
+    # ================= Settings =================
+    - id: page_settings
+      bg_color: 0x000000
+      widgets:
+        - obj:
+            <<: *status_row
+            id: status_row_s
+            widgets:
+              - label: {id: status_icon_s, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: status_text_s, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
+        - label:
+            align: CENTER
+            y: -54
+            text: "SETTINGS"
+            text_font: font_hint
+            text_color: 0x6A6A6A
+        - label: {id: row_m2, align: CENTER, y: -40, width: 160, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A, hidden: true}
+        - label: {id: row_m1, align: CENTER, y: -26, width: 190, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
+        - obj:
+            align: CENTER
+            y: 8
+            width: 204
+            height: 40
+            radius: 20
+            bg_color: 0x1A1A1A
+            bg_opa: COVER
+            border_color: 0xFF7A1A
+            border_width: 2
+        - label: {id: row_0, align: CENTER, y: 8, width: 196, text_align: CENTER, long_mode: CLIP, text: "", text_font: font_menu, text_color: 0xFFFFFF}
+        - label: {id: row_p1, align: CENTER, y: 42, width: 190, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
+        - label: {id: row_p2, align: CENTER, y: 56, width: 160, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A, hidden: true}
+        - label:
+            align: CENTER
+            y: 86
+            width: 150
+            text_align: CENTER
+            text: "Turn \u00B7 Tap"
+            text_font: font_hint
+            text_color: 0x4A4A4A

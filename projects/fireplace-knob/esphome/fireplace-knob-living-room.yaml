@@ -1,5 +1,5 @@
 # Living-room fireplace knob (Elecrow CrowPanel 2.1" rotary display).
-# All behaviour and hardware live in fireplace-knob/base.yaml.
+# Behaviour: fireplace-knob/common.yaml; board: hw-crowpanel21.yaml; UI: ui-480.yaml.
 # Living room = Proflame Connect Wi-Fi integration (proflame_connect_wifi).
 
 substitutions:
@@ -15,4 +15,6 @@ substitutions:
   temp_format: "%.0f"
 
 packages:
-  knob: !include fireplace-knob/base.yaml
+  common: !include fireplace-knob/common.yaml
+  hardware: !include fireplace-knob/hw-crowpanel21.yaml
+  ui: !include fireplace-knob/ui-480.yaml

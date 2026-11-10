@@ -1,0 +1,20 @@
+# Living-room fireplace dial: M5Stack Dial v1.1 (1.28" 240x240).
+# Behaviour: fireplace-knob/common.yaml; board: hw-m5dial.yaml; UI: ui-240.yaml.
+# Same fireplace entities as the CrowPanel knob (fireplace-knob-living-room.yaml).
+
+substitutions:
+  device_name: fireplace-dial-living-room
+  friendly_name: Living Room Fireplace Dial
+  fireplace_name: Living Room
+  fireplace_switch: switch.living_room_fireplace
+  climate_entity: climate.living_room_fireplace_mode
+  flame_number: number.living_room_fireplace_flame_height
+  fan_number: number.living_room_fireplace_fan_speed
+  light_switch: switch.living_room_fireplace_light
+  temp_step: "1.0"
+  temp_format: "%.0f"
+
+packages:
+  common: !include fireplace-knob/common.yaml
+  hardware: !include fireplace-knob/hw-m5dial.yaml
+  ui: !include fireplace-knob/ui-240.yaml

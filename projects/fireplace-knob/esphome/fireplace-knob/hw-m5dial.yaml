@@ -1,0 +1,97 @@
+# Hardware package: M5Stack Dial v1.1 (ESP32-S3FN8, 8 MB flash, no PSRAM,
+# 1.28" 240x240 GC9A01 SPI, FT3267 touch, 16-detent encoder, under-screen
+# button, buzzer, PCF8563 RTC, WS1850S NFC, LiPo connector + charger,
+# DC 6-36 V input). Pair with ui-240.yaml.
+# Pins: docs.m5stack.com/en/core/M5Dial%20V1.1 and devices.esphome.io/devices/M5Stack-Dial.
+#
+# Battery power latch: on battery the board stays powered only while GPIO46
+# (HOLD) is high, so it is driven high at setup. Pressing the under-screen
+# button powers the board on from fully off (6 uA); setting HOLD low powers
+# it off again (not used yet).
+
+esphome:
+  platformio_options:
+    board_build.flash_mode: dio
+
+esp32:
+  board: m5stack-stamps3
+  flash_size: 8MB
+  framework:
+    type: esp-idf
+
+safe_mode:
+
+# Keep battery power on (no-op on USB).
+switch:
+  - platform: gpio
+    id: power_hold
+    internal: true
+    pin: GPIO46
+    restore_mode: ALWAYS_ON
+
+output:
+  - platform: ledc
+    pin: GPIO9
+    id: bl_pwm
+    frequency: 19531Hz
+  - platform: ledc
+    pin: GPIO3
+    id: buzzer_out
+
+rtttl:
+  output: buzzer_out
+  id: buzzer
+
+light:
+  - platform: monochromatic
+    id: display_backlight
+    internal: true
+    output: bl_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 250ms
+
+spi:
+  clk_pin: GPIO6
+  mosi_pin: GPIO5
+
+display:
+  - platform: mipi_spi
+    id: panel
+    model: GC9A01A
+    cs_pin: GPIO7
+    dc_pin: GPIO4
+    reset_pin: GPIO8
+    data_rate: 40MHz
+    invert_colors: true
+    update_interval: never
+    auto_clear_enabled: false
+
+sensor:
+  - platform: rotary_encoder
+    id: knob
+    internal: true
+    pin_a:
+      number: GPIO41
+      mode: {input: true, pullup: true}
+    pin_b:
+      number: GPIO40
+      mode: {input: true, pullup: true}
+    on_clockwise:
+      - script.execute: {id: knob_turn, dir: !lambda 'return ${rotation_sign};'}
+    on_anticlockwise:
+      - script.execute: {id: knob_turn, dir: !lambda 'return -(${rotation_sign});'}
+
+binary_sensor:
+  - platform: gpio
+    id: knob_button
+    internal: true
+    pin:
+      number: GPIO42
+      mode: {input: true, pullup: true}
+      inverted: true
+    filters:
+      - delayed_on_off: 15ms
+    on_press:
+      - script.execute: button_down
+    on_release:
+      - script.execute: button_up

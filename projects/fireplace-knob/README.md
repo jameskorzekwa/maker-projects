@@ -54,6 +54,7 @@ All three are remembered across reboots and can be changed from the knob
 
 | Component | Quantity | Notes | Purchase link |
 | --- | ---: | --- | --- |
+| M5Stack Dial v1.1 (ESP32-S3FN8, 1.28" 240×240 GC9A01, encoder, LiPo connector + charger, 6–36 V in) | 1 | Battery-capable alternative; bought 2026-11-10 | [M5Stack](https://shop.m5stack.com/products/m5stack-dial-v1-1) |
 | ELECROW CrowPanel 2.1" ESP32-S3 rotary display (480×480 IPS, ST7701S RGB, CST826 touch, PCF8574 expander, rotary encoder with push) | 1 per fireplace | ESP32-S3, 16 MB flash, 8 MB octal PSRAM, USB-C power | [Amazon B0G3TZGRC4](https://www.amazon.com/dp/B0G3TZGRC4) |
 | USB-C 5 V supply | 1 | Wall powered; no battery | — |
 
@@ -82,7 +83,10 @@ component, and this interface does not use touch.
 
 | File | Purpose |
 | --- | --- |
-| `esphome/fireplace-knob/base.yaml` + `knob_helpers.h` | Hardware, UI, and behaviour. All entities are substitutions. |
+| `esphome/fireplace-knob/common.yaml` + `knob_helpers.h` | Behaviour, HA entities, state and the render script (board-independent). All entities are substitutions. |
+| `esphome/fireplace-knob/hw-crowpanel21.yaml` / `hw-m5dial.yaml` | Board packages: pins, display driver, encoder and button (call `button_down`/`button_up`). |
+| `esphome/fireplace-knob/ui-480.yaml` / `ui-240.yaml` | Fonts and LVGL pages for 480×480 (CrowPanel 2.1") and 240×240 (M5Stack Dial). Same widget ids. |
+| `esphome/fireplace-dial-living-room.yaml` | Living room on the **M5Stack Dial v1.1** (same entities as the CrowPanel knob). |
 | `esphome/fireplace-knob-living-room.yaml` | Living room: `proflame_connect_wifi` entities (`switch.living_room_fireplace`, `climate.living_room_fireplace_mode`, `number.living_room_fireplace_flame_height`, `number.living_room_fireplace_fan_speed`, `switch.living_room_fireplace_light`). |
 | `esphome/fireplace-knob-basement.yaml` | Basement: ESP32 X0A controller entities (`*.basement_fireplace_*`), 0.5° steps. Not deployed. |
 
@@ -144,6 +148,7 @@ over USB.
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-10 | Split into common/hw/ui packages. Added the M5Stack Dial v1.1 (`hw-m5dial.yaml`, `ui-240.yaml`): 240×240 layout with bigger relative type, no hint lines, three settings rows. Flashed over USB from the laptop via esptool, adopted in HA, "allow actions" enabled. Hold now toggles on **release** after 0.7–3 s; a press longer than 3 s is ignored as stuck (both boards). |
 | 2026-11-07 | Cold-boot fix: the boot sequence now pulses the LCD reset low for 100 ms (as Elecrow's factory `Board21.h` does) in one blocking lambda before the display driver runs. Without the pulse a power-cycled panel showed coloured noise; with the pulse as separate `delay:` steps the driver initialised the panel while it was still in reset (black). |
 | 2026-11-07 | Display Off: Sleep + fireplace off for 30 s turns the backlight off and enables Wi-Fi modem sleep (`esp_wifi_set_ps`). Battery research recorded in `power.md`. |
 | 2026-11-07 | Sleep after 10 s; HA-connected check uses the state-subscription test and is re-polled, so OFFLINE no longer sticks after a reconnect; Main never wraps. |

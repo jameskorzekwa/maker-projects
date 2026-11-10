@@ -1,5 +1,5 @@
 # Basement fireplace knob (Elecrow CrowPanel 2.1" rotary display).
-# All behaviour and hardware live in fireplace-knob/base.yaml.
+# Behaviour: fireplace-knob/common.yaml; board: hw-crowpanel21.yaml; UI: ui-480.yaml.
 # Basement = ESP32 X0A controller (proflame-bench.yaml, "Basement Fireplace").
 # Not deployed yet; flash a second CrowPanel with this file to use it.
 
@@ -16,4 +16,6 @@ substitutions:
   temp_format: "%.1f"
 
 packages:
-  knob: !include fireplace-knob/base.yaml
+  common: !include fireplace-knob/common.yaml
+  hardware: !include fireplace-knob/hw-crowpanel21.yaml
+  ui: !include fireplace-knob/ui-480.yaml
