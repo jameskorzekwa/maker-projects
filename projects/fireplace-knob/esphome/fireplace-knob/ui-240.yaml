@@ -8,6 +8,7 @@ substitutions:
   txt_fp_offline_short: "Offline"
   txt_fp_offline: "Fireplace offline"
   txt_connecting: "Connecting to HA..."
+  settings_value_below: "true"
 
 font:
   - file: {type: gfonts, family: Roboto, weight: 700}
@@ -285,10 +286,10 @@ lvgl:
             text_font: font_hint
             text_color: 0x6A6A6A
         - label: {id: row_m2, align: CENTER, y: -40, width: 160, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A, hidden: true}
-        - label: {id: row_m1, align: CENTER, y: -26, width: 190, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
+        - label: {id: row_m1, align: CENTER, y: -30, width: 190, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
         - obj:
             align: CENTER
-            y: 8
+            y: 2
             width: 204
             height: 40
             radius: 20
@@ -296,12 +297,13 @@ lvgl:
             bg_opa: COVER
             border_color: 0xFF7A1A
             border_width: 2
-        - label: {id: row_0, align: CENTER, y: 8, width: 196, text_align: CENTER, long_mode: CLIP, text: "", text_font: font_menu, text_color: 0xFFFFFF}
-        - label: {id: row_p1, align: CENTER, y: 42, width: 190, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
-        - label: {id: row_p2, align: CENTER, y: 56, width: 160, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A, hidden: true}
+        - label: {id: row_0, align: CENTER, y: 2, width: 196, text_align: CENTER, long_mode: CLIP, text: "", text_font: font_menu, text_color: 0xFFFFFF}
+        - label: {id: row_value, align: CENTER, y: 32, width: 190, text_align: CENTER, long_mode: CLIP, text: "", text_font: font_sub, text_color: 0xFF7A1A}
+        - label: {id: row_p1, align: CENTER, y: 56, width: 190, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
+        - label: {id: row_p2, align: CENTER, y: 70, width: 160, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A, hidden: true}
         - label:
             align: CENTER
-            y: 86
+            y: 88
             width: 150
             text_align: CENTER
             text: "Turn \u00B7 Tap"

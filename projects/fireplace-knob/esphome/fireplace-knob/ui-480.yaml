@@ -291,6 +291,7 @@ lvgl:
             border_color: 0xFF7A1A
             border_width: 2
         - label: {id: row_0, align: CENTER, y: 24, width: 380, text_align: CENTER, text: "", text_font: font_menu, text_color: 0xFFFFFF}
+        - label: {id: row_value, align: CENTER, y: 24, width: 10, text: "", text_font: font_hint, text_color: 0x000000, hidden: true}
         - label: {id: row_p1, align: CENTER, y: 76, width: 380, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
         - label: {id: row_p2, align: CENTER, y: 108, width: 360, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A}
         - label:

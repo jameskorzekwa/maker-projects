@@ -74,6 +74,7 @@ substitutions:
   txt_fp_offline_short: "Fireplace offline"
   txt_fp_offline: "Fireplace not reachable"
   txt_connecting: "Connecting to Home Assistant..."
+  settings_value_below: "false"   # "true": value under the highlighted row (small UI)
   sleep_brightness_default: "25"
 
 esphome:
@@ -721,9 +722,15 @@ script:
                 case 8: snprintf(val, sizeof(val), "%d", id(flame_target)); break;
                 case 9: snprintf(val, sizeof(val), "%.0f%%", id(awake_brightness).state); break;
               }
-              if (val[0]) snprintf(buf, sizeof(buf), "%s   %s", NAMES[r], val);
-              else snprintf(buf, sizeof(buf), "%s", NAMES[r]);
-              lv_label_set_text(lbl, buf);
+              if (${settings_value_below}) {
+                lv_label_set_text(lbl, NAMES[r]);
+                lv_label_set_text(id(row_value), val);
+              } else {
+                if (val[0]) snprintf(buf, sizeof(buf), "%s   %s", NAMES[r], val);
+                else snprintf(buf, sizeof(buf), "%s", NAMES[r]);
+                lv_label_set_text(lbl, buf);
+                lv_label_set_text(id(row_value), "");
+              }
             }
           }
 
