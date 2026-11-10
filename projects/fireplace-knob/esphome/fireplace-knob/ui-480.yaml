@@ -58,6 +58,7 @@ font:
       - "\U000F0335"  # lightbulb
       - "\U000F0336"  # lightbulb-outline
       - "\U000F0E50"  # lightbulb-off-outline
+      - "\U000F081D"  # fan-off
       - "\U000F0425"  # power
       - "\U000F00E0"  # brightness-7
       - "\U000F004D"  # arrow-left (Back)
@@ -73,6 +74,7 @@ font:
       - "\U000F0335"  # lightbulb
       - "\U000F0336"  # lightbulb-outline
       - "\U000F0E50"  # lightbulb-off-outline
+      - "\U000F081D"  # fan-off
       - "\U000F0425"  # power
       - "\U000F00E0"  # brightness-7
       - "\U000F004D"  # arrow-left (Back)
@@ -207,7 +209,7 @@ lvgl:
               flex_align_track: CENTER
               pad_column: 10
             widgets:
-              - label: {id: stat_fan_icon, text: "\U000F0210", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: stat_fan_icon, text: "\U000F081D", text_font: font_icons_small, text_color: 0x5A5A5A}
               - label: {id: stat_fan_value, text: "0", text_font: font_title, text_color: 0x9A9A9A}
               - label: {text: " \u00B7 ", text_font: font_title, text_color: 0x6A6A6A}
               - label: {id: stat_light_icon, text: "\U000F0E50", text_font: font_icons_small, text_color: 0x5A5A5A}
