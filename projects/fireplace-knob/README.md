@@ -7,7 +7,7 @@ alone, with no touch input.
 ## Screens
 
 ```
-SLEEP --tap--> MAIN --tap--> SETTINGS --tap on item--> EDIT (Power/Mode/Fan/Light/Flame/Brightness)
+SLEEP --tap--> MAIN --tap--> SETTINGS (icon arc) --tap on icon--> EDIT (Power/Mode/Fan/Light/Flame/Brightness)
   |             |  ^            |  ^                        |
   | turn        |  | tap/10 s   |  +---------- tap ---------+
   v             |  |            +-- "Back" + tap --> MAIN
@@ -22,10 +22,10 @@ SLEEP + fireplace off for 30 s --> DISPLAY OFF (backlight off, Wi-Fi modem sleep
 | **Sleep** | Room temperature at the Sleep brightness; a small orange flame when the fireplace is on. After 30 s with the fireplace off the backlight turns fully off (Display Off) until touched or the fireplace turns on | Opens Set Point; the first click already changes the value | Main |
 | **Main** | Room temperature, set point (or flame height in Manual), mode, fan and light state | Set Point | Settings |
 | **Set Point** | Set temperature (Manual while burning: flame height) | ±1 °F (or ±1 flame) | Main (10 s idle goes to Sleep) |
-| **Settings** | Power, Mode, Fan, Light, Flame, Brightness, Back. Flame appears only in Manual while burning | Choose a row | Open it (Back → Main) |
+| **Settings** | An arc of icons across the top (Back, Power, Mode, Fan, Light, Flame, Brightness) with a live preview of the highlighted setting underneath. Back is highlighted on entry. Flame appears only in Manual while burning | Move the highlight along the arc | Edit that setting (the arc dims); Back → Main |
 | **Power** | ON/OFF | Choose | Apply and return to Settings |
 | **Mode** | Manual / Thermostat / Smart | Choose | Apply and return to Settings. While off, only picks the mode for the next turn-on |
-| **Fan / Light / Flame** | Fan 0–6, light on/off, flame 1–6 | Change (sent ~1 s after you stop) | Settings |
+| **Fan / Light / Flame** | Fan 0–6, light on/off, flame 1–6 | Change (sent ~1 s after you stop) | Back to the Settings arc, same icon highlighted |
 | **Brightness** | Awake brightness, then Sleep brightness (previewed live) | ±5 % | Next step, then Settings |
 
 - Only a long press, or Power in Settings, ever lights the fireplace. Set
@@ -148,6 +148,7 @@ over USB.
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-10 | Settings redesigned as an icon arc with live preview (pages 2–9 all draw on `page_value`; `page_settings` removed). Compact wording and split value line on 240×240. Fireplace dongle moved IP → HA entry fixed and DHCP reservations added. |
 | 2026-11-10 | Split into common/hw/ui packages. Added the M5Stack Dial v1.1 (`hw-m5dial.yaml`, `ui-240.yaml`): 240×240 layout with bigger relative type, no hint lines, three settings rows. Flashed over USB from the laptop via esptool, adopted in HA, "allow actions" enabled. Hold now toggles on **release** after 0.7–3 s; a press longer than 3 s is ignored as stuck (both boards). |
 | 2026-11-07 | Cold-boot fix: the boot sequence now pulses the LCD reset low for 100 ms (as Elecrow's factory `Board21.h` does) in one blocking lambda before the display driver runs. Without the pulse a power-cycled panel showed coloured noise; with the pulse as separate `delay:` steps the driver initialised the panel while it was still in reset (black). |
 | 2026-11-07 | Display Off: Sleep + fireplace off for 30 s turns the backlight off and enables Wi-Fi modem sleep (`esp_wifi_set_ps`). Battery research recorded in `power.md`. |

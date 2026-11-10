@@ -1,6 +1,9 @@
 # UI package for 480x480 round displays (CrowPanel 2.1"). Widget ids are
 # shared with ui-240.yaml; common.yaml's render script drives both.
 
+substitutions:
+  arc_radius: "200"
+
 # ------------------------------------------------------------------
 # UI
 # ------------------------------------------------------------------
@@ -42,6 +45,14 @@ font:
     glyphs:
       - "\U000F0238"  # fire
       - "\U000F1722"  # fire-off
+      - "\U000F050F"  # thermometer
+      - "\U000F1542"  # tune-variant
+      - "\U000F0210"  # fan
+      - "\U000F0335"  # lightbulb
+      - "\U000F0336"  # lightbulb-outline
+      - "\U000F0425"  # power
+      - "\U000F00E0"  # brightness-7
+      - "\U000F004D"  # arrow-left (Back)
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
     id: font_icons
     size: 44
@@ -55,6 +66,7 @@ font:
       - "\U000F0336"  # lightbulb-outline
       - "\U000F0425"  # power
       - "\U000F00E0"  # brightness-7
+      - "\U000F004D"  # arrow-left (Back)
 
 # Status row (flame + mode/OFF) used at the top of Main, Value and Settings.
 .status_row: &status_row
@@ -261,44 +273,17 @@ lvgl:
             text: ""
             text_font: font_sub
             text_color: 0x9A9A9A
-
-    # ================= Settings =================
-    - id: page_settings
-      bg_color: 0x000000
-      widgets:
-        - obj:
-            <<: *status_row
-            id: status_row_s
-            widgets:
-              - label: {id: status_icon_s, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
-              - label: {id: status_text_s, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
-        - label:
-            align: CENTER
-            y: -104
-            text: "SETTINGS"
-            text_font: font_title
-            text_color: 0x6A6A6A
-        - label: {id: row_m2, align: CENTER, y: -58, width: 360, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A}
-        - label: {id: row_m1, align: CENTER, y: -26, width: 380, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
-        - obj:
-            align: CENTER
-            y: 24
-            width: 400
-            height: 64
-            radius: 32
-            bg_color: 0x1A1A1A
-            bg_opa: COVER
-            border_color: 0xFF7A1A
-            border_width: 2
-        - label: {id: row_0, align: CENTER, y: 24, width: 380, text_align: CENTER, text: "", text_font: font_menu, text_color: 0xFFFFFF}
-        - label: {id: row_value, align: CENTER, y: 24, width: 10, text: "", text_font: font_hint, text_color: 0x000000, hidden: true}
-        - label: {id: row_p1, align: CENTER, y: 76, width: 380, text_align: CENTER, text: "", text_font: font_sub, text_color: 0x6A6A6A}
-        - label: {id: row_p2, align: CENTER, y: 108, width: 360, text_align: CENTER, text: "", text_font: font_hint, text_color: 0x3A3A3A}
-        - label:
-            align: CENTER
-            y: 170
-            width: 300
-            text_align: CENTER
-            text: "Turn: choose   Tap: open"
-            text_font: font_hint
-            text_color: 0x4A4A4A
+        - label: {id: arc_big_0, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_0, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_1, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_1, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_2, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_2, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_3, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_3, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_4, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_4, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_5, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_5, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_6, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_6, align: CENTER, x: 0, y: -200, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}

@@ -15,8 +15,10 @@
 #              Turn -> Set Point.
 #   Set Point  turn = set temperature (Manual while burning: flame height).
 #              Tap or 10 s idle -> Main. Never lights the fireplace.
-#   Settings   turn = choose Power / Mode / Fan / Light / Flame / Brightness /
-#              Back, tap = open. Flame is listed only in Manual while burning.
+#   Settings   an arc of icons across the top (Back, Power, Mode, Fan, Light,
+#              Flame, Brightness); turn = move the highlight, the centre
+#              previews that setting live; tap = edit it (tap Back -> Main).
+#              Flame is listed only in Manual while burning.
 #   Edit       turn = change, tap -> Settings. Fan, light, flame and the set
 #              point are sent ~1 s after the knob stops; Power and Mode are
 #              sent when you tap (a timeout discards them). Brightness has
@@ -74,7 +76,7 @@ substitutions:
   txt_fp_offline_short: "Fireplace offline"
   txt_fp_offline: "Fireplace not reachable"
   txt_connecting: "Connecting to Home Assistant..."
-  settings_value_below: "false"   # "true": value under the highlighted row (small UI)
+  arc_radius: "200"               # radius of the settings icon arc (ui-*.yaml overrides)
   sleep_brightness_default: "25"
 
 esphome:
@@ -358,7 +360,6 @@ script:
           lv_obj_t *scr = id(page_value)->obj;
           if (to == 0) scr = id(page_sleep)->obj;
           else if (to == 1) scr = id(page_main)->obj;
-          else if (to == 3) scr = id(page_settings)->obj;
           if (lv_screen_active() != scr) lv_screen_load(scr);
 
   - id: wake
@@ -672,12 +673,12 @@ script:
           lv_obj_set_style_text_color(id(sleep_temp), lv_color_hex(connected ? WHITE : GREY), 0);
           lv_obj_set_style_text_color(id(main_temp), lv_color_hex(connected ? WHITE : GREY), 0);
 
-          // ---- status rows (same content on Main, Value and Settings) ----
+          // ---- status rows (Main and Set Point) ----
           const char *st_icon = fp_on ? "\U000F0238" : "\U000F1722";
           const char *st_text = !connected ? "${txt_no_ha}" : !fp_known ? "${txt_fp_offline_short}" : fp_on ? MODE_MC[m] : "OFF";
-          lv_obj_t *sicons[] = {id(status_icon_m), id(status_icon_v), id(status_icon_s)};
-          lv_obj_t *stexts[] = {id(status_text_m), id(status_text_v), id(status_text_s)};
-          for (int i = 0; i < 3; i++) {
+          lv_obj_t *sicons[] = {id(status_icon_m), id(status_icon_v)};
+          lv_obj_t *stexts[] = {id(status_text_m), id(status_text_v)};
+          for (int i = 0; i < 2; i++) {
             lv_label_set_text(sicons[i], st_icon);
             lv_obj_set_style_text_color(sicons[i], lv_color_hex(fp_on ? ORANGE : GREY), 0);
             lv_label_set_text(stexts[i], st_text);
@@ -700,47 +701,54 @@ script:
           lv_label_set_text(id(main_info), buf);
           lv_label_set_text(id(main_hint), manual_flame ? "Tap: settings   Turn: flame" : "Tap: settings   Turn: set temp");
 
-          // ---- Settings list ----
-          if (p == 3) {
-            static const char *NAMES[] = {"", "Back", "", "", "Power", "Mode", "Fan", "Light", "Flame", "Brightness"};
+          // ---- Settings arc + Value page ----
+          // Pages 2..9 all draw on page_value. Page 3 (Settings) shows the arc
+          // of setting icons at the top and previews the highlighted setting
+          // below it; pages 4..9 edit that setting (arc dimmed); page 2 (Set
+          // Point) hides the arc.
+          if (p >= 2) {
+            static const char *ICON_OF[] = {"", "\U000F004D", "", "", "\U000F0425", "\U000F1542", "\U000F0210", "\U000F0335", "\U000F0238", "\U000F00E0"};
+            static const uint32_t ACCENT_OF[] = {0, 0x9A9A9A, 0, 0, GREEN, PURPLE, CYAN, YELLOW, RED, WHITE};
+            const bool editing = p >= 4;
             int rows[8]; int n = settings_rows(rows, fp_on, m);
             int sel = std::min(id(settings_sel), n - 1);
             id(settings_sel) = sel;
-            lv_obj_t *R[] = {id(row_m2), id(row_m1), id(row_0), id(row_p1), id(row_p2)};
-            for (int k = -2; k <= 2; k++) {
-              int i = sel + k;
-              lv_obj_t *lbl = R[k + 2];
-              if (i < 0 || i >= n) { lv_label_set_text(lbl, ""); continue; }
-              int r = rows[i];
-              if (k != 0) { lv_label_set_text(lbl, NAMES[r]); continue; }
-              char val[32] = "";
-              switch (r) {
-                case 4: snprintf(val, sizeof(val), "%s", fp_on ? "ON" : "OFF"); break;
-                case 5: snprintf(val, sizeof(val), "%s", MODE_MC[m]); break;
-                case 6: if (id(fan_target) > 0) snprintf(val, sizeof(val), "%d", id(fan_target)); else snprintf(val, sizeof(val), "Off"); break;
-                case 7: snprintf(val, sizeof(val), "%s", (id(light_pending) ? id(light_target) : id(ha_light).state == "on") ? "On" : "Off"); break;
-                case 8: snprintf(val, sizeof(val), "%d", id(flame_target)); break;
-                case 9: snprintf(val, sizeof(val), "%.0f%%", id(awake_brightness).state); break;
-              }
-              if (${settings_value_below}) {
-                lv_label_set_text(lbl, NAMES[r]);
-                lv_label_set_text(id(row_value), val);
-              } else {
-                if (val[0]) snprintf(buf, sizeof(buf), "%s   %s", NAMES[r], val);
-                else snprintf(buf, sizeof(buf), "%s", NAMES[r]);
-                lv_label_set_text(lbl, buf);
-                lv_label_set_text(id(row_value), "");
-              }
-            }
-          }
+            // The setting being shown: highlighted one while browsing, the
+            // page itself while editing, nothing (-1) on Set Point.
+            int view = (p == 3) ? rows[sel] : editing ? p : -1;
+            if (editing) { for (int i = 0; i < n; i++) if (rows[i] == p) sel = i; }
 
-          // ---- Value page (Set Point + edit screens) ----
-          if (p == 2 || p >= 4) {
+            // Arc icons: N evenly spaced over the top, highlighted = big + accent.
+            lv_obj_t *big[] = {id(arc_big_0), id(arc_big_1), id(arc_big_2), id(arc_big_3), id(arc_big_4), id(arc_big_5), id(arc_big_6)};
+            lv_obj_t *small[] = {id(arc_small_0), id(arc_small_1), id(arc_small_2), id(arc_small_3), id(arc_small_4), id(arc_small_5), id(arc_small_6)};
+            const bool show_arc = (p >= 3);
+            const float span = std::min(144.0f, (n - 1) * 24.0f);
+            for (int i = 0; i < 7; i++) {
+              if (!show_arc || i >= n) { lv_obj_add_flag(big[i], LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(small[i], LV_OBJ_FLAG_HIDDEN); continue; }
+              const float ang = (-span / 2 + i * (n > 1 ? span / (n - 1) : 0)) * 3.14159265f / 180.0f;
+              const int32_t x = (int32_t) lroundf(${arc_radius} * sinf(ang)), y = (int32_t) lroundf(-${arc_radius} * cosf(ang));
+              const int r = rows[i];
+              lv_obj_t *show = (i == sel) ? big[i] : small[i];
+              lv_obj_t *hide = (i == sel) ? small[i] : big[i];
+              lv_obj_add_flag(hide, LV_OBJ_FLAG_HIDDEN);
+              lv_obj_remove_flag(show, LV_OBJ_FLAG_HIDDEN);
+              lv_label_set_text(show, (r == 7 && !(id(light_pending) ? id(light_target) : id(ha_light).state == "on")) ? "\U000F0336" : ICON_OF[r]);
+              lv_obj_set_x(show, x); lv_obj_set_y(show, y);
+              uint32_t col = (i == sel) ? (r == 1 ? WHITE : ACCENT_OF[r]) : editing ? 0x2A2A2A : 0x6A6A6A;
+              lv_obj_set_style_text_color(show, lv_color_hex(col), 0);
+            }
+            // Status row only on Set Point (the arc takes its place otherwise).
+            if (show_arc) lv_obj_add_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_remove_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);
+
             uint32_t accent = ORANGE;
             const char *title = ""; const char *icon = "";
-            bool show_mode_label = false;
-            switch (p) {
-              case 2:
+            bool show_mode_label = false, show_value = true;
+            // Values shown: live state while browsing, the edit buffer while editing.
+            const bool pw = editing ? id(power_edit) : fp_on;
+            const int  md = editing ? id(mode_edit) : m;
+            switch (view) {
+              case -1:  // Set Point
                 if (manual_flame) {
                   accent = RED; title = "FLAME"; icon = "\U000F0238";
                   snprintf(buf, sizeof(buf), "%d", id(flame_target));
@@ -761,12 +769,20 @@ script:
                   lv_label_set_text(id(sub_label), buf);
                 }
                 break;
+              case 1: {  // Back
+                accent = 0x9A9A9A; title = "BACK"; icon = "\U000F004D"; show_value = false;
+                lv_arc_set_range(id(ring), 0, 1);
+                lv_arc_set_value(id(ring), 0);
+                lv_label_set_text(id(sub_label), "Tap: back to main");
+                break;
+              }
               case 4: {
                 accent = GREEN; title = "POWER"; icon = "\U000F0425";
-                lv_label_set_text(id(value_label), id(power_edit) ? "ON" : "OFF");
+                lv_label_set_text(id(value_label), pw ? "ON" : "OFF");
                 lv_arc_set_range(id(ring), 0, 1);
-                lv_arc_set_value(id(ring), id(power_edit) ? 1 : 0);
-                if (id(power_edit) != fp_on) snprintf(buf, sizeof(buf), "Tap to turn %s", id(power_edit) ? "on" : "off");
+                lv_arc_set_value(id(ring), pw ? 1 : 0);
+                if (!editing) snprintf(buf, sizeof(buf), "Tap to change");
+                else if (pw != fp_on) snprintf(buf, sizeof(buf), "Tap to turn %s", pw ? "on" : "off");
                 else snprintf(buf, sizeof(buf), "Turn right: on   left: off");
                 lv_label_set_text(id(sub_label), buf);
                 break;
@@ -774,10 +790,11 @@ script:
               case 5: {
                 accent = PURPLE; title = "MODE"; icon = "\U000F1542"; show_mode_label = true;
                 static const char *HINT[] = {"You set flame + fan", "Auto flame, you set fan", "Smart flame, you set fan"};
-                lv_label_set_text(id(mode_label), MODE_UP[id(mode_edit)]);
+                lv_label_set_text(id(mode_label), MODE_UP[md]);
                 lv_arc_set_range(id(ring), 0, 3);
-                lv_arc_set_value(id(ring), id(mode_edit) + 1);
-                if (id(mode_edit) != m) snprintf(buf, sizeof(buf), "Tap to apply");
+                lv_arc_set_value(id(ring), md + 1);
+                if (!editing) snprintf(buf, sizeof(buf), "Tap to change");
+                else if (md != m) snprintf(buf, sizeof(buf), "Tap to apply");
                 else if (fp_on) snprintf(buf, sizeof(buf), "%s", HINT[m]);
                 else snprintf(buf, sizeof(buf), "Used at next turn-on");
                 lv_label_set_text(id(sub_label), buf);
@@ -790,7 +807,7 @@ script:
                 lv_label_set_text(id(value_label), buf);
                 lv_arc_set_range(id(ring), 0, ${fan_max});
                 lv_arc_set_value(id(ring), f);
-                lv_label_set_text(id(sub_label), id(fan_pending) ? "Setting..." : "Speed 0 - ${fan_max}");
+                lv_label_set_text(id(sub_label), !editing ? "Tap to change" : id(fan_pending) ? "Setting..." : "Speed 0 - ${fan_max}");
                 break;
               }
               case 7: {
@@ -800,7 +817,7 @@ script:
                 lv_label_set_text(id(value_label), lon ? "ON" : "OFF");
                 lv_arc_set_range(id(ring), 0, 1);
                 lv_arc_set_value(id(ring), lon ? 1 : 0);
-                lv_label_set_text(id(sub_label), "Turn right: on   left: off");
+                lv_label_set_text(id(sub_label), !editing ? "Tap to change" : "Turn right: on   left: off");
                 break;
               }
               case 8: {
@@ -810,20 +827,20 @@ script:
                 lv_label_set_text(id(value_label), buf);
                 lv_arc_set_range(id(ring), 0, ${flame_max});
                 lv_arc_set_value(id(ring), f);
-                lv_label_set_text(id(sub_label), !fp_on ? "Hold knob to turn on"
+                lv_label_set_text(id(sub_label), !editing ? "Tap to change" : !fp_on ? "Hold knob to turn on"
                                   : id(flame_pending) ? "Setting..." : "Flame 1 - ${flame_max}");
                 break;
               }
               case 9: {
                 accent = WHITE; icon = "\U000F00E0";
-                bool sl = id(bright_step) == 1;
+                bool sl = editing && id(bright_step) == 1;
                 title = sl ? "SLEEP BRIGHTNESS" : "BRIGHTNESS";
                 float v = sl ? id(sleep_brightness).state : id(awake_brightness).state;
                 snprintf(buf, sizeof(buf), "%.0f", v);
                 lv_label_set_text(id(value_label), buf);
                 lv_arc_set_range(id(ring), 0, 100);
                 lv_arc_set_value(id(ring), (int32_t) v);
-                lv_label_set_text(id(sub_label), sl ? "Tap to finish" : "Tap for sleep brightness");
+                lv_label_set_text(id(sub_label), !editing ? "Tap to change" : sl ? "Tap to finish" : "Tap for sleep brightness");
                 break;
               }
             }
@@ -833,11 +850,12 @@ script:
               lv_obj_add_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
               lv_obj_remove_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
             } else {
-              lv_obj_remove_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
+              if (show_value) lv_obj_remove_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
+              else lv_obj_add_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
               lv_obj_add_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
             }
             if (!connected) lv_label_set_text(id(sub_label), "${txt_connecting}");
-            else if (!fp_known) lv_label_set_text(id(sub_label), "${txt_fp_offline}");
+            else if (!fp_known && view != 1) lv_label_set_text(id(sub_label), "${txt_fp_offline}");
             lv_obj_set_style_arc_color(id(ring), lv_color_hex(accent), LV_PART_INDICATOR);
             lv_obj_set_style_text_color(id(title_icon), lv_color_hex(accent), 0);
             lv_obj_set_style_text_color(id(value_label), lv_color_hex(connected ? WHITE : GREY), 0);
