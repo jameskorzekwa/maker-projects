@@ -13,7 +13,8 @@
 #              Turn -> Set Point (first click already counts). Hold -> on/off.
 #   Main       room temperature, set point, mode, on/off. Tap -> Settings.
 #              Turn -> Set Point.
-#   Set Point  turn = set temperature (Manual while burning: flame height).
+#   Set Point  turn = set temperature (Manual: flame height; while off it is
+#              stored and sent right after the next Manual turn-on).
 #              Tap or 10 s idle -> Main. Never lights the fireplace.
 #   Settings   an arc of icons across the top (Back, Power, Mode, Fan, Light,
 #              Flame, Brightness); turn = move the highlight, the centre
@@ -158,9 +159,13 @@ globals:
   - id: temp_pending
     type: bool
     initial_value: "false"
-  - id: flame_target
+  - id: flame_target        # live flame height from HA (while burning)
     type: int
     initial_value: "0"
+  - id: flame_saved         # flame height to light with in Manual (knob-set)
+    type: int
+    restore_value: true
+    initial_value: "3"
   - id: flame_pending
     type: bool
     initial_value: "false"
@@ -302,7 +307,10 @@ sensor:
     entity_id: ${flame_number}
     on_value:
       - lambda: |-
-          if (!std::isnan(x) && !id(flame_pending)) id(flame_target) = (int) lroundf(x);
+          if (!std::isnan(x) && !id(flame_pending)) {
+            id(flame_target) = (int) lroundf(x);
+            if (id(flame_target) > 0) id(flame_saved) = id(flame_target);
+          }
       - script.execute: render
   - platform: homeassistant
     id: ha_fan
@@ -478,9 +486,8 @@ script:
           if (p == 0 || p == 1) { id(go)->execute(2); p = 2; }   // first click counts
           switch (p) {
             case 2: {
-              if (id(mode_sel) == 0 && fp_on) {        // Manual: flame height
-                int f = std::min(${flame_max}, std::max(1, id(flame_target) + dir));
-                if (f != id(flame_target)) { id(flame_target) = f; id(flame_pending) = true; id(send_flame)->execute(); }
+              if (id(mode_sel) == 0) {                 // Manual: flame height
+                id(adjust_flame)->execute(dir);
               } else {
                 float t = id(setpoint) + dir * ${temp_step};
                 id(setpoint) = std::min((float) ${temp_max}, std::max((float) ${temp_min}, t));
@@ -507,12 +514,7 @@ script:
               if (want != cur) { id(light_target) = want; id(light_pending) = true; id(send_light)->execute(); }
               break;
             }
-            case 8: {
-              if (!fp_on) { id(show_toast)->execute("Hold knob to\nturn on first", 2000); break; }
-              int f = std::min(${flame_max}, std::max(1, id(flame_target) + dir));
-              if (f != id(flame_target)) { id(flame_target) = f; id(flame_pending) = true; id(send_flame)->execute(); }
-              break;
-            }
+            case 8: id(adjust_flame)->execute(dir); break;
             case 9: {
               auto *n = id(bright_step) == 0 ? (number::Number *) id(awake_brightness) : (number::Number *) id(sleep_brightness);
               float lo = id(bright_step) == 0 ? 10 : 0;
@@ -549,6 +551,34 @@ script:
                   m: !lambda |-
                     static const char *M[] = {"Manual", "Thermostat", "Smart"};
                     return std::string(M[id(mode_sel)]);
+            # Manual: light with the knob's stored flame height.
+            - if:
+                condition:
+                  lambda: 'return id(mode_sel) == 0;'
+                then:
+                  - delay: 3s
+                  - homeassistant.action:
+                      action: number.set_value
+                      data:
+                        entity_id: ${flame_number}
+                      data_template:
+                        value: "{{ v }}"
+                      variables:
+                        v: !lambda 'return id(flame_saved);'
+
+  # Flame height. Burning: send it (debounced). Off: only store it, because
+  # a flame > 0 sent to an off Proflame lights it; toggle_fireplace sends
+  # the stored value right after a Manual turn-on.
+  - id: adjust_flame
+    parameters: {dir: int}
+    then:
+      - lambda: |-
+          const bool fp_on = id(ha_fireplace).state == "on";
+          int cur = fp_on ? id(flame_target) : id(flame_saved);
+          int f = std::min(${flame_max}, std::max(1, cur + dir));
+          if (f == cur) return;
+          id(flame_saved) = f;
+          if (fp_on) { id(flame_target) = f; id(flame_pending) = true; id(send_flame)->execute(); }
 
   # Debounced: one HA call after the knob stops turning.
   - id: send_temp
@@ -658,7 +688,8 @@ script:
           const bool fp_known = fp == "on" || fp == "off";
           const int m = id(mode_sel);
           const int p = id(page);
-          const bool manual_flame = (m == 0 && fp_on);
+          const bool manual_flame = (m == 0);
+          const int flame_shown = fp_on ? id(flame_target) : id(flame_saved);
 
           // ---- room temperature: selected source, falling back to the other
           // one when it has no reading (fireplace offline, sensor unavailable).
@@ -690,7 +721,7 @@ script:
           else lv_obj_add_flag(id(sleep_flame), LV_OBJ_FLAG_HIDDEN);
 
           // ---- Main ----
-          if (manual_flame) snprintf(buf, sizeof(buf), "Flame %d", id(flame_target));
+          if (manual_flame) snprintf(buf, sizeof(buf), "Flame %d", flame_shown);
           else snprintf(buf, sizeof(buf), "Set ${temp_format}\u00B0", id(setpoint));
           lv_label_set_text(id(main_set), buf);
           lv_obj_set_style_text_color(id(main_set), lv_color_hex(!connected ? GREY : fp_on ? ORANGE : SUB), 0);
@@ -738,10 +769,9 @@ script:
               uint32_t col = (i == sel) ? (r == 1 ? WHITE : ACCENT_OF[r]) : 0x6A6A6A;
               lv_obj_set_style_text_color(show, lv_color_hex(col), 0);
             }
-            // Status row only on Set Point. While browsing the arc the ring and
+            // No status row here (Main shows it). While browsing the arc the ring and
             // the title icon are hidden (the arc icon already identifies it).
-            if (p == 2) lv_obj_remove_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);
-            else lv_obj_add_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);   // Main already shows the state
             if (show_arc) { lv_obj_add_flag(id(ring), LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(id(title_icon), LV_OBJ_FLAG_HIDDEN); }
             else { lv_obj_remove_flag(id(ring), LV_OBJ_FLAG_HIDDEN); lv_obj_remove_flag(id(title_icon), LV_OBJ_FLAG_HIDDEN); }
 
@@ -755,11 +785,11 @@ script:
               case -1:  // Set Point
                 if (manual_flame) {
                   accent = RED; title = "FLAME"; icon = "\U000F0238";
-                  snprintf(buf, sizeof(buf), "%d", id(flame_target));
+                  snprintf(buf, sizeof(buf), "%d", flame_shown);
                   lv_label_set_text(id(value_label), buf);
                   lv_arc_set_range(id(ring), 0, ${flame_max});
-                  lv_arc_set_value(id(ring), id(flame_target));
-                  lv_label_set_text(id(sub_label), id(flame_pending) ? "Setting..." : "Flame 1 - ${flame_max}");
+                  lv_arc_set_value(id(ring), flame_shown);
+                  lv_label_set_text(id(sub_label), !fp_on ? "Saved for next turn-on" : id(flame_pending) ? "Setting..." : "Flame 1 - ${flame_max}");
                 } else {
                   accent = ORANGE; title = "SET TEMP"; icon = "\U000F050F";
                   snprintf(buf, sizeof(buf), "${temp_format}\u00B0", id(setpoint));
@@ -826,12 +856,11 @@ script:
               }
               case 8: {
                 accent = RED; title = "FLAME"; icon = "\U000F0238";
-                int f = fp_on ? id(flame_target) : 0;
-                if (f <= 0) snprintf(buf, sizeof(buf), "OFF"); else snprintf(buf, sizeof(buf), "%d", f);
+                snprintf(buf, sizeof(buf), "%d", flame_shown);
                 lv_label_set_text(id(value_label), buf);
                 lv_arc_set_range(id(ring), 0, ${flame_max});
-                lv_arc_set_value(id(ring), f);
-                lv_label_set_text(id(sub_label), !editing ? "Tap to change" : !fp_on ? "Hold knob to turn on"
+                lv_arc_set_value(id(ring), flame_shown);
+                lv_label_set_text(id(sub_label), !editing ? "Tap to change" : !fp_on ? "Saved for next turn-on"
                                   : id(flame_pending) ? "Setting..." : "Flame 1 - ${flame_max}");
                 break;
               }

@@ -21,7 +21,7 @@ SLEEP + fireplace off for 30 s --> DISPLAY OFF (backlight off, Wi-Fi modem sleep
 | --- | --- | --- | --- |
 | **Sleep** | Room temperature at the Sleep brightness; a small orange flame when the fireplace is on. After 30 s with the fireplace off the backlight turns fully off (Display Off) until touched or the fireplace turns on | Opens Set Point; the first click already changes the value | Main |
 | **Main** | Room temperature, set point (or flame height in Manual), mode, fan and light state | Set Point | Settings |
-| **Set Point** | Set temperature (Manual while burning: flame height) | ±1 °F (or ±1 flame) | Main (10 s idle goes to Sleep) |
+| **Set Point** | Set temperature (Manual: flame height, stored while off). No status row; Main shows the state | ±1 °F (or ±1 flame) | Main (10 s idle goes to Sleep) |
 | **Settings** | An arc of icons across the top (Back, Power, Mode, Fan, Light, Flame, Brightness) with a live preview of the highlighted setting underneath. Back is highlighted on entry. Flame appears only in Manual while burning | Move the highlight along the arc | Edit that setting (the arc dims); Back → Main |
 | **Power** | ON/OFF | Choose | Apply and return to Settings |
 | **Mode** | Manual / Thermostat / Smart | Choose | Apply and return to Settings. While off, only picks the mode for the next turn-on |

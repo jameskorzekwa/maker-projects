@@ -11,8 +11,7 @@ static inline void knob_wifi_power_save(bool low) {
 
 // Rows of the knob's Settings list for the current fireplace state.
 // Page ids: 4 Power, 5 Mode, 6 Fan, 7 Light, 8 Flame, 9 Brightness, 1 Back.
-// Flame is listed only in Manual while the fireplace is burning; in the
-// other modes the IFC sets the flame itself.
+// Flame is listed only in Manual; in the other modes the IFC sets it.
 static inline int settings_rows(int *rows, bool fireplace_on, int mode_sel) {
   int n = 0;
   rows[n++] = 1;   // Back first: a tap on Settings returns to Main
@@ -20,7 +19,7 @@ static inline int settings_rows(int *rows, bool fireplace_on, int mode_sel) {
   rows[n++] = 5;
   rows[n++] = 6;
   rows[n++] = 7;
-  if (mode_sel == 0 && fireplace_on) rows[n++] = 8;
+  if (mode_sel == 0) rows[n++] = 8;   // Manual: flame (stored while off)
   rows[n++] = 9;
   return n;
 }
