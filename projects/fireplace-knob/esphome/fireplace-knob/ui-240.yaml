@@ -168,7 +168,7 @@ lvgl:
         - obj:
             id: main_batt
             align: CENTER
-            y: -104
+            y: -108
             width: SIZE_CONTENT
             height: SIZE_CONTENT
             bg_opa: TRANSP
@@ -187,14 +187,28 @@ lvgl:
               - label: {id: batt_icon, text: "\U000F0079", text_font: font_icons_small, text_color: 0x4ADE80}
               - label: {id: batt_text, text: "", text_font: font_hint, text_color: 0x9A9A9A}
         - obj:
-            <<: *status_row
             id: status_row_m
+            align: CENTER
+            y: -78
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout:
+              type: flex
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+              pad_column: 5
             widgets:
               - label: {id: status_icon_m, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
               - label: {id: status_text_m, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
         - label:
             align: CENTER
-            y: -60
+            y: -52
             text: "ROOM"
             text_font: font_hint
             text_color: 0x6A6A6A
