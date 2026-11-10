@@ -716,9 +716,10 @@ script:
             lv_obj_set_style_text_color(stexts[i], lv_color_hex(fp_on ? ORANGE : SUB), 0);
           }
 
-          // ---- Sleep ----
-          if (fp_on) lv_obj_remove_flag(id(sleep_flame), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_add_flag(id(sleep_flame), LV_OBJ_FLAG_HIDDEN);
+          // ---- Sleep: big flame (on) or crossed flame (off), readable from afar ----
+          lv_label_set_text(id(sleep_flame), fp_on ? "\U000F0238" : "\U000F1722");
+          lv_obj_set_style_text_color(id(sleep_flame), lv_color_hex(fp_on ? ORANGE : GREY), 0);
+          lv_obj_remove_flag(id(sleep_flame), LV_OBJ_FLAG_HIDDEN);
 
           // ---- Main ----
           if (manual_flame) snprintf(buf, sizeof(buf), "Flame %d", flame_shown);

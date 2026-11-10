@@ -42,6 +42,13 @@ font:
     size: 22
     bpp: 4
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_icons_sleep
+    size: 40
+    bpp: 4
+    glyphs:
+      - "\U000F0238"  # fire
+      - "\U000F1722"  # fire-off
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
     id: font_icons_small
     size: 22
     bpp: 4
@@ -124,11 +131,10 @@ lvgl:
         - label:
             id: sleep_flame
             align: CENTER
-            y: -62
-            text: "\U000F0238"
-            text_font: font_icons_small
-            text_color: 0xFF7A1A
-            hidden: true
+            y: -70
+            text: "\U000F1722"
+            text_font: font_icons_sleep
+            text_color: 0x5A5A5A
         - label:
             id: sleep_temp
             align: CENTER
