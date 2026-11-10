@@ -738,7 +738,7 @@ script:
           lv_obj_set_style_text_color(id(stat_fan_icon), lv_color_hex(id(fan_target) > 0 ? CYAN : GREY), 0);
           lv_obj_set_style_text_color(id(stat_fan_value), lv_color_hex(id(fan_target) > 0 ? WHITE : GREY), 0);
           const bool light_on = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
-          lv_label_set_text(id(stat_light_icon), light_on ? "\U000F0335" : "\U000F0336");
+          lv_label_set_text(id(stat_light_icon), light_on ? "\U000F0335" : "\U000F0E50");   // bulb / bulb-off-outline
           lv_obj_set_style_text_color(id(stat_light_icon), lv_color_hex(light_on ? YELLOW : GREY), 0);
           lv_label_set_text(id(main_hint), manual_flame ? "Tap: settings   Turn: flame" : "Tap: settings   Turn: set temp");
 
