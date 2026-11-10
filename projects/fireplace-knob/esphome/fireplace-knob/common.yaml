@@ -97,10 +97,12 @@ esphome:
       then:
         - lambda: |-
             id(last_activity_ms) = millis();
-            // A cold boot is usually the wake tap: show Main right away. If
-            // that press is still held, its release must not count as a tap.
-            id(boot_release_pending) = id(knob_button).state;
+            // A cold boot is usually the wake press: show Main right away.
             id(go)->execute(1);
+        # The wake press is still down (and not yet debounced) when we start:
+        # ignore the button until it has been released once, or for 3 s.
+        - delay: 3s
+        - lambda: 'id(boot_guard) = false;'
 
 wifi:
   ssid: !secret wifi_ssid
@@ -215,9 +217,9 @@ globals:
   - id: power_off_tried     # one power-off attempt per idle period
     type: bool
     initial_value: "false"
-  - id: boot_release_pending  # the press that powered the board on is still held
+  - id: boot_guard          # ignore the button until its first release after boot
     type: bool
-    initial_value: "false"
+    initial_value: "true"
   - id: cache_temp          # last room temperature, shown until HA reconnects
     type: float
     restore_value: true
@@ -439,11 +441,16 @@ script:
   # Called by the board's button binary_sensor.
   - id: button_down
     then:
-      - lambda: |-
-          id(long_fired) = false;
-          id(press_stuck) = false;
-          id(press_from_sleep) = id(page) == 0;
-      - script.execute: long_press_timer
+      - if:
+          condition:
+            lambda: 'return id(boot_guard);'
+          then: []
+          else:
+            - lambda: |-
+                id(long_fired) = false;
+                id(press_stuck) = false;
+                id(press_from_sleep) = id(page) == 0;
+            - script.execute: long_press_timer
 
   - id: button_up
     then:
@@ -454,7 +461,7 @@ script:
       - if:
           condition:
             lambda: |-
-              if (id(boot_release_pending)) { id(boot_release_pending) = false; return true; }
+              if (id(boot_guard)) { id(boot_guard) = false; return true; }   // the wake press
               return id(press_stuck);
           then: []
           else:
