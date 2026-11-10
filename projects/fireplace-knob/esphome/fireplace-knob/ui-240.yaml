@@ -193,7 +193,7 @@ lvgl:
         - obj:
             id: main_stats
             align: CENTER
-            y: 82
+            y: 92
             width: SIZE_CONTENT
             height: SIZE_CONTENT
             bg_opa: TRANSP

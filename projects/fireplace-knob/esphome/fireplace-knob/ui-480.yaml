@@ -190,7 +190,7 @@ lvgl:
         - obj:
             id: main_stats
             align: CENTER
-            y: 150
+            y: 164
             width: SIZE_CONTENT
             height: SIZE_CONTENT
             bg_opa: TRANSP
