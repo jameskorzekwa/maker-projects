@@ -498,7 +498,7 @@ script:
             }
             case 3: {
               int rows[8]; int n = settings_rows(rows, fp_on, id(mode_sel));
-              id(settings_sel) = ((id(settings_sel) + dir) % n + n) % n;   // wraps around
+              id(settings_sel) = std::min(n - 1, std::max(0, id(settings_sel) + dir));   // stops at the ends
               break;
             }
             case 4: id(power_edit) = dir > 0; break;
