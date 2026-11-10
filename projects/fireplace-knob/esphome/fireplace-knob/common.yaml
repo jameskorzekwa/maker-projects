@@ -69,6 +69,11 @@ substitutions:
   sleep_after_s: "10"       # any screen -> Sleep
   display_off_after_s: "30" # Sleep + fireplace off -> backlight off
   awake_brightness_default: "100"
+  # Wording that must fit the screen; the ui-*.yaml packages override these.
+  txt_no_ha: "No HA link"
+  txt_fp_offline_short: "Fireplace offline"
+  txt_fp_offline: "Fireplace not reachable"
+  txt_connecting: "Connecting to Home Assistant..."
   sleep_brightness_default: "25"
 
 esphome:
@@ -668,7 +673,7 @@ script:
 
           // ---- status rows (same content on Main, Value and Settings) ----
           const char *st_icon = fp_on ? "\U000F0238" : "\U000F1722";
-          const char *st_text = !connected ? "No HA link" : !fp_known ? "Fireplace offline" : fp_on ? MODE_MC[m] : "OFF";
+          const char *st_text = !connected ? "${txt_no_ha}" : !fp_known ? "${txt_fp_offline_short}" : fp_on ? MODE_MC[m] : "OFF";
           lv_obj_t *sicons[] = {id(status_icon_m), id(status_icon_v), id(status_icon_s)};
           lv_obj_t *stexts[] = {id(status_text_m), id(status_text_v), id(status_text_s)};
           for (int i = 0; i < 3; i++) {
@@ -687,8 +692,8 @@ script:
           else snprintf(buf, sizeof(buf), "Set ${temp_format}\u00B0", id(setpoint));
           lv_label_set_text(id(main_set), buf);
           lv_obj_set_style_text_color(id(main_set), lv_color_hex(!connected ? GREY : fp_on ? ORANGE : SUB), 0);
-          if (!connected) snprintf(buf, sizeof(buf), "Connecting to Home Assistant...");
-          else if (!fp_known) snprintf(buf, sizeof(buf), "Fireplace not reachable");
+          if (!connected) snprintf(buf, sizeof(buf), "${txt_connecting}");
+          else if (!fp_known) snprintf(buf, sizeof(buf), "${txt_fp_offline}");
           else snprintf(buf, sizeof(buf), "Fan %d  \u00B7  Light %s", id(fan_target),
                         (id(light_pending) ? id(light_target) : id(ha_light).state == "on") ? "on" : "off");
           lv_label_set_text(id(main_info), buf);
@@ -824,8 +829,8 @@ script:
               lv_obj_remove_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
               lv_obj_add_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
             }
-            if (!connected) lv_label_set_text(id(sub_label), "Connecting to Home Assistant");
-            else if (!fp_known) lv_label_set_text(id(sub_label), "Fireplace not reachable");
+            if (!connected) lv_label_set_text(id(sub_label), "${txt_connecting}");
+            else if (!fp_known) lv_label_set_text(id(sub_label), "${txt_fp_offline}");
             lv_obj_set_style_arc_color(id(ring), lv_color_hex(accent), LV_PART_INDICATOR);
             lv_obj_set_style_text_color(id(title_icon), lv_color_hex(accent), 0);
             lv_obj_set_style_text_color(id(value_label), lv_color_hex(connected ? WHITE : GREY), 0);

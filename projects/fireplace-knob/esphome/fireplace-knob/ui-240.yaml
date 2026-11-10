@@ -3,6 +3,12 @@
 # screen less than half the size: bigger relative type, no hint lines, three
 # settings rows instead of five (the hidden rows keep their ids).
 
+substitutions:
+  txt_no_ha: "No HA"
+  txt_fp_offline_short: "Offline"
+  txt_fp_offline: "Fireplace offline"
+  txt_connecting: "Connecting to HA..."
+
 font:
   - file: {type: gfonts, family: Roboto, weight: 700}
     id: font_value
@@ -254,8 +260,8 @@ lvgl:
         - label:
             id: sub_label
             align: CENTER
-            y: 60
-            width: 190
+            y: 58
+            width: 176
             text_align: CENTER
             long_mode: DOT
             text: ""
