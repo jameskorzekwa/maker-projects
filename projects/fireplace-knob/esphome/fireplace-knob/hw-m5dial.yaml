@@ -13,9 +13,11 @@ esphome:
   platformio_options:
     board_build.flash_mode: dio
   on_boot:
-    # Grab the power latch as early as possible: on battery the board is only
-    # powered while the wake button is held until HOLD (GPIO46) goes high.
-    - priority: 1000
+    # Grab the power latch before ANY component sets up (buses are at 1000 and
+    # an I2C scan on a stuck bus took ~10 s, which is how long the wake button
+    # had to be held): on battery the board is only powered while the button
+    # is held until HOLD (GPIO46) goes high.
+    - priority: 2000
       then:
         - lambda: |-
             gpio_reset_pin(GPIO_NUM_46);
@@ -81,6 +83,8 @@ i2c:
   sda: GPIO13
   scl: GPIO15
   frequency: 100kHz
+  scan: false          # no boot-time address scan (slow when the bus is stuck)
+  timeout: 10ms
 
 display:
   - platform: mipi_spi
