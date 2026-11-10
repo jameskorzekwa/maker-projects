@@ -59,6 +59,11 @@ font:
       - "\U000F0336"  # lightbulb-outline
       - "\U000F0E50"  # lightbulb-off-outline
       - "\U000F081D"  # fan-off
+      - "\U000F0079"  # battery
+      - "\U000F0081"  # battery-80
+      - "\U000F007E"  # battery-50
+      - "\U000F007B"  # battery-20
+      - "\U000F10CD"  # battery-alert-variant-outline
       - "\U000F0425"  # power
       - "\U000F00E0"  # brightness-7
       - "\U000F004D"  # arrow-left (Back)
@@ -75,6 +80,11 @@ font:
       - "\U000F0336"  # lightbulb-outline
       - "\U000F0E50"  # lightbulb-off-outline
       - "\U000F081D"  # fan-off
+      - "\U000F0079"  # battery
+      - "\U000F0081"  # battery-80
+      - "\U000F007E"  # battery-50
+      - "\U000F007B"  # battery-20
+      - "\U000F10CD"  # battery-alert-variant-outline
       - "\U000F0425"  # power
       - "\U000F00E0"  # brightness-7
       - "\U000F004D"  # arrow-left (Back)
@@ -151,6 +161,27 @@ lvgl:
     - id: page_main
       bg_color: 0x000000
       widgets:
+        - obj:
+            id: main_batt
+            align: CENTER
+            y: -200
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            hidden: true
+            layout:
+              type: flex
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+              pad_column: 6
+            widgets:
+              - label: {id: batt_icon, text: "\U000F0079", text_font: font_icons_small, text_color: 0x4ADE80}
+              - label: {id: batt_text, text: "", text_font: font_hint, text_color: 0x9A9A9A}
         - obj:
             <<: *status_row
             id: status_row_m

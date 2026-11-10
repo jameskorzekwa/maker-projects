@@ -73,6 +73,15 @@ spi:
   clk_pin: GPIO6
   mosi_pin: GPIO5
 
+# Port A (red Grove jack): GND, 5 V, G13 = SDA, G15 = SCL. A MAX17048 fuel
+# gauge on the LiPo hangs here (wired 2026-11-10). The driver's register maths
+# matches the MAX17048 (VCELL 78.125 uV/LSB, SOC 1/256 %).
+i2c:
+  id: port_a
+  sda: GPIO13
+  scl: GPIO15
+  frequency: 100kHz
+
 display:
   - platform: mipi_spi
     id: panel
@@ -86,6 +95,24 @@ display:
     auto_clear_enabled: false
 
 sensor:
+  - platform: max17043
+    i2c_id: port_a
+    address: 0x36
+    update_interval: 30s
+    battery_level:
+      name: Battery
+      id: battery_level
+      entity_category: diagnostic
+      filters:
+        - clamp: {min_value: 0, max_value: 100}
+      on_value:
+        - lambda: 'id(battery_pct) = x;'
+        - script.execute: render
+    battery_voltage:
+      name: Battery Voltage
+      entity_category: diagnostic
+      accuracy_decimals: 2
+
   - platform: rotary_encoder
     id: knob
     internal: true
