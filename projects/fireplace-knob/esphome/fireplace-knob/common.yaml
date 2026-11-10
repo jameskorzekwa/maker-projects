@@ -702,10 +702,11 @@ script:
           lv_label_set_text(id(main_hint), manual_flame ? "Tap: settings   Turn: flame" : "Tap: settings   Turn: set temp");
 
           // ---- Settings arc + Value page ----
-          // Pages 2..9 all draw on page_value. Page 3 (Settings) shows the arc
-          // of setting icons at the top and previews the highlighted setting
-          // below it; pages 4..9 edit that setting (arc dimmed); page 2 (Set
-          // Point) hides the arc.
+          // Pages 2..9 all draw on page_value. Page 3 (Settings) shows only
+          // the arc of setting icons at the top (no ring, no title icon) and
+          // previews the highlighted setting's value below it; pages 4..9 edit
+          // that setting (icons hidden, ring + title icon shown); page 2 (Set
+          // Point) is like an edit page.
           if (p >= 2) {
             static const char *ICON_OF[] = {"", "\U000F004D", "", "", "\U000F0425", "\U000F1542", "\U000F0210", "\U000F0335", "\U000F0238", "\U000F00E0"};
             static const uint32_t ACCENT_OF[] = {0, 0x9A9A9A, 0, 0, GREEN, PURPLE, CYAN, YELLOW, RED, WHITE};
@@ -721,7 +722,7 @@ script:
             // Arc icons: N evenly spaced over the top, highlighted = big + accent.
             lv_obj_t *big[] = {id(arc_big_0), id(arc_big_1), id(arc_big_2), id(arc_big_3), id(arc_big_4), id(arc_big_5), id(arc_big_6)};
             lv_obj_t *small[] = {id(arc_small_0), id(arc_small_1), id(arc_small_2), id(arc_small_3), id(arc_small_4), id(arc_small_5), id(arc_small_6)};
-            const bool show_arc = (p >= 3);
+            const bool show_arc = (p == 3);   // icons only while browsing
             const float span = std::min(144.0f, (n - 1) * 24.0f);
             for (int i = 0; i < 7; i++) {
               if (!show_arc || i >= n) { lv_obj_add_flag(big[i], LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(small[i], LV_OBJ_FLAG_HIDDEN); continue; }
@@ -734,12 +735,15 @@ script:
               lv_obj_remove_flag(show, LV_OBJ_FLAG_HIDDEN);
               lv_label_set_text(show, (r == 7 && !(id(light_pending) ? id(light_target) : id(ha_light).state == "on")) ? "\U000F0336" : ICON_OF[r]);
               lv_obj_set_x(show, x); lv_obj_set_y(show, y);
-              uint32_t col = (i == sel) ? (r == 1 ? WHITE : ACCENT_OF[r]) : editing ? 0x2A2A2A : 0x6A6A6A;
+              uint32_t col = (i == sel) ? (r == 1 ? WHITE : ACCENT_OF[r]) : 0x6A6A6A;
               lv_obj_set_style_text_color(show, lv_color_hex(col), 0);
             }
-            // Status row only on Set Point (the arc takes its place otherwise).
-            if (show_arc) lv_obj_add_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);
-            else lv_obj_remove_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);
+            // Status row only on Set Point. While browsing the arc the ring and
+            // the title icon are hidden (the arc icon already identifies it).
+            if (p == 2) lv_obj_remove_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(id(status_row_v), LV_OBJ_FLAG_HIDDEN);
+            if (show_arc) { lv_obj_add_flag(id(ring), LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(id(title_icon), LV_OBJ_FLAG_HIDDEN); }
+            else { lv_obj_remove_flag(id(ring), LV_OBJ_FLAG_HIDDEN); lv_obj_remove_flag(id(title_icon), LV_OBJ_FLAG_HIDDEN); }
 
             uint32_t accent = ORANGE;
             const char *title = ""; const char *icon = "";
