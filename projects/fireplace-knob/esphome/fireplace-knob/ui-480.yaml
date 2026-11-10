@@ -223,26 +223,23 @@ lvgl:
             widgets:
               - label: {id: status_icon_v, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
               - label: {id: status_text_v, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
-        - obj:
-            id: title_row
+        - label:
+            id: title_icon
+            align: CENTER
+            y: -150
+            text: "\U000F050F"
+            text_font: font_icons
+            text_color: 0xFF7A1A
+        - label:
+            id: title_label
             align: CENTER
             y: -98
-            width: SIZE_CONTENT
-            height: SIZE_CONTENT
-            bg_opa: TRANSP
-            border_width: 0
-            pad_all: 0
-            scrollable: false
-            layout:
-              type: flex
-              flex_flow: ROW
-              flex_align_main: CENTER
-              flex_align_cross: CENTER
-              flex_align_track: CENTER
-              pad_column: 12
-            widgets:
-              - label: {id: title_icon, text: "\U000F050F", text_font: font_icons, text_color: 0xFF7A1A}
-              - label: {id: title_label, text: "SET TEMP", text_font: font_title, text_color: 0xCFCFCF}
+            width: 380
+            text_align: CENTER
+            long_mode: CLIP
+            text: "SET TEMP"
+            text_font: font_title
+            text_color: 0xCFCFCF
         - label:
             id: value_label
             align: CENTER

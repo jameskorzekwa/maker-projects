@@ -838,13 +838,13 @@ script:
               case 9: {
                 accent = WHITE; icon = "\U000F00E0";
                 bool sl = editing && id(bright_step) == 1;
-                title = sl ? "SLEEP BRIGHTNESS" : "BRIGHTNESS";
+                title = sl ? "SLEEP LEVEL" : "BRIGHTNESS";
                 float v = sl ? id(sleep_brightness).state : id(awake_brightness).state;
                 snprintf(buf, sizeof(buf), "%.0f", v);
                 lv_label_set_text(id(value_label), buf);
                 lv_arc_set_range(id(ring), 0, 100);
                 lv_arc_set_value(id(ring), (int32_t) v);
-                lv_label_set_text(id(sub_label), !editing ? "Tap to change" : sl ? "Tap to finish" : "Tap for sleep brightness");
+                lv_label_set_text(id(sub_label), !editing ? "Tap to change" : sl ? "Tap to finish" : "Tap for sleep level");
                 break;
               }
             }
