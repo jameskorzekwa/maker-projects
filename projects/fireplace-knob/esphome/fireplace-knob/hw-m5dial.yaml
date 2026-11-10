@@ -122,6 +122,14 @@ sensor:
   # signed. The Dial's charger has no status pin, so this is how we know.
   # It is a ~1 min average; the 1 s voltage-step detector below reacts first.
   - platform: template
+    name: Battery Voltage Spread
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: 'return id(battery_spread);'
+
+  - platform: template
     id: battery_rate
     name: Battery Charge Rate
     unit_of_measurement: "%/h"
@@ -135,8 +143,10 @@ sensor:
       // Backstop for the 1 s detector: a clearly positive rate means charging,
       // a clearly negative one means on battery. Near zero (full on USB, or
       // idle) leave the fast detector's verdict alone.
-      if (rate > 1.0f && !id(battery_charging)) { id(battery_charging) = true; id(render)->execute(); }
-      if (rate < -1.0f && id(battery_charging)) { id(battery_charging) = false; id(render)->execute(); }
+      if (!id(battery_absent)) {
+        if (rate > 1.0f && !id(battery_charging)) { id(battery_charging) = true; id(render)->execute(); }
+        if (rate < -1.0f && id(battery_charging)) { id(battery_charging) = false; id(render)->execute(); }
+      }
       return rate;
 
   - platform: rotary_encoder
@@ -163,6 +173,9 @@ globals:
   - id: vcount
     type: int
     initial_value: "0"
+  - id: battery_spread
+    type: float
+    initial_value: "0"
 
 interval:
   # Fast charger-state detection from the cell voltage: unplugging USB drops
@@ -179,13 +192,31 @@ interval:
           const float oldest = h[id(vidx)];             // sample from 6 s ago (ring is full)
           h[id(vidx)] = v; id(vidx) = (id(vidx) + 1) % 6;
           if (n < 6) { id(vcount) = n + 1; return; }
-          const float d = v - oldest;
+          // No cell: the gauge sees the charger's output pin, which cannot hold
+          // a steady voltage without a battery (cut-off / restart sawtooth), so
+          // the 6 s spread is tens of mV. A real cell stays within a few mV.
+          float lo = h[0], hi = h[0];
+          for (int i = 1; i < 6; i++) { lo = std::min(lo, h[i]); hi = std::max(hi, h[i]); }
+          const float spread = hi - lo;
+          id(battery_spread) = spread;
+          const bool absent = spread > 0.050f;
           bool changed = false;
-          if (d <= -0.030f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
-          if (d >= +0.030f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
+          if (absent != id(battery_absent)) { id(battery_absent) = absent; changed = true; }
+          if (absent) { if (id(battery_charging)) { id(battery_charging) = false; changed = true; } }
+          else {
+            const float d = v - oldest;
+            if (d <= -0.030f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
+            if (d >= +0.030f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
+          }
           if (changed) { id(power_off_tried) = false; id(render)->execute(); }
 
 binary_sensor:
+  - platform: template
+    name: Battery Present
+    device_class: plug
+    entity_category: diagnostic
+    lambda: 'return !id(battery_absent) && !std::isnan(id(battery_pct));'
+
   - platform: template
     name: Battery Charging
     device_class: battery_charging

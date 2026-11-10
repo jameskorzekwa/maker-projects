@@ -232,6 +232,9 @@ globals:
   - id: battery_charging
     type: bool
     initial_value: "false"
+  - id: battery_absent      # gauge present but no cell connected
+    type: bool
+    initial_value: "false"
 
 # ------------------------------------------------------------------
 # Home Assistant: settings exposed on the device page
@@ -754,7 +757,7 @@ script:
           // ---- Battery (boards with a fuel gauge): icon + % at the top of Main ----
           {
             const float b = id(battery_pct);
-            if (std::isnan(b)) lv_obj_add_flag(id(main_batt), LV_OBJ_FLAG_HIDDEN);
+            if (std::isnan(b) || id(battery_absent)) lv_obj_add_flag(id(main_batt), LV_OBJ_FLAG_HIDDEN);
             else {
               lv_obj_remove_flag(id(main_batt), LV_OBJ_FLAG_HIDDEN);
               const char *ic = id(battery_charging) ? "\U000F0084"
