@@ -192,7 +192,7 @@ lvgl:
               - label: {id: status_text_m, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
         - label:
             align: CENTER
-            y: -98
+            y: -100
             text: "ROOM"
             text_font: font_title
             text_color: 0x6A6A6A
