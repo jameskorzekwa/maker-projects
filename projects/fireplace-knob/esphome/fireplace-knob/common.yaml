@@ -726,11 +726,20 @@ script:
           else snprintf(buf, sizeof(buf), "Set ${temp_format}\u00B0", id(setpoint));
           lv_label_set_text(id(main_set), buf);
           lv_obj_set_style_text_color(id(main_set), lv_color_hex(!connected ? GREY : fp_on ? ORANGE : SUB), 0);
-          if (!connected) snprintf(buf, sizeof(buf), "${txt_connecting}");
-          else if (!fp_known) snprintf(buf, sizeof(buf), "${txt_fp_offline}");
-          else snprintf(buf, sizeof(buf), "Fan %d  \u00B7  Light %s", id(fan_target),
-                        (id(light_pending) ? id(light_target) : id(ha_light).state == "on") ? "on" : "off");
-          lv_label_set_text(id(main_info), buf);
+          // Fan + light as icons: "<fan> 4   <bulb>" (bulb lit = light on).
+          // main_info carries the connection / fireplace-offline messages instead.
+          const bool show_msg = !connected || !fp_known;
+          if (!connected) lv_label_set_text(id(main_info), "${txt_connecting}");
+          else if (!fp_known) lv_label_set_text(id(main_info), "${txt_fp_offline}");
+          if (show_msg) { lv_obj_remove_flag(id(main_info), LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(id(main_stats), LV_OBJ_FLAG_HIDDEN); }
+          else { lv_obj_add_flag(id(main_info), LV_OBJ_FLAG_HIDDEN); lv_obj_remove_flag(id(main_stats), LV_OBJ_FLAG_HIDDEN); }
+          snprintf(buf, sizeof(buf), "%d", id(fan_target));
+          lv_label_set_text(id(stat_fan_value), buf);
+          lv_obj_set_style_text_color(id(stat_fan_icon), lv_color_hex(id(fan_target) > 0 ? CYAN : GREY), 0);
+          lv_obj_set_style_text_color(id(stat_fan_value), lv_color_hex(id(fan_target) > 0 ? WHITE : GREY), 0);
+          const bool light_on = id(light_pending) ? id(light_target) : id(ha_light).state == "on";
+          lv_label_set_text(id(stat_light_icon), light_on ? "\U000F0335" : "\U000F0336");
+          lv_obj_set_style_text_color(id(stat_light_icon), lv_color_hex(light_on ? YELLOW : GREY), 0);
           lv_label_set_text(id(main_hint), manual_flame ? "Tap: settings   Turn: flame" : "Tap: settings   Turn: set temp");
 
           // ---- Settings arc + Value page ----
