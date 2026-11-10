@@ -644,7 +644,7 @@ script:
           static const char *MODE_UP[] = {"MANUAL", "THERMOSTAT", "SMART"};
           static const char *MODE_MC[] = {"Manual", "Thermostat", "Smart"};
           char buf[64];
-          const bool connected = api::global_api_server->is_connected_with_state_subscription();
+          const bool connected = api::global_api_server->is_connected();
           id(last_connected) = connected;
           const std::string fp = id(ha_fireplace).state;
           const bool fp_on = fp == "on";
@@ -653,10 +653,12 @@ script:
           const int p = id(page);
           const bool manual_flame = (m == 0 && fp_on);
 
-          // ---- room temperature (selected source, fallback to fireplace) ----
-          float room = id(ha_room_temp).state;
+          // ---- room temperature: selected source, falling back to the other
+          // one when it has no reading (fireplace offline, sensor unavailable).
+          const float fp_temp = id(ha_room_temp).state, alt_temp = id(ha_alt_temp).state;
           bool alt = id(temp_source).current_option() == "${alt_temp_label}";
-          if (alt && !std::isnan(id(ha_alt_temp).state)) room = id(ha_alt_temp).state;
+          float room = alt ? alt_temp : fp_temp;
+          if (std::isnan(room)) room = alt ? fp_temp : alt_temp;
           if (std::isnan(room)) snprintf(buf, sizeof(buf), "--");
           else snprintf(buf, sizeof(buf), "%.0f\u00B0", room);
           lv_label_set_text(id(sleep_temp), buf);
@@ -666,7 +668,7 @@ script:
 
           // ---- status rows (same content on Main, Value and Settings) ----
           const char *st_icon = fp_on ? "\U000F0238" : "\U000F1722";
-          const char *st_text = !connected ? "OFFLINE" : !fp_known ? "UNAVAILABLE" : fp_on ? MODE_MC[m] : "OFF";
+          const char *st_text = !connected ? "No HA link" : !fp_known ? "Fireplace offline" : fp_on ? MODE_MC[m] : "OFF";
           lv_obj_t *sicons[] = {id(status_icon_m), id(status_icon_v), id(status_icon_s)};
           lv_obj_t *stexts[] = {id(status_text_m), id(status_text_v), id(status_text_s)};
           for (int i = 0; i < 3; i++) {
@@ -686,6 +688,7 @@ script:
           lv_label_set_text(id(main_set), buf);
           lv_obj_set_style_text_color(id(main_set), lv_color_hex(!connected ? GREY : fp_on ? ORANGE : SUB), 0);
           if (!connected) snprintf(buf, sizeof(buf), "Connecting to Home Assistant...");
+          else if (!fp_known) snprintf(buf, sizeof(buf), "Fireplace not reachable");
           else snprintf(buf, sizeof(buf), "Fan %d  \u00B7  Light %s", id(fan_target),
                         (id(light_pending) ? id(light_target) : id(ha_light).state == "on") ? "on" : "off");
           lv_label_set_text(id(main_info), buf);
@@ -822,6 +825,7 @@ script:
               lv_obj_add_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
             }
             if (!connected) lv_label_set_text(id(sub_label), "Connecting to Home Assistant");
+            else if (!fp_known) lv_label_set_text(id(sub_label), "Fireplace not reachable");
             lv_obj_set_style_arc_color(id(ring), lv_color_hex(accent), LV_PART_INDICATOR);
             lv_obj_set_style_text_color(id(title_icon), lv_color_hex(accent), 0);
             lv_obj_set_style_text_color(id(value_label), lv_color_hex(connected ? WHITE : GREY), 0);
@@ -839,7 +843,7 @@ interval:
           }
           // Redraw as soon as the HA connection state changes, whatever the
           // order of connect/disconnect events during a reconnect.
-          if (api::global_api_server->is_connected_with_state_subscription() != id(last_connected))
+          if (api::global_api_server->is_connected() != id(last_connected))
             id(render)->execute();
           if (id(knob_button).state) return;   // a hold in progress never times out
           const bool fp_on = id(ha_fireplace).state == "on";

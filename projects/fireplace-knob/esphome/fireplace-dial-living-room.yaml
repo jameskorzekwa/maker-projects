@@ -13,6 +13,7 @@ substitutions:
   light_switch: switch.living_room_fireplace_light
   temp_step: "1.0"
   temp_format: "%.0f"
+  rotation_sign: "-1"       # Dial encoder counts the opposite way
 
 packages:
   common: !include fireplace-knob/common.yaml

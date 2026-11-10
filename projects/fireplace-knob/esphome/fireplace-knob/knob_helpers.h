@@ -15,12 +15,12 @@ static inline void knob_wifi_power_save(bool low) {
 // other modes the IFC sets the flame itself.
 static inline int settings_rows(int *rows, bool fireplace_on, int mode_sel) {
   int n = 0;
+  rows[n++] = 1;   // Back first: a tap on Settings returns to Main
   rows[n++] = 4;
   rows[n++] = 5;
   rows[n++] = 6;
   rows[n++] = 7;
   if (mode_sel == 0 && fireplace_on) rows[n++] = 8;
   rows[n++] = 9;
-  rows[n++] = 1;
   return n;
 }
