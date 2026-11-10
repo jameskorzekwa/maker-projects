@@ -734,7 +734,7 @@ script:
           if (show_msg) { lv_obj_remove_flag(id(main_info), LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(id(main_stats), LV_OBJ_FLAG_HIDDEN); }
           else { lv_obj_add_flag(id(main_info), LV_OBJ_FLAG_HIDDEN); lv_obj_remove_flag(id(main_stats), LV_OBJ_FLAG_HIDDEN); }
           snprintf(buf, sizeof(buf), "%d", id(fan_target));
-          lv_label_set_text(id(stat_fan_value), buf);
+          lv_label_set_text(id(stat_fan_value), id(fan_target) > 0 ? buf : "");   // no "0": the slashed icon says it
           lv_label_set_text(id(stat_fan_icon), id(fan_target) > 0 ? "\U000F0210" : "\U000F081D");   // fan / fan-off
           lv_obj_set_style_text_color(id(stat_fan_icon), lv_color_hex(id(fan_target) > 0 ? CYAN : GREY), 0);
           lv_obj_set_style_text_color(id(stat_fan_value), lv_color_hex(id(fan_target) > 0 ? WHITE : GREY), 0);
