@@ -83,6 +83,8 @@ substitutions:
   txt_fp_offline_short: "Fireplace offline"
   txt_fp_offline: "Fireplace not reachable"
   txt_connecting: "Connecting to Home Assistant..."
+  txt_conn_failed: "Could not connect to Home Assistant"
+  connect_timeout_s: "30"   # spinner -> error after this long without HA
   arc_radius: "200"               # radius of the settings icon arc (ui-*.yaml overrides)
   sleep_brightness_default: "25"
 
@@ -128,6 +130,8 @@ api:
   on_client_connected:
     - script.execute: render
   on_client_disconnected:
+    - lambda: |-
+        if (!api::global_api_server->is_connected()) { id(disconnected_since_ms) = millis(); id(conn_timed_out) = false; }
     - script.execute: render
 
 ota:
@@ -206,6 +210,12 @@ globals:
     type: uint32_t
     initial_value: "0"
   - id: last_connected      # HA connection state as last drawn
+    type: bool
+    initial_value: "false"
+  - id: disconnected_since_ms   # boot or the last API disconnect
+    type: uint32_t
+    initial_value: "0"
+  - id: conn_timed_out      # spinner replaced by the error text
     type: bool
     initial_value: "false"
   - id: display_off         # Sleep with the backlight fully off
@@ -725,6 +735,7 @@ script:
           char buf[64];
           const bool connected = api::global_api_server->is_connected();
           id(last_connected) = connected;
+          const bool connecting = !connected && !id(conn_timed_out);
           std::string fp = id(ha_fireplace).state;
           if (!connected && !(fp == "on" || fp == "off")) fp = id(cache_fp_on) ? "on" : "off";   // cached until HA is back
           const bool fp_on = fp == "on";
@@ -751,7 +762,10 @@ script:
 
           // ---- status rows (Main and Set Point) ----
           const char *st_icon = fp_on ? "\U000F0238" : "\U000F1722";
-          const char *st_text = !connected ? "${txt_no_ha}" : !fp_known ? "${txt_fp_offline_short}" : fp_on ? MODE_MC[m] : "OFF";
+          const char *st_text = connecting ? "Connecting" : !connected ? "${txt_no_ha}" : !fp_known ? "${txt_fp_offline_short}" : fp_on ? MODE_MC[m] : "OFF";
+          // Spinner next to the status while (re)connecting; the flame icon hides meanwhile.
+          if (connecting) { lv_obj_remove_flag(id(conn_spinner), LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(id(status_icon_m), LV_OBJ_FLAG_HIDDEN); }
+          else { lv_obj_add_flag(id(conn_spinner), LV_OBJ_FLAG_HIDDEN); lv_obj_remove_flag(id(status_icon_m), LV_OBJ_FLAG_HIDDEN); }
           lv_obj_t *sicons[] = {id(status_icon_m), id(status_icon_v)};
           lv_obj_t *stexts[] = {id(status_text_m), id(status_text_v)};
           for (int i = 0; i < 2; i++) {
@@ -791,7 +805,8 @@ script:
           // Fan + light as icons: "<fan> 4   <bulb>" (bulb lit = light on).
           // main_info carries the connection / fireplace-offline messages instead.
           const bool show_msg = !connected || !fp_known;
-          if (!connected) lv_label_set_text(id(main_info), "${txt_connecting}");
+          if (connecting) lv_label_set_text(id(main_info), "${txt_connecting}");
+          else if (!connected) lv_label_set_text(id(main_info), "${txt_conn_failed}");
           else if (!fp_known) lv_label_set_text(id(main_info), "${txt_fp_offline}");
           if (show_msg) { lv_obj_remove_flag(id(main_info), LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(id(main_stats), LV_OBJ_FLAG_HIDDEN); }
           else { lv_obj_add_flag(id(main_info), LV_OBJ_FLAG_HIDDEN); lv_obj_remove_flag(id(main_stats), LV_OBJ_FLAG_HIDDEN); }
@@ -960,7 +975,8 @@ script:
               else lv_obj_add_flag(id(value_label), LV_OBJ_FLAG_HIDDEN);
               lv_obj_add_flag(id(mode_label), LV_OBJ_FLAG_HIDDEN);
             }
-            if (!connected) lv_label_set_text(id(sub_label), "${txt_connecting}");
+            if (connecting) lv_label_set_text(id(sub_label), "${txt_connecting}");
+            else if (!connected) lv_label_set_text(id(sub_label), "${txt_conn_failed}");
             else if (!fp_known && view != 1) lv_label_set_text(id(sub_label), "${txt_fp_offline}");
             lv_obj_set_style_arc_color(id(ring), lv_color_hex(accent), LV_PART_INDICATOR);
             lv_obj_set_style_text_color(id(title_icon), lv_color_hex(accent), 0);
@@ -981,6 +997,12 @@ interval:
           // order of connect/disconnect events during a reconnect.
           if (api::global_api_server->is_connected() != id(last_connected))
             id(render)->execute();
+          // Connecting spinner -> error after connect_timeout_s without HA.
+          if (!api::global_api_server->is_connected() && !id(conn_timed_out) &&
+              (now - id(disconnected_since_ms)) >= ${connect_timeout_s}u * 1000u) {
+            id(conn_timed_out) = true;
+            id(render)->execute();
+          }
           if (id(knob_button).state) return;   // a hold in progress never times out
           const bool fp_on = id(ha_fireplace).state == "on";
           // Display Off: Sleep + fireplace off for a while -> backlight off and

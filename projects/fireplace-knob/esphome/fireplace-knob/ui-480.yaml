@@ -188,6 +188,18 @@ lvgl:
             <<: *status_row
             id: status_row_m
             widgets:
+              - spinner:
+                  id: conn_spinner
+                  width: 34
+                  height: 34
+                  spin_time: 1s
+                  arc_length: 90deg
+                  arc_color: 0x333333
+                  arc_width: 3
+                  hidden: true
+                  indicator:
+                    arc_color: 0xFF7A1A
+                    arc_width: 3
               - label: {id: status_icon_m, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
               - label: {id: status_text_m, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
         - label:
