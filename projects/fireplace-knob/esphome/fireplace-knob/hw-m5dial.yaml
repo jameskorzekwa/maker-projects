@@ -12,6 +12,15 @@
 esphome:
   platformio_options:
     board_build.flash_mode: dio
+  on_boot:
+    # Grab the power latch as early as possible: on battery the board is only
+    # powered while the wake button is held until HOLD (GPIO46) goes high.
+    - priority: 1000
+      then:
+        - lambda: |-
+            gpio_reset_pin(GPIO_NUM_46);
+            gpio_set_direction(GPIO_NUM_46, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_46, 1);
 
 esp32:
   board: m5stack-stamps3
@@ -21,13 +30,23 @@ esp32:
 
 safe_mode:
 
-# Keep battery power on (no-op on USB).
+# Power latch (no effect on USB, where the ESP32 is fed directly).
 switch:
   - platform: gpio
     id: power_hold
     internal: true
     pin: GPIO46
     restore_mode: ALWAYS_ON
+
+script:
+  # Release the latch. On battery the board is off before the delay ends
+  # (tap = power on, cold boot). On USB we are still here: re-assert HOLD so
+  # the Grove 5 V rail and a later USB unplug behave, and carry on awake.
+  - id: board_power_off
+    then:
+      - switch.turn_off: power_hold
+      - delay: 500ms
+      - switch.turn_on: power_hold
 
 output:
   - platform: ledc

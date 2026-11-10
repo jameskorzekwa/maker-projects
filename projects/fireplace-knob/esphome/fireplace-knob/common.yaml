@@ -27,6 +27,11 @@
 #   Anywhere   hold 0.7-3 s then release = fireplace on/off (on = the
 #              selected mode). A press held longer than 3 s is treated as a
 #              stuck button and ignored. 10 s without input -> Sleep.
+#   Battery    30 s without input -> the board asks its hardware package to
+#              power off (hw-m5dial: release the power latch). On battery the
+#              Dial switches off (~6 uA) and a tap powers it back on (cold
+#              boot, cached temperature shown until HA reconnects). On USB the
+#              latch has no effect, so the board stays on and falls back to:
 #   Display Off  Sleep + fireplace off for 30 s -> backlight fully off and
 #              Wi-Fi modem power save. Tap/turn/hold behave exactly as on
 #              Sleep (no reboot). The fireplace turning on lights it again.
@@ -70,7 +75,8 @@ substitutions:
   stuck_press: 2300ms       # held this much longer -> ignored as stuck
   setpoint_timeout_s: "10"  # Set Point -> Main
   sleep_after_s: "10"       # any screen -> Sleep
-  display_off_after_s: "30" # Sleep + fireplace off -> backlight off
+  display_off_after_s: "30" # Sleep + fireplace off -> backlight off (USB)
+  power_off_after_s: "30"   # no input for this long -> try to power off (battery)
   awake_brightness_default: "100"
   # Wording that must fit the screen; the ui-*.yaml packages override these.
   txt_no_ha: "No HA link"
@@ -91,9 +97,10 @@ esphome:
       then:
         - lambda: |-
             id(last_activity_ms) = millis();
-            id(page) = 0;
-            id(apply_backlight)->execute();
-        - script.execute: render
+            // A cold boot is usually the wake tap: show Main right away. If
+            // that press is still held, its release must not count as a tap.
+            id(boot_release_pending) = id(knob_button).state;
+            id(go)->execute(1);
 
 wifi:
   ssid: !secret wifi_ssid
@@ -205,6 +212,20 @@ globals:
   - id: sleep_since_ms
     type: uint32_t
     initial_value: "0"
+  - id: power_off_tried     # one power-off attempt per idle period
+    type: bool
+    initial_value: "false"
+  - id: boot_release_pending  # the press that powered the board on is still held
+    type: bool
+    initial_value: "false"
+  - id: cache_temp          # last room temperature, shown until HA reconnects
+    type: float
+    restore_value: true
+    initial_value: "NAN"
+  - id: cache_fp_on
+    type: bool
+    restore_value: true
+    initial_value: "false"
 
 # ------------------------------------------------------------------
 # Home Assistant: settings exposed on the device page
@@ -260,6 +281,7 @@ text_sensor:
     id: ha_fireplace
     entity_id: ${fireplace_switch}
     on_value:
+      - lambda: 'if (x == "on" || x == "off") id(cache_fp_on) = (x == "on");'
       - script.execute: render
   - platform: homeassistant
     id: ha_light
@@ -296,6 +318,7 @@ sensor:
     entity_id: ${climate_entity}
     attribute: current_temperature
     on_value:
+      - lambda: 'if (!std::isnan(x)) id(cache_temp) = x;'
       - script.execute: render
   - platform: homeassistant
     id: ha_alt_temp
@@ -374,6 +397,7 @@ script:
     then:
       - lambda: |-
           id(last_activity_ms) = millis();
+          id(power_off_tried) = false;
           if (id(display_off)) {
             id(display_off) = false;
             knob_wifi_power_save(false);
@@ -420,7 +444,9 @@ script:
           lv_obj_add_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
       - if:
           condition:
-            lambda: 'return id(press_stuck);'
+            lambda: |-
+              if (id(boot_release_pending)) { id(boot_release_pending) = false; return true; }
+              return id(press_stuck);
           then: []
           else:
             - if:
@@ -683,7 +709,8 @@ script:
           char buf[64];
           const bool connected = api::global_api_server->is_connected();
           id(last_connected) = connected;
-          const std::string fp = id(ha_fireplace).state;
+          std::string fp = id(ha_fireplace).state;
+          if (!connected && !(fp == "on" || fp == "off")) fp = id(cache_fp_on) ? "on" : "off";   // cached until HA is back
           const bool fp_on = fp == "on";
           const bool fp_known = fp == "on" || fp == "off";
           const int m = id(mode_sel);
@@ -697,12 +724,14 @@ script:
           bool alt = id(temp_source).current_option() == "${alt_temp_label}";
           float room = alt ? alt_temp : fp_temp;
           if (std::isnan(room)) room = alt ? fp_temp : alt_temp;
+          const bool room_cached = std::isnan(room) && !std::isnan(id(cache_temp));
+          if (room_cached) room = id(cache_temp);
           if (std::isnan(room)) snprintf(buf, sizeof(buf), "--");
           else snprintf(buf, sizeof(buf), "%.0f\u00B0", room);
           lv_label_set_text(id(sleep_temp), buf);
           lv_label_set_text(id(main_temp), buf);
-          lv_obj_set_style_text_color(id(sleep_temp), lv_color_hex(connected ? WHITE : GREY), 0);
-          lv_obj_set_style_text_color(id(main_temp), lv_color_hex(connected ? WHITE : GREY), 0);
+          lv_obj_set_style_text_color(id(sleep_temp), lv_color_hex(connected && !room_cached ? WHITE : GREY), 0);
+          lv_obj_set_style_text_color(id(main_temp), lv_color_hex(connected && !room_cached ? WHITE : GREY), 0);
 
           // ---- status rows (Main and Set Point) ----
           const char *st_icon = fp_on ? "\U000F0238" : "\U000F1722";
@@ -934,6 +963,13 @@ interval:
             id(apply_backlight)->execute();
           }
           const uint32_t idle = (now - id(last_activity_ms)) / 1000;
+          // Battery: one power-off attempt per idle period. On USB it returns
+          // and the board simply stays on.
+          if (!id(power_off_tried) && idle >= ${power_off_after_s}) {
+            id(power_off_tried) = true;
+            id(cache_fp_on) = fp_on;
+            id(board_power_off)->execute();
+          }
           if (id(page) != 0 && idle >= ${sleep_after_s}) {
             id(go)->execute(0);                 // discards unapplied Power/Mode edits
           } else if (id(page) == 2 && idle >= ${setpoint_timeout_s}) {

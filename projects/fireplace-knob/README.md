@@ -148,6 +148,7 @@ over USB.
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-10 | Battery mode on the M5Stack Dial: HOLD (GPIO46) asserted at boot and released after 30 s idle; on battery that powers the Dial off (tap powers it on), on USB it is a no-op. Cached temperature/fireplace state shown on boot. CrowPanel battery plan retired (`components.md`, `power.md`). |
 | 2026-11-10 | Settings redesigned as an icon arc with live preview (pages 2–9 all draw on `page_value`; `page_settings` removed). Compact wording and split value line on 240×240. Fireplace dongle moved IP → HA entry fixed and DHCP reservations added. |
 | 2026-11-10 | Split into common/hw/ui packages. Added the M5Stack Dial v1.1 (`hw-m5dial.yaml`, `ui-240.yaml`): 240×240 layout with bigger relative type, no hint lines, three settings rows. Flashed over USB from the laptop via esptool, adopted in HA, "allow actions" enabled. Hold now toggles on **release** after 0.7–3 s; a press longer than 3 s is ignored as stuck (both boards). |
 | 2026-11-07 | Cold-boot fix: the boot sequence now pulses the LCD reset low for 100 ms (as Elecrow's factory `Board21.h` does) in one blocking lambda before the display driver runs. Without the pulse a power-cycled panel showed coloured noise; with the pulse as separate `delay:` steps the driver initialised the panel while it was still in reset (black). |

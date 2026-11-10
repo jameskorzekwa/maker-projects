@@ -164,6 +164,11 @@ display:
       - delay 100ms
       - [0x29]
       - delay 50ms
+script:
+  # No battery/power latch on this board: nothing to do.
+  - id: board_power_off
+    then: []
+
 sensor:
   - platform: rotary_encoder
     id: knob

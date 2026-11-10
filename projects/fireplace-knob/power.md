@@ -80,3 +80,28 @@ In (0x10) ≈60 mA. XIAO ESP32-S3 (octal PSRAM): deep sleep 13 µA, light sleep
 The idle floor can be made excellent; the real limit is the time the fire
 is on with the screen awake. A fireplace that burns 3 h a night costs ~10 %
 of a 5,000 mAh battery per night regardless of the sleep mode.
+
+## M5Stack Dial v1.1 (chosen battery platform, 2026-11-10)
+
+From the M5Dial schematic (shared by v1.0/v1.1) and M5Unified:
+
+- **Charger:** TP4057, PROG 10 kΩ → **100 mA** from USB-C or the 6–36 V input.
+  Battery socket 1.25 mm 2-pin under the Stamp module (pin 1 = VBAT+, pin 2 =
+  GND; physical orientation unmarked → verify). Switch-over via CN809J + P-FET:
+  external power feeds the board and charges the cell; the cell is only used
+  when external power is absent.
+- **Power latch:** P-FET Q3 is held on by any of: the under-screen button S1
+  (GPIO42) pressed, the BM8563 RTC INT, or **HOLD = GPIO46 high**. Releasing
+  HOLD on battery powers the board off (**~6 µA**). On USB the Stamp's 5 V pin
+  is fed directly, so HOLD has no effect and the board cannot switch itself
+  off; it also powers on automatically when USB is applied.
+- **No battery ADC and no VBUS-detect GPIO.** TP4057 CHRG/STDBY are not wired.
+- GPIO40/41/42 are not RTC pins (no ESP deep-sleep wake); GPIO14 (touch INT) is.
+
+Firmware behaviour (`hw-m5dial.yaml` + `common.yaml`): GPIO46 is driven high
+at the earliest boot priority; after 30 s without input the firmware releases
+it. On battery the Dial is off until the next tap (cold boot ~3–5 s; Main
+shows the cached temperature/state until HA reconnects). On USB the release is
+a no-op and the existing Display Off logic applies. The press that powered
+the board on is ignored as a tap. Spec draw: ~100 mA awake on battery → a
+1,000 mAh cell gives ~10 h of screen-on time and months of standby.
