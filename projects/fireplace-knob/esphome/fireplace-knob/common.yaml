@@ -135,14 +135,21 @@ api:
   on_client_connected:
     - lambda: 'id(stale_ok) = false;'
     - script.execute: render
+    # A fireplace on/off that was requested while disconnected fires now.
+    - delay: 1500ms
+    - if:
+        condition:
+          lambda: 'return id(pending_toggle) && api::global_api_server->is_connected();'
+        then:
+          - lambda: 'id(pending_toggle) = false;'
+          - script.execute: toggle_fireplace
   on_client_disconnected:
     - lambda: |-
         if (!api::global_api_server->is_connected()) {
           id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
-          // Keep the values in RAM while in (or just out of) light sleep: they
-          // are shown on wake and refreshed silently. Otherwise start over.
-          if (!id(stale_ok))
-            id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = false;
+          // Values already received stay on screen through any disconnect (HA
+          // refreshes them silently when it is back); only the first boot
+          // waits on the loading screen.
         }
     - script.execute: render
 
@@ -221,6 +228,9 @@ globals:
   - id: toast_until_ms
     type: uint32_t
     initial_value: "0"
+  - id: pending_toggle      # fireplace on/off requested while HA was disconnected
+    type: bool
+    initial_value: "false"
   - id: last_connected      # HA connection state as last drawn
     type: bool
     initial_value: "false"
@@ -650,6 +660,14 @@ script:
     then:
       - if:
           condition:
+            lambda: 'return !api::global_api_server->is_connected();'
+          then:
+            - lambda: |-
+                id(pending_toggle) = true;
+                id(show_toast)->execute("Waiting for HA...", 6000);
+            - script.stop: toggle_fireplace
+      - if:
+          condition:
             lambda: 'return id(ha_fireplace).state == "on";'
           then:
             - script.execute: {id: show_toast, text: "Turning OFF", ms: 2500}
@@ -800,8 +818,8 @@ script:
             const bool conn = api::global_api_server->is_connected();
             const bool have_all = id(got_fp) && id(got_light) && id(got_preset) && id(got_setpoint) &&
                                   id(got_room) && id(got_flame) && id(got_fan);
-            // After a light-sleep wake the RAM copy is good enough to show.
-            const bool ready = (conn || (id(stale_ok) && !id(conn_timed_out))) && have_all;
+            // Once a full set has arrived it is shown regardless of the link.
+            const bool ready = have_all;
             if (!ready) {
               if (id(conn_timed_out)) {
                 lv_obj_add_flag(id(load_spinner), LV_OBJ_FLAG_HIDDEN);
@@ -832,9 +850,10 @@ script:
           char buf[64];
           const bool connected = api::global_api_server->is_connected();
           id(last_connected) = connected;
-          // Connection trouble is only surfaced when there is nothing fresh enough
-          // to show: a light-sleep wake keeps the UI calm while HA reconnects.
-          const bool quiet = id(stale_ok) && !id(conn_timed_out);
+          // Short link drops (HA reconnecting after a wake) are not surfaced at
+          // all; after 5 s the status row says "Connecting", after the timeout
+          // "No HA". Values stay on screen throughout.
+          const bool quiet = !connected && (millis() - id(disconnected_since_ms)) < 5000u;
           const bool connecting = !connected && !id(conn_timed_out) && !quiet;
           const bool conn_issue = !connected && !quiet;
           std::string fp = id(ha_fireplace).state;
