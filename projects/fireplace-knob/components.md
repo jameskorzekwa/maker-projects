@@ -12,7 +12,8 @@ Design: see `power.md` (Dial section).
 | 3 | James's existing JST-PH 2.0 LiPo | | 1 | have | | | Usable only with a PH-2.0 → 1.25 mm adapter (item 4) or by re-terminating the plug. |
 | 4 | Micro JST 1.25 mm 2-pin pigtails | for re-terminating / an adapter | 2 | need | Amazon "JST 1.25mm 2 pin" ~$6–9 | | James has 1.25 mm **4-pin** pigtails (Cermant); the 2-pin housing is different. Only needed if item 2 is skipped. |
 | 5 | PowerBoost 1000C | | – | not-needed | | | Dial has its own charger/latch |
-| 6 | MAX17048 fuel gauge (Newfame, B0HJ94TP3L) | I²C 0x36 | 1 | have | Amazon | 114-8797990-9903459, 2026-11-08 | Wired 2026-11-10: BAT+/BAT− to the cell, SDA/SCL to Port A G13/G15. Battery % and voltage in HA and on Main. |
+| 6 | MAX17048 fuel gauge (Newfame, B0HJ94TP3L) | I²C 0x36 | 1 | have (removed) | Amazon | 114-8797990-9903459 | Used 2026-11-10 only; voltage-only gauge cannot detect charging. Replaced by the INA219. |
+| 8 | INA219 current/voltage monitor (ACEIRMC 10-pack, B0CTYB69B5) | I²C 0x40, 0.1 Ω shunt, in series with the battery + lead | 1 | have | Amazon | 2026-11-10 | Battery → VIN+, VIN− → B+, VCC from the battery tap, GND, SDA/SCL → Port A G13/G15. Measures current with direction: charging, external power, and the coulomb-counted % all come from it. |
 | 7 | 2.2 kΩ resistor, UART pigtail, USB-C pigtail | | – | not-needed | | | Were for USB detection on the CrowPanel; the Dial detects battery by releasing its latch |
 
 To buy: **one 1.25 mm-plug LiPo (~$8–15)**. Everything else is on hand or unnecessary.

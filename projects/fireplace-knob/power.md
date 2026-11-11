@@ -105,3 +105,22 @@ shows the cached temperature/state until HA reconnects). On USB the release is
 a no-op and the existing Display Off logic applies. The press that powered
 the board on is ignored as a tap. Spec draw: ~100 mA awake on battery → a
 1,000 mAh cell gives ~10 h of screen-on time and months of standby.
+
+## Battery monitor: INA219 (2026-11-10)
+
+The MAX17048 was replaced after one day: it is voltage-only, so "charging"
+could only be inferred from voltage trends (slow, fragile, wrong while its
+model re-converged). The INA219 sits in the battery's + lead (battery →
+VIN+, VIN− → the Dial's B+ pad), VCC from the battery tap, on Port A at 0x40
+(`shunt_resistance: 0.1 ohm`, `max_current: 0.8A`, 1 s). Sign convention in
+firmware: + = into the battery. First reading on USB: +108.6 mA, 3.772 V.
+
+- Charging = current > +10 mA. External power = current > −20 mA (an awake
+  Dial always draws ≥ 60 mA from the cell when on battery).
+- Percentage = coulomb count of the `battery_mah` (2,000) pack, snapped to
+  100 % when charge terminates (≥ 4.18 V, < 15 mA) and to 0 % at 3.30 V;
+  seeded from a rough OCV table (3.45 V = 0 %, 4.15 V = 100 %) and persisted
+  per whole percent. "Reset Battery Gauge" button re-seeds it.
+- The INA219 is powered from the cell (~0.7 mA idle), so the firmware writes
+  its power-down mode before releasing the power latch and re-initialises it
+  if the board turns out to be on USB.
