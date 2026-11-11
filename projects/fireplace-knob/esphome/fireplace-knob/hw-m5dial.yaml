@@ -100,9 +100,7 @@ script:
           id(wifi_id).enable();
           id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
           if (id(stale_ok)) id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = true;
-          id(page) = 1;
-          id(apply_backlight)->execute();
-          id(render)->execute();
+          id(go)->execute(1);   // switches the screen to Main (and renders)
 
   # Re-seed the charge counter from the resting voltage (rough LiPo OCV table).
   - id: gauge_reseed
@@ -240,7 +238,7 @@ interval:
             if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
               // A waking *press* is not a tap (its release clears the guard);
               // a waking *turn* goes on to act as the first click.
-              if (gpio_get_level(GPIO_NUM_42) == 0) id(boot_guard) = true;
+              if (gpio_get_level(GPIO_NUM_42) == 0) { id(boot_guard) = true; id(guard_ms) = millis(); }
               id(board_resume)->execute("input");
               return;
             }

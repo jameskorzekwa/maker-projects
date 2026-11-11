@@ -107,9 +107,8 @@ esphome:
             id(apply_backlight)->execute();
             id(render)->execute();           // loading screen until HA data is complete
         # The wake press is still down (and not yet debounced) when we start:
-        # ignore the button until it has been released once, or for 3 s.
-        - delay: 3s
-        - lambda: 'id(boot_guard) = false;'
+        # ignore the button until it has been released (see the interval).
+        - lambda: 'id(guard_ms) = millis();'
 
 wifi:
   id: wifi_id
@@ -273,9 +272,12 @@ globals:
   - id: power_off_tried     # one power-off attempt per idle period
     type: bool
     initial_value: "false"
-  - id: boot_guard          # ignore the button until its first release after boot
+  - id: boot_guard          # ignore the button until its first release after boot/wake
     type: bool
     initial_value: "true"
+  - id: guard_ms            # when the guard was armed (auto-clears after 1 s released)
+    type: uint32_t
+    initial_value: "0"
   - id: cache_temp          # last room temperature, shown until HA reconnects
     type: float
     restore_value: true
@@ -475,7 +477,7 @@ script:
           id(power_off_tried) = false;
           if (id(idle_sleeping)) {
             // Input during the awake-dark refresh window: resume; a press only wakes.
-            if (id(knob_button).state) id(boot_guard) = true;
+            if (id(knob_button).state) { id(boot_guard) = true; id(guard_ms) = millis(); }
             id(board_resume)->execute("input");
           }
           if (id(display_off)) {
@@ -1105,6 +1107,9 @@ interval:
             id(conn_timed_out) = true;
             id(render)->execute();
           }
+          // The wake-press guard clears itself once the button is seen released
+          // (or after 1 s if the sensor never saw the press at all).
+          if (id(boot_guard) && !id(knob_button).state && (now - id(guard_ms)) > 1000u) id(boot_guard) = false;
           if (id(knob_button).state) return;   // a hold in progress never times out
           const bool fp_on = id(ha_fireplace).state == "on";
           // Display Off: Sleep + fireplace off for a while -> backlight off and
