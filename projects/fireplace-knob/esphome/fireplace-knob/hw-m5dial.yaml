@@ -234,7 +234,11 @@ interval:
             esp_sleep_enable_timer_wakeup(4000000ULL);
             esp_err_t rc = esp_light_sleep_start();
             App.feed_wdt();
-            for (auto p : pins) gpio_wakeup_disable(p);
+            // gpio_wakeup_enable() switched the pins to LEVEL triggering and
+            // gpio_wakeup_disable() does not switch them back. The button and
+            // encoder ISRs (ESPHome, level-3) would then re-fire for as long as
+            // a pin sits at that level: a held button = interrupt-watchdog reset.
+            for (auto p : pins) { gpio_wakeup_disable(p); gpio_set_intr_type(p, GPIO_INTR_ANYEDGE); }
             id(sleep_loops)++;
             if (rc != ESP_OK) {
               if (++id(sleep_rejects) > 5) { id(board_resume)->execute("sleep refused"); }
