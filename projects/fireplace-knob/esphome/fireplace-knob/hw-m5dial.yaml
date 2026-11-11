@@ -26,6 +26,9 @@ esphome:
             gpio_reset_pin(GPIO_NUM_46);
             gpio_set_direction(GPIO_NUM_46, GPIO_MODE_OUTPUT);
             gpio_set_level(GPIO_NUM_46, 1);
+            // Hold the pad through software resets (OTA reboot, restart button)
+            // so a reboot on battery does not drop the latch and power off.
+            gpio_hold_en(GPIO_NUM_46);
 
 esp32:
   board: m5stack-stamps3
@@ -51,11 +54,15 @@ script:
   # at ~0.7 mA otherwise) and bring it back if we turn out to be on USB.
   - id: board_power_off
     then:
-      - lambda: 'id(ina).write_byte_16(0x00, 0x0000);   // INA219 config: power-down'
+      - lambda: |-
+          id(ina).write_byte_16(0x00, 0x0000);   // INA219 config: power-down
+          gpio_hold_dis(GPIO_NUM_46);             // release the pad hold so the latch can drop
       - switch.turn_off: power_hold
       - delay: 500ms
       - switch.turn_on: power_hold
-      - lambda: 'id(ina).setup();                        // still here: USB. Re-init the INA219'
+      - lambda: |-
+          gpio_hold_en(GPIO_NUM_46);
+          id(ina).setup();                        // still here: USB. Re-init the INA219
 
   # Two-stage idle sleep on battery.
   # Stage 1: light sleep (RAM kept, Wi-Fi off, screen dark). Wakes instantly on
