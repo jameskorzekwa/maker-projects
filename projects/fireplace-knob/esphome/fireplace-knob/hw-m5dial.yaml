@@ -204,6 +204,7 @@ sensor:
             // the range limit (seen: +819 mA with the cell unplugged). Nothing
             // real exceeds ~300 mA here, so beyond 500 mA = disconnected.
             if (fabsf(i_ma) > 500.0f) absent = true;
+            else if (fabsf(i_ma) > 5.0f) absent = false;   // current flowing = a cell is there
             else if (id(vcount) >= 6) {
               float lo = h[0], hi = h[0];
               for (int k = 1; k < 6; k++) { lo = std::min(lo, h[k]); hi = std::max(hi, h[k]); }
