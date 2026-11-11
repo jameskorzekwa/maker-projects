@@ -128,7 +128,7 @@ sensor:
               float est = (v - 3.45f) / (4.15f - 3.45f) * 100.0f;
               est = std::min(100.0f, std::max(0.0f, est));
               static uint32_t last_qs = 0;
-              if (fabsf(x - est) > 35.0f && (millis() - last_qs) > 600000u) {   // >35 % off, max once per 10 min
+              if (fabsf(x - est) > 25.0f && (millis() - last_qs) > 600000u) {   // >25 % off, max once per 10 min
                 last_qs = millis();
                 ESP_LOGW("gauge", "SOC %.0f%% vs ~%.0f%% from %.2f V: quick start", x, est, v);
                 id(gauge_quickstart)->execute();
@@ -201,9 +201,9 @@ globals:
   - id: battery_spread
     type: float
     initial_value: "0"
-  - id: vtrend           # one sample per 10 s, last 5 minutes (ring of 30)
-    type: float[30]
-    initial_value: "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}"
+  - id: vtrend           # one sample per 10 s, last 2 minutes (ring of 12)
+    type: float[12]
+    initial_value: "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}"
   - id: vtrend_idx
     type: int
     initial_value: "0"
@@ -253,18 +253,19 @@ interval:
             if (d >= +0.012f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
           }
           // Steady-state detector (no plug event seen, e.g. USB already in at
-          // boot): the cell voltage drifts up while charging and down on
-          // battery. One sample per 10 s, compare with 5 minutes ago.
+          // boot): the cell voltage drifts up while charging (~1-3 mV/min at
+          // 100 mA) and down on battery. One sample per 10 s, compare with
+          // 2 minutes ago.
           if (!absent && ++id(vtick) >= 10) {
             id(vtick) = 0;
             float *t = id(vtrend);
             const float old5 = t[id(vtrend_idx)];
-            t[id(vtrend_idx)] = v; id(vtrend_idx) = (id(vtrend_idx) + 1) % 30;
-            if (id(vtrend_count) < 30) id(vtrend_count)++;
+            t[id(vtrend_idx)] = v; id(vtrend_idx) = (id(vtrend_idx) + 1) % 12;
+            if (id(vtrend_count) < 12) id(vtrend_count)++;
             else {
               const float dv = v - old5;
-              if (dv >= +0.008f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
-              if (dv <= -0.008f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
+              if (dv >= +0.002f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
+              if (dv <= -0.004f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
             }
           }
           if (changed) { id(power_off_tried) = false; id(render)->execute(); }
