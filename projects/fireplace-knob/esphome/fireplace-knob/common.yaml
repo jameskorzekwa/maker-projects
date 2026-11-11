@@ -220,6 +220,9 @@ globals:
   - id: press_stuck         # held > stuck_press: ignore this press
     type: bool
     initial_value: "false"
+  - id: hold_hinted         # "Hold to turn ..." was shown: releasing early is not a tap
+    type: bool
+    initial_value: "false"
   - id: press_from_sleep    # the current press started on the Sleep screen
     type: bool
     initial_value: "false"
@@ -512,6 +515,7 @@ script:
       - delay: 200ms
       - lambda: |-
           if (id(page) == 0) id(go)->execute(1);
+          id(hold_hinted) = true;
           bool on = id(ha_fireplace).state == "on";
           id(show_toast)->execute(on ? "Hold to turn OFF" : "Hold to turn ON", 4000);
       - delay: ${long_press}
@@ -536,6 +540,7 @@ script:
             - lambda: |-
                 id(long_fired) = false;
                 id(press_stuck) = false;
+                id(hold_hinted) = false;
                 id(press_from_sleep) = id(page) == 0;
             - script.execute: long_press_timer
 
@@ -549,7 +554,8 @@ script:
           condition:
             lambda: |-
               if (id(boot_guard)) { id(boot_guard) = false; return true; }   // the wake press
-              return id(press_stuck);
+              if (id(press_stuck)) return true;
+              return id(hold_hinted) && !id(long_fired);   // aborted hold: stay put
           then: []
           else:
             - if:
