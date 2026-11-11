@@ -76,6 +76,7 @@ substitutions:
   setpoint_timeout_s: "10"  # Set Point -> Main
   sleep_after_s: "10"       # any screen -> Sleep
   display_off_after_s: "30" # Sleep + fireplace off -> backlight off (USB)
+  display_off_enabled: "true"  # hw packages with their own sleep (Dial) set false
   power_off_after_s: "30"   # no input for this long -> idle sleep (battery)
   light_sleep_minutes: "10" # Dial: light sleep this long, then full power-off
   refresh_every_s: "60"     # Dial: during light sleep, reconnect to HA this often
@@ -1137,7 +1138,7 @@ interval:
             id(display_off) = false;
             knob_wifi_power_save(false);
             id(apply_backlight)->execute();
-          } else if (id(page) == 0 && !id(display_off) && !fp_on && !id(on_usb) &&
+          } else if (${display_off_enabled} && id(page) == 0 && !id(display_off) && !fp_on && !id(on_usb) &&
                      (now - id(sleep_since_ms)) >= ${display_off_after_s}u * 1000u) {
             // (never on external power: the Sleep screen stays on; the Dial
             // knows when it is on USB, the CrowPanel is always on USB-but-unknown)

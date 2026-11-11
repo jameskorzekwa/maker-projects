@@ -1,5 +1,6 @@
 substitutions:
   battery_mah: "2000"       # pack capacity for the charge counter
+  display_off_enabled: "false"  # the Dial light-sleeps instead; Sleep screen stays on USB
 
 # Hardware package: M5Stack Dial v1.1 (ESP32-S3FN8, 8 MB flash, no PSRAM,
 # 1.28" 240x240 GC9A01 SPI, FT3267 touch, 16-detent encoder, under-screen
