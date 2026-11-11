@@ -57,6 +57,53 @@ script:
       - switch.turn_on: power_hold
       - lambda: 'id(ina).setup();                        // still here: USB. Re-init the INA219'
 
+  # Two-stage idle sleep on battery.
+  # Stage 1: light sleep (RAM kept, Wi-Fi off, screen dark). Wakes instantly on
+  #   the button or the encoder (any GPIO can wake light sleep), and every 5 s
+  #   to read the INA219: current flowing into the cell = USB plugged in ->
+  #   wake fully. Draws a few mA.
+  # Stage 2: after light_sleep_minutes, release the power latch -> off (~6 uA).
+  #   USB plug-in boots the board (hardware); a tap needs a ~0.5 s hold.
+  - id: board_idle_sleep
+    then:
+      - lambda: |-
+          id(wifi_id).disable();
+          id(display_backlight).turn_off().perform();
+          delay(300);   // let Wi-Fi shut down
+          gpio_wakeup_enable(GPIO_NUM_42, GPIO_INTR_LOW_LEVEL);   // button
+          gpio_wakeup_enable(GPIO_NUM_40, GPIO_INTR_LOW_LEVEL);   // encoder B
+          gpio_wakeup_enable(GPIO_NUM_41, GPIO_INTR_LOW_LEVEL);   // encoder A
+          esp_sleep_enable_gpio_wakeup();
+          const uint32_t limit_ms = ${light_sleep_minutes}u * 60u * 1000u;
+          uint32_t slept_ms = 0;
+          bool wake_input = false, usb = false;
+          while (slept_ms < limit_ms) {
+            esp_sleep_enable_timer_wakeup(4000000ULL);            // 4 s slices (task WDT is 5 s)
+            esp_light_sleep_start();
+            App.feed_wdt();
+            const auto cause = esp_sleep_get_wakeup_cause();
+            if (cause == ESP_SLEEP_WAKEUP_GPIO) { wake_input = true; break; }
+            slept_ms += 4000;
+            id(ina).update();                                      // refreshes on_usb via on_value
+            if (id(on_usb)) { usb = true; break; }
+          }
+          gpio_wakeup_disable(GPIO_NUM_42); gpio_wakeup_disable(GPIO_NUM_40); gpio_wakeup_disable(GPIO_NUM_41);
+          if (wake_input || usb) {
+            // Back to life without a reboot. The press that woke us must not
+            // count as a tap; its release clears boot_guard.
+            id(boot_guard) = wake_input;
+            id(last_activity_ms) = millis();
+            id(power_off_tried) = false;
+            id(wifi_id).enable();
+            id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
+            id(page) = 1;
+            id(apply_backlight)->execute();
+            id(render)->execute();
+            return;
+          }
+          // Stage 2: full power-off (returns only if we are on USB after all).
+          id(board_power_off)->execute();
+
   # Re-seed the charge counter from the resting voltage (rough LiPo OCV table).
   - id: gauge_reseed
     then:

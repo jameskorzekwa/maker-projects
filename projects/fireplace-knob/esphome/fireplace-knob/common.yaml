@@ -76,7 +76,8 @@ substitutions:
   setpoint_timeout_s: "10"  # Set Point -> Main
   sleep_after_s: "10"       # any screen -> Sleep
   display_off_after_s: "30" # Sleep + fireplace off -> backlight off (USB)
-  power_off_after_s: "30"   # no input for this long -> try to power off (battery)
+  power_off_after_s: "30"   # no input for this long -> idle sleep (battery)
+  light_sleep_minutes: "10" # Dial: light sleep this long, then full power-off
   awake_brightness_default: "100"
   # Wording that must fit the screen; the ui-*.yaml packages override these.
   txt_no_ha: "No HA link"
@@ -110,6 +111,7 @@ esphome:
         - lambda: 'id(boot_guard) = false;'
 
 wifi:
+  id: wifi_id
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   ap:
@@ -1095,12 +1097,12 @@ interval:
             id(apply_backlight)->execute();
           }
           const uint32_t idle = (now - id(last_activity_ms)) / 1000;
-          // Battery: one power-off attempt per idle period. On USB it returns
-          // and the board simply stays on.
+          // Battery: hand over to the board's idle-sleep (Dial: light sleep,
+          // then power-off). One attempt per idle period; on USB nothing.
           if (!id(power_off_tried) && !id(on_usb) && idle >= ${power_off_after_s}) {
             id(power_off_tried) = true;
             id(cache_fp_on) = fp_on;
-            id(board_power_off)->execute();
+            id(board_idle_sleep)->execute();
           }
           if (id(page) != 0 && idle >= ${sleep_after_s}) {
             id(go)->execute(0);                 // discards unapplied Power/Mode edits

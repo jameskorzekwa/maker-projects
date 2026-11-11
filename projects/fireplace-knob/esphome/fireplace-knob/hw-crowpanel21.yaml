@@ -168,6 +168,8 @@ script:
   # No battery/power latch on this board: nothing to do.
   - id: board_power_off
     then: []
+  - id: board_idle_sleep
+    then: []
 
 sensor:
   - platform: rotary_encoder

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <esp_wifi.h>
+#include <esp_sleep.h>
+#include <driver/gpio.h>
 
 // Wi-Fi modem power save while the display is off. ESPHome applies its own
 // (configured) mode again on every reconnect, which is fine: this is only
