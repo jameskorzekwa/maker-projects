@@ -8,6 +8,8 @@ substitutions:
   txt_fp_offline_short: "Offline"
   txt_fp_offline: "Fireplace offline"
   txt_connecting: "Connecting to HA..."
+  txt_wait_data: "Loading data..."
+  txt_wait_data_failed: "No fireplace data"
   txt_conn_failed: "HA not reachable"
   arc_radius: "97"
 
@@ -141,6 +143,33 @@ lvgl:
                 text_font: font_toast
                 text_color: 0xFFFFFF
   pages:
+    # ================= Loading (boot / reconnect) =================
+    - id: page_loading
+      bg_color: 0x000000
+      widgets:
+        - spinner:
+            id: load_spinner
+            align: CENTER
+            y: -17
+            width: 70
+            height: 70
+            spin_time: 1s
+            arc_length: 80deg
+            arc_color: 0x2A2A2A
+            arc_width: 5
+            indicator:
+              arc_color: 0xFF7A1A
+              arc_width: 5
+        - label:
+            id: load_text
+            align: CENTER
+            y: 45
+            width: 200
+            text_align: CENTER
+            long_mode: WRAP
+            text: ""
+            text_font: font_sub
+            text_color: 0x9A9A9A
     # ================= Sleep =================
     - id: page_sleep
       bg_color: 0x000000

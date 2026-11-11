@@ -84,6 +84,8 @@ substitutions:
   txt_fp_offline: "Fireplace not reachable"
   txt_connecting: "Connecting to Home Assistant..."
   txt_conn_failed: "Could not connect to Home Assistant"
+  txt_wait_data: "Loading fireplace data..."
+  txt_wait_data_failed: "Connected, but no fireplace data"
   connect_timeout_s: "30"   # spinner -> error after this long without HA
   arc_radius: "200"               # radius of the settings icon arc (ui-*.yaml overrides)
   sleep_brightness_default: "25"
@@ -99,8 +101,9 @@ esphome:
       then:
         - lambda: |-
             id(last_activity_ms) = millis();
-            // A cold boot is usually the wake press: show Main right away.
-            id(go)->execute(1);
+            id(disconnected_since_ms) = millis();
+            id(apply_backlight)->execute();
+            id(render)->execute();           // loading screen until HA data is complete
         # The wake press is still down (and not yet debounced) when we start:
         # ignore the button until it has been released once, or for 3 s.
         - delay: 3s
@@ -131,7 +134,10 @@ api:
     - script.execute: render
   on_client_disconnected:
     - lambda: |-
-        if (!api::global_api_server->is_connected()) { id(disconnected_since_ms) = millis(); id(conn_timed_out) = false; }
+        if (!api::global_api_server->is_connected()) {
+          id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
+          id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = false;
+        }
     - script.execute: render
 
 ota:
@@ -218,6 +224,33 @@ globals:
   - id: conn_timed_out      # spinner replaced by the error text
     type: bool
     initial_value: "false"
+  # One flag per HA value the screens use. The UI stays on the loading screen
+  # until HA is connected and all of them have arrived (NaN/"unavailable"
+  # count as arrived: that is a real answer). Cleared on every disconnect.
+  - id: got_fp
+    type: bool
+    initial_value: "false"
+  - id: got_light
+    type: bool
+    initial_value: "false"
+  - id: got_preset
+    type: bool
+    initial_value: "false"
+  - id: got_setpoint
+    type: bool
+    initial_value: "false"
+  - id: got_room
+    type: bool
+    initial_value: "false"
+  - id: got_flame
+    type: bool
+    initial_value: "false"
+  - id: got_fan
+    type: bool
+    initial_value: "false"
+  - id: loading_shown       # the loading screen is the active screen
+    type: bool
+    initial_value: "true"
   - id: display_off         # Sleep with the backlight fully off
     type: bool
     initial_value: "false"
@@ -302,13 +335,13 @@ text_sensor:
     id: ha_fireplace
     entity_id: ${fireplace_switch}
     on_value:
-      - lambda: 'if (x == "on" || x == "off") id(cache_fp_on) = (x == "on");'
+      - lambda: 'id(got_fp) = true; if (x == "on" || x == "off") id(cache_fp_on) = (x == "on");'
       - script.execute: render
   - platform: homeassistant
     id: ha_light
     entity_id: ${light_switch}
     on_value:
-      - lambda: 'id(light_pending) = false;'
+      - lambda: 'id(got_light) = true; id(light_pending) = false;'
       - script.execute: render
   - platform: homeassistant
     id: ha_preset
@@ -318,6 +351,7 @@ text_sensor:
       # Follow the fireplace's real mode (remote, HA, automations). "Off" is
       # ignored so the knob remembers which mode to light it in next time.
       - lambda: |-
+          id(got_preset) = true;
           if (id(mode_pending)) return;
           if (x == "Manual") id(mode_sel) = 0;
           else if (x == "Thermostat") id(mode_sel) = 1;
@@ -332,6 +366,7 @@ sensor:
     on_value:
       # null in Off/Manual on the Proflame integrations -> NaN; keep ours.
       - lambda: |-
+          id(got_setpoint) = true;
           if (!std::isnan(x) && !id(temp_pending)) id(setpoint) = x;
       - script.execute: render
   - platform: homeassistant
@@ -339,7 +374,7 @@ sensor:
     entity_id: ${climate_entity}
     attribute: current_temperature
     on_value:
-      - lambda: 'if (!std::isnan(x)) id(cache_temp) = x;'
+      - lambda: 'id(got_room) = true; if (!std::isnan(x)) id(cache_temp) = x;'
       - script.execute: render
   - platform: homeassistant
     id: ha_alt_temp
@@ -351,6 +386,7 @@ sensor:
     entity_id: ${flame_number}
     on_value:
       - lambda: |-
+          id(got_flame) = true;
           if (!std::isnan(x) && !id(flame_pending)) {
             id(flame_target) = (int) lroundf(x);
             if (id(flame_target) > 0) id(flame_saved) = id(flame_target);
@@ -361,6 +397,7 @@ sensor:
     entity_id: ${fan_number}
     on_value:
       - lambda: |-
+          id(got_fan) = true;
           if (!std::isnan(x) && !id(fan_pending)) id(fan_target) = (int) lroundf(x);
       - script.execute: render
   - platform: wifi_signal
@@ -386,7 +423,7 @@ script:
       - lambda: |-
           if (id(display_off)) { id(display_backlight).turn_off().perform(); return; }
           float pct = id(awake_brightness).state;
-          if (id(page) == 0 || (id(page) == 9 && id(bright_step) == 1)) pct = id(sleep_brightness).state;
+          if (!id(loading_shown) && (id(page) == 0 || (id(page) == 9 && id(bright_step) == 1))) pct = id(sleep_brightness).state;
           if (std::isnan(pct)) pct = 100;
           if (pct <= 0) { id(display_backlight).turn_off().perform(); return; }
           auto call = id(display_backlight).turn_on();
@@ -409,6 +446,7 @@ script:
           }
           id(apply_backlight)->execute();
           id(render)->execute();
+          if (id(loading_shown)) return;   // render() moves off the loading screen when data is complete
           lv_obj_t *scr = id(page_value)->obj;
           if (to == 0) scr = id(page_sleep)->obj;
           else if (to == 1) scr = id(page_main)->obj;
@@ -432,6 +470,11 @@ script:
     mode: restart
     then:
       - script.execute: wake
+      - if:
+          condition:
+            lambda: 'return id(loading_shown);'
+          then:
+            - script.stop: long_press_timer
       - delay: 200ms
       - lambda: |-
           if (id(page) == 0) id(go)->execute(1);
@@ -497,6 +540,7 @@ script:
     then:
       - lambda: |-
           id(wake)->execute();
+          if (id(loading_shown)) return;
           const bool fp_on = id(ha_fireplace).state == "on";
           const int p = id(page);
           if (id(press_from_sleep)) { id(go)->execute(1); return; }   // just wake
@@ -533,6 +577,7 @@ script:
     then:
       - lambda: |-
           id(wake)->execute();
+          if (id(loading_shown)) return;
           const bool fp_on = id(ha_fireplace).state == "on";
           int p = id(page);
           if (p == 0 || p == 1) { id(go)->execute(2); p = 2; }   // first click counts
@@ -726,6 +771,33 @@ script:
   - id: render
     then:
       - lambda: |-
+          // ---- Loading gate: nothing but the spinner until HA is connected and
+          // every value we display has arrived. ----
+          {
+            const bool conn = api::global_api_server->is_connected();
+            const bool ready = conn && id(got_fp) && id(got_light) && id(got_preset) && id(got_setpoint) &&
+                               id(got_room) && id(got_flame) && id(got_fan);
+            if (!ready) {
+              if (id(conn_timed_out)) {
+                lv_obj_add_flag(id(load_spinner), LV_OBJ_FLAG_HIDDEN);
+                lv_label_set_text(id(load_text), conn ? "${txt_wait_data_failed}" : "${txt_conn_failed}");
+                lv_obj_set_style_text_color(id(load_text), lv_color_hex(0xFF4A2A), 0);
+              } else {
+                lv_obj_remove_flag(id(load_spinner), LV_OBJ_FLAG_HIDDEN);
+                lv_label_set_text(id(load_text), conn ? "${txt_wait_data}" : "${txt_connecting}");
+                lv_obj_set_style_text_color(id(load_text), lv_color_hex(0x9A9A9A), 0);
+              }
+              if (lv_screen_active() != id(page_loading)->obj) lv_screen_load(id(page_loading)->obj);
+              id(loading_shown) = true;
+              return;
+            }
+            if (id(loading_shown)) {       // first complete data set: show Main
+              id(loading_shown) = false;
+              id(last_activity_ms) = millis();
+              id(go)->execute(1);
+              return;                      // go() re-renders
+            }
+          }
           static const uint32_t ORANGE = 0xFF7A1A, RED = 0xFF4A2A, CYAN = 0x38BDF8,
                                 YELLOW = 0xFACC15, PURPLE = 0xA78BFA, GREEN = 0x4ADE80,
                                 GREY = 0x5A5A5A, DIM = 0x333333, WHITE = 0xFFFFFF,
@@ -737,7 +809,6 @@ script:
           id(last_connected) = connected;
           const bool connecting = !connected && !id(conn_timed_out);
           std::string fp = id(ha_fireplace).state;
-          if (!connected && !(fp == "on" || fp == "off")) fp = id(cache_fp_on) ? "on" : "off";   // cached until HA is back
           const bool fp_on = fp == "on";
           const bool fp_known = fp == "on" || fp == "off";
           const int m = id(mode_sel);
@@ -751,8 +822,7 @@ script:
           bool alt = id(temp_source).current_option() == "${alt_temp_label}";
           float room = alt ? alt_temp : fp_temp;
           if (std::isnan(room)) room = alt ? fp_temp : alt_temp;
-          const bool room_cached = std::isnan(room) && !std::isnan(id(cache_temp));
-          if (room_cached) room = id(cache_temp);
+          const bool room_cached = false;   // nothing stale is shown; the loading screen covers it
           if (std::isnan(room)) snprintf(buf, sizeof(buf), "--");
           else snprintf(buf, sizeof(buf), "%.0f\u00B0", room);
           lv_label_set_text(id(sleep_temp), buf);
@@ -998,7 +1068,7 @@ interval:
           if (api::global_api_server->is_connected() != id(last_connected))
             id(render)->execute();
           // Connecting spinner -> error after connect_timeout_s without HA.
-          if (!api::global_api_server->is_connected() && !id(conn_timed_out) &&
+          if (id(loading_shown) && !id(conn_timed_out) &&
               (now - id(disconnected_since_ms)) >= ${connect_timeout_s}u * 1000u) {
             id(conn_timed_out) = true;
             id(render)->execute();

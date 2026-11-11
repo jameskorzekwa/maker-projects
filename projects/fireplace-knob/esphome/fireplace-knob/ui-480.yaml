@@ -138,6 +138,33 @@ lvgl:
                 text_font: font_toast
                 text_color: 0xFFFFFF
   pages:
+    # ================= Loading (boot / reconnect) =================
+    - id: page_loading
+      bg_color: 0x000000
+      widgets:
+        - spinner:
+            id: load_spinner
+            align: CENTER
+            y: -35
+            width: 140
+            height: 140
+            spin_time: 1s
+            arc_length: 80deg
+            arc_color: 0x2A2A2A
+            arc_width: 11
+            indicator:
+              arc_color: 0xFF7A1A
+              arc_width: 11
+        - label:
+            id: load_text
+            align: CENTER
+            y: 80
+            width: 400
+            text_align: CENTER
+            long_mode: WRAP
+            text: ""
+            text_font: font_sub
+            text_color: 0x9A9A9A
     # ================= Sleep =================
     - id: page_sleep
       bg_color: 0x000000
