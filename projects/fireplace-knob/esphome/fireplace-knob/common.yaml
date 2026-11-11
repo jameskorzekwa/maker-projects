@@ -280,6 +280,9 @@ globals:
   - id: battery_absent      # gauge present but no cell connected
     type: bool
     initial_value: "false"
+  - id: on_usb              # external power present (boards that can tell); false otherwise
+    type: bool
+    initial_value: "false"
 
 # ------------------------------------------------------------------
 # Home Assistant: settings exposed on the device page
@@ -1094,7 +1097,7 @@ interval:
           const uint32_t idle = (now - id(last_activity_ms)) / 1000;
           // Battery: one power-off attempt per idle period. On USB it returns
           // and the board simply stays on.
-          if (!id(power_off_tried) && idle >= ${power_off_after_s}) {
+          if (!id(power_off_tried) && !id(on_usb) && idle >= ${power_off_after_s}) {
             id(power_off_tried) = true;
             id(cache_fp_on) = fp_on;
             id(board_power_off)->execute();

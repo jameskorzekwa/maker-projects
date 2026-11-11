@@ -1,3 +1,6 @@
+substitutions:
+  battery_mah: "2000"       # pack capacity for the charge counter
+
 # Hardware package: M5Stack Dial v1.1 (ESP32-S3FN8, 8 MB flash, no PSRAM,
 # 1.28" 240x240 GC9A01 SPI, FT3267 touch, 16-detent encoder, under-screen
 # button, buzzer, PCF8563 RTC, WS1850S NFC, LiPo connector + charger,
@@ -44,20 +47,27 @@ script:
   # Release the latch. On battery the board is off before the delay ends
   # (tap = power on, cold boot). On USB we are still here: re-assert HOLD so
   # the Grove 5 V rail and a later USB unplug behave, and carry on awake.
+  # The INA219 is powered from the battery, so put it to sleep first (it idles
+  # at ~0.7 mA otherwise) and bring it back if we turn out to be on USB.
   - id: board_power_off
     then:
+      - lambda: 'id(ina).write_byte_16(0x00, 0x0000);   // INA219 config: power-down'
       - switch.turn_off: power_hold
       - delay: 500ms
       - switch.turn_on: power_hold
+      - lambda: 'id(ina).setup();                        // still here: USB. Re-init the INA219'
 
-  - id: gauge_quickstart
+  # Re-seed the charge counter from the resting voltage (rough LiPo OCV table).
+  - id: gauge_reseed
     then:
       - lambda: |-
-          uint8_t cmd[2] = {0x40, 0x00};
-          if (id(gauge).write_bytes(0x06, cmd, 2)) ESP_LOGI("gauge", "MAX17048 quick start");
-          else ESP_LOGW("gauge", "MAX17048 quick start failed");
-      - delay: 1500ms
-      - component.update: gauge
+          const float v = id(batt_v);
+          if (std::isnan(v)) return;
+          float pct = (v - 3.45f) / (4.15f - 3.45f) * 100.0f;
+          pct = std::min(100.0f, std::max(0.0f, pct));
+          id(soc_mah) = pct / 100.0f * ${battery_mah};
+          id(soc_pct_saved) = (int) lroundf(pct);
+          ESP_LOGI("batt", "charge counter re-seeded at %.0f%% from %.3f V", pct, v);
 
 output:
   - platform: ledc
@@ -84,9 +94,10 @@ spi:
   clk_pin: GPIO6
   mosi_pin: GPIO5
 
-# Port A (red Grove jack): GND, 5 V, G13 = SDA, G15 = SCL. A MAX17048 fuel
-# gauge on the LiPo hangs here (wired 2026-11-10). The driver's register maths
-# matches the MAX17048 (VCELL 78.125 uV/LSB, SOC 1/256 %).
+# Port A (red Grove jack): GND, 5 V, G13 = SDA, G15 = SCL. An INA219 sits in
+# the battery's + lead (battery -> VIN+, VIN- -> B+), powered from the battery
+# tap, on this bus at 0x40. It measures the cell voltage and the current with
+# direction, so charging / on-USB / percentage are all derived from it.
 i2c:
   id: port_a
   sda: GPIO13
@@ -107,71 +118,126 @@ display:
     update_interval: never
     auto_clear_enabled: false
 
+globals:
+  - id: batt_v              # cell voltage (V), NaN until read
+    type: float
+    initial_value: "NAN"
+  - id: batt_i              # battery current, mA, + = into the battery (charging)
+    type: float
+    initial_value: "NAN"
+  - id: soc_mah             # charge counter (mAh), NaN until seeded
+    type: float
+    initial_value: "NAN"
+  - id: soc_pct_saved       # persisted whole-percent copy of the counter
+    type: int
+    restore_value: true
+    initial_value: "-1"
+  - id: vhist               # last 6 one-second voltage samples (no-cell detection)
+    type: float[6]
+    initial_value: "{0, 0, 0, 0, 0, 0}"
+  - id: vidx
+    type: int
+    initial_value: "0"
+  - id: vcount
+    type: int
+    initial_value: "0"
+  - id: batt_last_ms
+    type: uint32_t
+    initial_value: "0"
+
 sensor:
-  - platform: max17043
-    id: gauge
+  - platform: ina219
+    id: ina
     i2c_id: port_a
-    address: 0x36
-    update_interval: 30s
-    battery_level:
-      name: Battery
-      id: battery_level
-      entity_category: diagnostic
-      filters:
-        - clamp: {min_value: 0, max_value: 100}
+    address: 0x40
+    shunt_resistance: 0.1 ohm
+    max_current: 0.8A         # 80 mV shunt range: fine resolution at 100-300 mA
+    max_voltage: 16V
+    update_interval: 1s
+    bus_voltage:
+      id: ina_bus_v
+      internal: true
+    current:
+      id: ina_current
+      internal: true
       on_value:
         - lambda: |-
-            id(battery_pct) = x;
-            // Rough LiPo OCV -> % (3.5 V ~ 10 %, 3.7 V ~ 40 %, 3.9 V ~ 70 %, 4.1 V ~ 95 %).
-            const float v = id(gauge_voltage).state;
-            if (!std::isnan(v) && !id(battery_absent)) {
-              float est = (v - 3.45f) / (4.15f - 3.45f) * 100.0f;
-              est = std::min(100.0f, std::max(0.0f, est));
-              static uint32_t last_qs = 0;
-              if (fabsf(x - est) > 20.0f && (millis() - last_qs) > 600000u) {   // >20 % off, max once per 10 min
-                last_qs = millis();
-                ESP_LOGW("gauge", "SOC %.0f%% vs ~%.0f%% from %.2f V: quick start", x, est, v);
-                id(gauge_quickstart)->execute();
-              }
-            }
-        - script.execute: render
-    battery_voltage:
-      name: Battery Voltage
-      id: gauge_voltage
-      entity_category: diagnostic
-      accuracy_decimals: 2
+            // Sign: ESPHome's INA219 current is + for VIN+ -> VIN-, i.e. battery
+            // -> Dial (discharge). Flip so + means charging.
+            const float i_ma = -x * 1000.0f;
+            const float v = id(ina_bus_v).state;
+            const uint32_t now = millis();
+            const bool first = std::isnan(id(batt_i));
+            id(batt_i) = i_ma; id(batt_v) = v;
 
-  # MAX17048 CRATE register (0x16): charge/discharge rate, 0.208 %/h per LSB,
-  # signed. The Dial's charger has no status pin, so this is how we know.
-  # It is a ~1 min average; the 1 s voltage-step detector below reacts first.
+            // No cell: the charger's output cannot hold a steady voltage
+            // without a battery (sawtooth), so the 6 s spread is large.
+            float *h = id(vhist);
+            h[id(vidx)] = v; id(vidx) = (id(vidx) + 1) % 6;
+            if (id(vcount) < 6) id(vcount)++;
+            bool absent = false;
+            if (id(vcount) >= 6) {
+              float lo = h[0], hi = h[0];
+              for (int k = 1; k < 6; k++) { lo = std::min(lo, h[k]); hi = std::max(hi, h[k]); }
+              absent = (hi - lo) > 0.050f;
+            }
+            id(battery_absent) = absent;
+
+            // Charging = current into the cell. External power = the cell is
+            // not supplying the Dial (it always draws >= ~60 mA while awake).
+            const bool charging = !absent && i_ma > 10.0f;
+            const bool usb = absent || i_ma > -20.0f;
+
+            // Charge counter (mAh) with anchors at full and empty.
+            if (!absent) {
+              if (std::isnan(id(soc_mah))) {
+                if (id(soc_pct_saved) >= 0) id(soc_mah) = id(soc_pct_saved) / 100.0f * ${battery_mah};
+                else id(gauge_reseed)->execute();
+              }
+              if (!first && !std::isnan(id(soc_mah))) {
+                const float dt_h = (now - id(batt_last_ms)) / 3600000.0f;
+                id(soc_mah) += i_ma * dt_h;
+                if (v >= 4.18f && charging && i_ma < 15.0f) id(soc_mah) = ${battery_mah};   // charge terminated: full
+                if (v >= 4.19f && !charging) id(soc_mah) = std::max(id(soc_mah), 0.97f * ${battery_mah});
+                if (v <= 3.30f && i_ma < 0) id(soc_mah) = 0;                                 // empty
+                id(soc_mah) = std::min((float) ${battery_mah}, std::max(0.0f, id(soc_mah)));
+                int pct = (int) lroundf(id(soc_mah) / ${battery_mah} * 100.0f);
+                if (pct != id(soc_pct_saved)) id(soc_pct_saved) = pct;   // persisted per whole %
+                id(battery_pct) = id(soc_mah) / ${battery_mah} * 100.0f;
+              }
+            } else id(battery_pct) = NAN;
+            id(batt_last_ms) = now;
+
+            bool changed = (charging != id(battery_charging)) || (usb != id(on_usb)) || first;
+            id(battery_charging) = charging;
+            id(on_usb) = usb;
+            if (changed) { id(power_off_tried) = false; id(render)->execute(); }
+
+  # HA-facing copies (throttled)
   - platform: template
-    name: Battery Voltage Spread
+    name: Battery
+    device_class: battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: 'return id(battery_pct);'
+  - platform: template
+    name: Battery Voltage
+    device_class: voltage
     unit_of_measurement: "V"
     accuracy_decimals: 3
     entity_category: diagnostic
-    update_interval: 10s
-    lambda: 'return id(battery_spread);'
-
+    update_interval: 30s
+    lambda: 'return id(batt_v);'
   - platform: template
-    id: battery_rate
-    name: Battery Charge Rate
-    unit_of_measurement: "%/h"
-    accuracy_decimals: 1
+    name: Battery Current
+    device_class: current
+    unit_of_measurement: "mA"
+    accuracy_decimals: 0
     entity_category: diagnostic
     update_interval: 30s
-    lambda: |-
-      uint16_t raw;
-      if (!id(gauge).read_byte_16(0x16, &raw)) return NAN;
-      float rate = (int16_t) raw * 0.208f;
-      // Backstop for the 1 s detector: a clearly positive rate means charging,
-      // a clearly negative one means on battery. Near zero (full on USB, or
-      // idle) leave the fast detector's verdict alone.
-      // A 100 mA charger cannot exceed ~10 %/h on this cell: larger magnitudes
-      // are the gauge's model still settling after a power-up, so ignore them.
-      // Diagnostic only: the MAX17048 has no current sensor, so this is the
-      // slope of its own SOC estimate and must not drive the charging flag.
-      if (fabsf(rate) >= 40.0f) return NAN;   // model still settling: unknown
-      return rate;
+    lambda: 'return id(batt_i);'   # + = charging, - = discharging
 
   - platform: rotary_encoder
     id: knob
@@ -187,111 +253,33 @@ sensor:
     on_anticlockwise:
       - script.execute: {id: knob_turn, dir: !lambda 'return -(${rotation_sign});'}
 
-globals:
-  - id: vhist            # last 6 one-second cell-voltage samples (ring)
-    type: float[6]
-    initial_value: "{0, 0, 0, 0, 0, 0}"
-  - id: vidx
-    type: int
-    initial_value: "0"
-  - id: vcount
-    type: int
-    initial_value: "0"
-  - id: battery_spread
-    type: float
-    initial_value: "0"
-  - id: vtrend           # one sample per 10 s, last 2 minutes (ring of 12)
-    type: float[12]
-    initial_value: "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}"
-  - id: vtrend_idx
-    type: int
-    initial_value: "0"
-  - id: vtrend_count
-    type: int
-    initial_value: "0"
-  - id: vtick
-    type: int
-    initial_value: "0"
-
-interval:
-  # Fast charger-state detection from the cell voltage: unplugging USB drops
-  # the terminal voltage by tens of mV within a second (charge current stops,
-  # then the Dial's own load pulls it down); plugging in does the opposite.
-  - interval: 1s
-    then:
-      - lambda: |-
-          uint16_t raw;
-          if (!id(gauge).read_byte_16(0x02, &raw)) return;
-          const float v = (raw >> 4) * 1.25f / 1000.0f;
-          float *h = id(vhist);
-          const int n = id(vcount);
-          const float oldest = h[id(vidx)];             // sample from 6 s ago (ring is full)
-          h[id(vidx)] = v; id(vidx) = (id(vidx) + 1) % 6;
-          if (n < 6) { id(vcount) = n + 1; return; }
-          // No cell: the gauge sees the charger's output pin, which cannot hold
-          // a steady voltage without a battery (cut-off / restart sawtooth), so
-          // the 6 s spread is tens of mV. A real cell stays within a few mV.
-          float lo = h[0], hi = h[0];
-          for (int i = 1; i < 6; i++) { lo = std::min(lo, h[i]); hi = std::max(hi, h[i]); }
-          const float spread = hi - lo;
-          id(battery_spread) = spread;
-          const bool absent = spread > 0.050f;
-          bool changed = false;
-          if (absent != id(battery_absent)) { id(battery_absent) = absent; changed = true; }
-          if (absent) { if (id(battery_charging)) { id(battery_charging) = false; changed = true; } }
-          else {
-            // Plug/unplug step at 100 mA charge is only ~10-25 mV on this cell:
-            // compare the mean of the newest 3 samples with the oldest 3.
-            float newer = 0, older = 0;
-            for (int k = 0; k < 3; k++) {
-              newer += h[(id(vidx) + 5 - k) % 6];   // 3 most recent
-              older += h[(id(vidx) + k) % 6];       // 3 oldest
-            }
-            const float d = (newer - older) / 3.0f;
-            if (d <= -0.012f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
-            if (d >= +0.012f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
-          }
-          // Steady-state detector (no plug event seen, e.g. USB already in at
-          // boot): the cell voltage drifts up while charging (~1-3 mV/min at
-          // 100 mA) and down on battery. One sample per 10 s, compare with
-          // 2 minutes ago.
-          if (!absent && ++id(vtick) >= 10) {
-            id(vtick) = 0;
-            float *t = id(vtrend);
-            const float old5 = t[id(vtrend_idx)];
-            t[id(vtrend_idx)] = v; id(vtrend_idx) = (id(vtrend_idx) + 1) % 12;
-            if (id(vtrend_count) < 12) id(vtrend_count)++;
-            else {
-              const float dv = v - old5;
-              if (dv >= +0.002f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
-              if (dv <= -0.004f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
-            }
-          }
-          if (changed) { id(power_off_tried) = false; id(render)->execute(); }
 
 button:
-  # MAX17048 quick start (MODE register 0x06 = 0x4000): re-seed the state of
-  # charge from the cell's open-circuit voltage. Needed after the gauge loses
-  # power (battery unplugged), when it restarts at a bogus 100 %.
   - platform: template
-    name: Recalibrate Battery Gauge
+    name: Reset Battery Gauge
     icon: mdi:battery-sync
     entity_category: config
     on_press:
-      - lambda: 'id(gauge_quickstart)->execute();'
+      - script.execute: gauge_reseed
 
 binary_sensor:
   - platform: template
     name: Battery Present
     device_class: plug
     entity_category: diagnostic
-    lambda: 'return !id(battery_absent) && !std::isnan(id(battery_pct));'
+    lambda: 'return !id(battery_absent) && !std::isnan(id(batt_v));'
 
   - platform: template
     name: Battery Charging
     device_class: battery_charging
     entity_category: diagnostic
     lambda: 'return id(battery_charging);'
+
+  - platform: template
+    name: External Power
+    device_class: power
+    entity_category: diagnostic
+    lambda: 'return id(on_usb);'
 
   - platform: gpio
     id: knob_button
