@@ -64,70 +64,35 @@ script:
           gpio_hold_en(GPIO_NUM_46);
           id(ina).setup();                        // still here: USB. Re-init the INA219
 
-  # Two-stage idle sleep on battery.
-  # Stage 1: light sleep (RAM kept, Wi-Fi off, screen dark). Wakes instantly on
-  #   the button or the encoder (any GPIO can wake light sleep), and every 5 s
-  #   to read the INA219: current flowing into the cell = USB plugged in ->
-  #   wake fully. Draws a few mA.
-  # Stage 2: after light_sleep_minutes, release the power latch -> off (~6 uA).
-  #   USB plug-in boots the board (hardware); a tap needs a ~0.5 s hold.
+  # Two-stage idle sleep on battery (state machine driven by the 200 ms
+  # interval below, so the ESPHome loop keeps running between sleep slices).
+  # Stage 1: light sleep in 4 s slices (RAM kept, Wi-Fi off, screen dark).
+  #   Wakes instantly on the button or the encoder; every slice reads the
+  #   INA219 and current INTO the cell (charger) = USB plugged in -> wake.
+  #   Every refresh_every_s it turns Wi-Fi on, lets HA reconnect and push
+  #   fresh values (screen stays dark), then sleeps again.
+  # Stage 2: after light_sleep_minutes, release the power latch -> off.
   - id: board_idle_sleep
     then:
       - lambda: |-
-          // Remember whether a complete data set is in RAM: a light-sleep wake
-          // shows it straight away and lets HA refresh it in the background.
           id(stale_ok) = id(got_fp) && id(got_light) && id(got_preset) && id(got_setpoint) &&
                          id(got_room) && id(got_flame) && id(got_fan);
+          id(idle_sleeping) = true;
+          id(sleep_state) = 1;
+          id(slept_ms) = 0; id(since_refresh_ms) = 0; id(sleep_loops) = 0; id(sleep_rejects) = 0;
           id(wifi_id).disable();
           id(display_backlight).turn_off().perform();
-          delay(300);   // let Wi-Fi shut down
-          esp_sleep_enable_gpio_wakeup();
-          const uint32_t limit_ms = ${light_sleep_minutes}u * 60u * 1000u;
-          uint32_t slept_ms = 0; int loops = 0, rejects = 0;
-          bool wake_input = false, usb = false;
-          esp_err_t rc = ESP_OK;
-          const gpio_num_t pins[] = {GPIO_NUM_42, GPIO_NUM_40, GPIO_NUM_41};
-          while (slept_ms < limit_ms) {
-            // Arm each wake pin on the opposite of its current level: the
-            // encoder rests with either line high or low, and a wake condition
-            // that is already true makes esp_light_sleep_start() refuse.
-            for (auto p : pins)
-              gpio_wakeup_enable(p, gpio_get_level(p) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
-            esp_sleep_enable_timer_wakeup(4000000ULL);            // 4 s slices (task WDT is 5 s)
-            rc = esp_light_sleep_start();
-            App.feed_wdt();
-            loops++;
-            if (rc != ESP_OK) { rejects++; if (rejects > 5) break; delay(200); continue; }
-            const auto cause = esp_sleep_get_wakeup_cause();
-            if (cause == ESP_SLEEP_WAKEUP_GPIO) { wake_input = true; break; }
-            slept_ms += 4000;
-            // Asleep the Dial draws only a few mA, so "not discharging" means
-            // nothing here: only current INTO the cell proves USB was plugged in.
-            id(ina).update();
-            if (id(battery_charging)) { usb = true; break; }
-          }
-          for (auto p : pins) gpio_wakeup_disable(p);
+
+  # Back to normal operation (from any sleep state).
+  - id: board_resume
+    parameters: {reason: string}
+    then:
+      - lambda: |-
+          id(sleep_state) = 0;
+          id(idle_sleeping) = false;
           char d[96];
-          snprintf(d, sizeof(d), "loops=%d rejects=%d rc=%d slept=%us input=%d usb=%d",
-                   loops, rejects, (int) rc, slept_ms / 1000, wake_input, usb);
+          snprintf(d, sizeof(d), "%s after %us (loops=%d rejects=%d)", reason.c_str(), id(slept_ms) / 1000, id(sleep_loops), id(sleep_rejects));
           id(last_sleep_info) = d;
-          if (wake_input || usb || rejects > 5) {
-            // Back to life without a reboot. The press that woke us must not
-            // count as a tap; its release clears boot_guard.
-            id(boot_guard) = wake_input;
-            id(last_activity_ms) = millis();
-            id(power_off_tried) = false;
-            id(wifi_id).enable();
-            id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
-            if (id(stale_ok)) id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = true;
-            id(page) = 1;
-            id(apply_backlight)->execute();
-            id(render)->execute();
-            return;
-          }
-          // Stage 2: full power-off (returns only if we are on USB after all,
-          // e.g. a full battery that drew no charge current: come back awake).
-          id(board_power_off)->execute();
           id(last_activity_ms) = millis();
           id(power_off_tried) = false;
           id(wifi_id).enable();
@@ -230,8 +195,79 @@ globals:
   - id: last_sleep_info     # diagnostics from the last light-sleep episode
     type: std::string
     initial_value: '""'
+  - id: sleep_state         # 0 awake, 1 light-sleep slices, 2 awake-dark refresh window
+    type: int
+    initial_value: "0"
+  - id: slept_ms
+    type: uint32_t
+    initial_value: "0"
+  - id: since_refresh_ms
+    type: uint32_t
+    initial_value: "0"
+  - id: refresh_t0
+    type: uint32_t
+    initial_value: "0"
+  - id: sleep_loops
+    type: int
+    initial_value: "0"
+  - id: sleep_rejects
+    type: int
+    initial_value: "0"
 
 interval:
+  - interval: 200ms
+    then:
+      - lambda: |-
+          if (id(sleep_state) == 0) return;
+          const uint32_t limit_ms = ${light_sleep_minutes}u * 60u * 1000u;
+          if (id(sleep_state) == 1) {
+            // One 4 s light-sleep slice. Arm each wake pin on the opposite of
+            // its current level (an already-true wake condition is refused).
+            const gpio_num_t pins[] = {GPIO_NUM_42, GPIO_NUM_40, GPIO_NUM_41};
+            for (auto p : pins) gpio_wakeup_enable(p, gpio_get_level(p) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
+            esp_sleep_enable_gpio_wakeup();
+            esp_sleep_enable_timer_wakeup(4000000ULL);
+            esp_err_t rc = esp_light_sleep_start();
+            App.feed_wdt();
+            for (auto p : pins) gpio_wakeup_disable(p);
+            id(sleep_loops)++;
+            if (rc != ESP_OK) {
+              if (++id(sleep_rejects) > 5) { id(board_resume)->execute("sleep refused"); }
+              return;
+            }
+            if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
+              // A waking *press* is not a tap (its release clears the guard);
+              // a waking *turn* goes on to act as the first click.
+              if (gpio_get_level(GPIO_NUM_42) == 0) id(boot_guard) = true;
+              id(board_resume)->execute("input");
+              return;
+            }
+            id(slept_ms) += 4000; id(since_refresh_ms) += 4000;
+            id(ina).update();
+            if (id(battery_charging)) { id(board_resume)->execute("usb"); return; }
+            if (id(slept_ms) >= limit_ms) {
+              // Stage 2. board_power_off returns only if we are on USB after all.
+              id(board_power_off)->execute();
+              id(board_resume)->execute("power-off attempt");
+              return;
+            }
+            if (id(since_refresh_ms) >= ${refresh_every_s}u * 1000u) {
+              id(sleep_state) = 2; id(refresh_t0) = millis();
+              id(wifi_id).enable();             // awake but dark: let HA reconnect and push values
+            }
+            return;
+          }
+          // state 2: refresh window
+          const bool have_all = id(got_fp) && id(got_light) && id(got_preset) && id(got_setpoint) &&
+                                id(got_room) && id(got_flame) && id(got_fan);
+          const bool done = api::global_api_server->is_connected() && have_all;
+          if (done || (millis() - id(refresh_t0)) > 15000u) {
+            if (have_all) id(stale_ok) = true;
+            id(wifi_id).disable();
+            id(since_refresh_ms) = 0;
+            id(sleep_state) = 1;
+          }
+
   # The INA219 is powered from the battery tap: unplug the battery and it
   # goes silent. No reading for 3 s = battery disconnected; the Dial is
   # obviously still running, so external power is present.

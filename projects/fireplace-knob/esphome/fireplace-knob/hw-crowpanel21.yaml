@@ -170,6 +170,9 @@ script:
     then: []
   - id: board_idle_sleep
     then: []
+  - id: board_resume
+    parameters: {reason: string}
+    then: []
 
 sensor:
   - platform: rotary_encoder

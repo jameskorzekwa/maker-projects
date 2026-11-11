@@ -78,6 +78,7 @@ substitutions:
   display_off_after_s: "30" # Sleep + fireplace off -> backlight off (USB)
   power_off_after_s: "30"   # no input for this long -> idle sleep (battery)
   light_sleep_minutes: "10" # Dial: light sleep this long, then full power-off
+  refresh_every_s: "60"     # Dial: during light sleep, reconnect to HA this often
   awake_brightness_default: "100"
   # Wording that must fit the screen; the ui-*.yaml packages override these.
   txt_no_ha: "No HA link"
@@ -257,6 +258,9 @@ globals:
   - id: stale_ok            # woke from light sleep with a complete data set in RAM:
     type: bool              # show it and refresh silently when HA reconnects
     initial_value: "false"
+  - id: idle_sleeping       # board is in its idle sleep (screen must stay dark)
+    type: bool
+    initial_value: "false"
   - id: display_off         # Sleep with the backlight fully off
     type: bool
     initial_value: "false"
@@ -430,7 +434,7 @@ script:
   - id: apply_backlight
     then:
       - lambda: |-
-          if (id(display_off)) { id(display_backlight).turn_off().perform(); return; }
+          if (id(display_off) || id(idle_sleeping)) { id(display_backlight).turn_off().perform(); return; }
           float pct = id(awake_brightness).state;
           if (!id(loading_shown) && (id(page) == 0 || (id(page) == 9 && id(bright_step) == 1))) pct = id(sleep_brightness).state;
           if (std::isnan(pct)) pct = 100;
@@ -466,6 +470,11 @@ script:
       - lambda: |-
           id(last_activity_ms) = millis();
           id(power_off_tried) = false;
+          if (id(idle_sleeping)) {
+            // Input during the awake-dark refresh window: resume; a press only wakes.
+            if (id(knob_button).state) id(boot_guard) = true;
+            id(board_resume)->execute("input");
+          }
           if (id(display_off)) {
             id(display_off) = false;
             knob_wifi_power_save(false);
@@ -481,7 +490,7 @@ script:
       - script.execute: wake
       - if:
           condition:
-            lambda: 'return id(loading_shown);'
+            lambda: 'return id(loading_shown) || id(boot_guard);'
           then:
             - script.stop: long_press_timer
       - delay: 200ms
