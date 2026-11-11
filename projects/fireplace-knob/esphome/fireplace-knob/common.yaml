@@ -33,8 +33,8 @@
 #              boot, cached temperature shown until HA reconnects). On USB the
 #              latch has no effect, so the board stays on and falls back to:
 #   Display Off  Sleep + fireplace off for 30 s -> backlight fully off and
-#              Wi-Fi modem power save. Tap/turn/hold behave exactly as on
-#              Sleep (no reboot). The fireplace turning on lights it again.
+#              Wi-Fi modem power save (only on boards that cannot detect
+#              external power; on the Dial on USB the Sleep screen stays on).
 #
 # Only a long press (or Power in Settings) ever lights the fireplace.
 #
@@ -1090,8 +1090,10 @@ interval:
             id(display_off) = false;
             knob_wifi_power_save(false);
             id(apply_backlight)->execute();
-          } else if (id(page) == 0 && !id(display_off) && !fp_on &&
+          } else if (id(page) == 0 && !id(display_off) && !fp_on && !id(on_usb) &&
                      (now - id(sleep_since_ms)) >= ${display_off_after_s}u * 1000u) {
+            // (never on external power: the Sleep screen stays on; the Dial
+            // knows when it is on USB, the CrowPanel is always on USB-but-unknown)
             id(display_off) = true;
             knob_wifi_power_save(true);
             id(apply_backlight)->execute();
