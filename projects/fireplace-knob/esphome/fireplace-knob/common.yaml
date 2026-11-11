@@ -140,7 +140,10 @@ api:
     - lambda: |-
         if (!api::global_api_server->is_connected()) {
           id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
-          id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = false;
+          // Keep the values in RAM while in (or just out of) light sleep: they
+          // are shown on wake and refreshed silently. Otherwise start over.
+          if (!id(stale_ok))
+            id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = false;
         }
     - script.execute: render
 

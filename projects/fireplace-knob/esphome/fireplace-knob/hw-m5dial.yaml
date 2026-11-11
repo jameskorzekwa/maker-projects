@@ -23,11 +23,13 @@ esphome:
     - priority: 2000
       then:
         - lambda: |-
-            gpio_reset_pin(GPIO_NUM_46);
+            // Drive high FIRST, then release any hold left from the previous
+            // run, then hold again: the pad never passes through its default
+            // (pulled-down) state, so a reboot on battery keeps the latch.
             gpio_set_direction(GPIO_NUM_46, GPIO_MODE_OUTPUT);
             gpio_set_level(GPIO_NUM_46, 1);
-            // Hold the pad through software resets (OTA reboot, restart button)
-            // so a reboot on battery does not drop the latch and power off.
+            gpio_hold_dis(GPIO_NUM_46);
+            gpio_set_level(GPIO_NUM_46, 1);
             gpio_hold_en(GPIO_NUM_46);
 
 esp32:
