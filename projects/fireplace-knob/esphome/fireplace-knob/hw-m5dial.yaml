@@ -74,6 +74,10 @@ script:
   - id: board_idle_sleep
     then:
       - lambda: |-
+          // Remember whether a complete data set is in RAM: a light-sleep wake
+          // shows it straight away and lets HA refresh it in the background.
+          id(stale_ok) = id(got_fp) && id(got_light) && id(got_preset) && id(got_setpoint) &&
+                         id(got_room) && id(got_flame) && id(got_fan);
           id(wifi_id).disable();
           id(display_backlight).turn_off().perform();
           delay(300);   // let Wi-Fi shut down
@@ -115,6 +119,7 @@ script:
             id(power_off_tried) = false;
             id(wifi_id).enable();
             id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
+            if (id(stale_ok)) id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = true;
             id(page) = 1;
             id(apply_backlight)->execute();
             id(render)->execute();
@@ -127,6 +132,7 @@ script:
           id(power_off_tried) = false;
           id(wifi_id).enable();
           id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
+          if (id(stale_ok)) id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = true;
           id(page) = 1;
           id(apply_backlight)->execute();
           id(render)->execute();
