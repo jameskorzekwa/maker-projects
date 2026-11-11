@@ -364,6 +364,10 @@ sensor:
             bool changed = (charging != id(battery_charging)) || (usb != id(on_usb)) || first || id(monitor_lost);
             id(monitor_lost) = false;
             id(battery_charging) = charging;
+            // Unplugging USB counts as activity: the idle clock (and so the
+            // 10 min light-sleep stage) starts from the unplug, not from the
+            // last touch hours ago.
+            if (id(on_usb) && !usb && id(sleep_state) == 0) { id(last_activity_ms) = millis(); id(power_off_tried) = false; }
             id(on_usb) = usb;
             if (changed) { id(power_off_tried) = false; id(render)->execute(); }
 
