@@ -71,8 +71,8 @@ substitutions:
   flame_max: "6"
   fan_max: "6"
   rotation_sign: "1"        # set to "-1" if the knob turns the wrong way
-  long_press: 700ms         # hold this long, then release = on/off
-  stuck_press: 2300ms       # held this much longer -> ignored as stuck
+  hold_hint_ms: 200ms       # held this long: "Turning ON in 3" appears
+  hold_count: "3"           # ...then counts down one per second; at 0 = on/off
   setpoint_timeout_s: "10"  # Set Point -> Main
   sleep_after_s: "10"       # any screen -> Sleep
   display_off_after_s: "30" # Sleep + fireplace off -> backlight off (USB)
@@ -214,15 +214,12 @@ globals:
   - id: light_pending
     type: bool
     initial_value: "false"
-  - id: long_fired          # held >= long_press: release = on/off
+  - id: hold_hinted         # "Turning ... in 3" was shown: this press is a hold, not a tap
     type: bool
     initial_value: "false"
-  - id: press_stuck         # held > stuck_press: ignore this press
-    type: bool
-    initial_value: "false"
-  - id: hold_hinted         # "Hold to turn ..." was shown: releasing early is not a tap
-    type: bool
-    initial_value: "false"
+  - id: hold_count          # countdown while held; the fireplace toggles when it hits 0
+    type: int
+    initial_value: "0"
   - id: press_from_sleep    # the current press started on the Sleep screen
     type: bool
     initial_value: "false"
@@ -500,9 +497,9 @@ script:
             id(apply_backlight)->execute();
           }
 
-  # Hold: after `long_press` the release toggles the fireplace; a press that
-  # lasts longer than `stuck_press` is ignored (slow click return, object
-  # resting on the knob) so a stuck button can never light the fireplace.
+  # Hold: after `hold_hint_ms` the screen shows "Turning ON in 3" and counts
+  # down once a second while the button stays held; at 0 the fireplace
+  # toggles. Releasing at any point before that aborts (and is not a tap).
   - id: long_press_timer
     mode: restart
     then:
@@ -512,22 +509,22 @@ script:
             lambda: 'return id(loading_shown) || id(boot_guard);'
           then:
             - script.stop: long_press_timer
-      - delay: 200ms
+      - delay: ${hold_hint_ms}
       - lambda: |-
           if (id(page) == 0) id(go)->execute(1);
           id(hold_hinted) = true;
-          bool on = id(ha_fireplace).state == "on";
-          id(show_toast)->execute(on ? "Hold to turn OFF" : "Hold to turn ON", 4000);
-      - delay: ${long_press}
-      - lambda: |-
-          id(long_fired) = true;
-          bool on = id(ha_fireplace).state == "on";
-          id(show_toast)->execute(on ? "Release to\nturn OFF" : "Release to\nturn ON", 4000);
-      - delay: ${stuck_press}
-      - lambda: |-
-          id(press_stuck) = true;
-          id(toast_until_ms) = 0;
-          lv_obj_add_flag(id(toast), LV_OBJ_FLAG_HIDDEN);
+          id(hold_count) = ${hold_count};
+      - while:
+          condition:
+            lambda: 'return id(hold_count) > 0;'
+          then:
+            - lambda: |-
+                char t[32];
+                snprintf(t, sizeof(t), "Turning %s\nin %d", id(ha_fireplace).state == "on" ? "OFF" : "ON", id(hold_count));
+                id(show_toast)->execute(t, 1500);
+            - delay: 1s
+            - lambda: 'id(hold_count)--;'
+      - script.execute: toggle_fireplace
 
   # Called by the board's button binary_sensor.
   - id: button_down
@@ -538,8 +535,6 @@ script:
           then: []
           else:
             - lambda: |-
-                id(long_fired) = false;
-                id(press_stuck) = false;
                 id(hold_hinted) = false;
                 id(press_from_sleep) = id(page) == 0;
             - script.execute: long_press_timer
@@ -554,17 +549,10 @@ script:
           condition:
             lambda: |-
               if (id(boot_guard)) { id(boot_guard) = false; return true; }   // the wake press
-              if (id(press_stuck)) return true;
-              return id(hold_hinted) && !id(long_fired);   // aborted hold: stay put
+              return id(hold_hinted);   // a hold (completed or aborted) is not a tap
           then: []
           else:
-            - if:
-                condition:
-                  lambda: 'return id(long_fired);'
-                then:
-                  - script.execute: toggle_fireplace
-                else:
-                  - script.execute: tap
+            - script.execute: tap
 
   - id: show_toast
     parameters: {text: string, ms: int}
