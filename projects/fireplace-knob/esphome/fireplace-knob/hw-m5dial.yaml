@@ -97,8 +97,10 @@ script:
             const auto cause = esp_sleep_get_wakeup_cause();
             if (cause == ESP_SLEEP_WAKEUP_GPIO) { wake_input = true; break; }
             slept_ms += 4000;
-            id(ina).update();                                      // refreshes on_usb via on_value
-            if (id(on_usb)) { usb = true; break; }
+            // Asleep the Dial draws only a few mA, so "not discharging" means
+            // nothing here: only current INTO the cell proves USB was plugged in.
+            id(ina).update();
+            if (id(battery_charging)) { usb = true; break; }
           }
           for (auto p : pins) gpio_wakeup_disable(p);
           char d[96];
@@ -118,8 +120,16 @@ script:
             id(render)->execute();
             return;
           }
-          // Stage 2: full power-off (returns only if we are on USB after all).
+          // Stage 2: full power-off (returns only if we are on USB after all,
+          // e.g. a full battery that drew no charge current: come back awake).
           id(board_power_off)->execute();
+          id(last_activity_ms) = millis();
+          id(power_off_tried) = false;
+          id(wifi_id).enable();
+          id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
+          id(page) = 1;
+          id(apply_backlight)->execute();
+          id(render)->execute();
 
   # Re-seed the charge counter from the resting voltage (rough LiPo OCV table).
   - id: gauge_reseed
