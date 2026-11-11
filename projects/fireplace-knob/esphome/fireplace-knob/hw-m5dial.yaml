@@ -144,6 +144,28 @@ globals:
   - id: batt_last_ms
     type: uint32_t
     initial_value: "0"
+  - id: monitor_lost        # INA219 stopped answering (it is powered from the battery)
+    type: bool
+    initial_value: "false"
+
+interval:
+  # The INA219 is powered from the battery tap: unplug the battery and it
+  # goes silent. No reading for 3 s = battery disconnected; the Dial is
+  # obviously still running, so external power is present.
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (id(monitor_lost)) return;
+          if (id(batt_last_ms) != 0 && (millis() - id(batt_last_ms)) > 3000u) {
+            id(monitor_lost) = true;
+            id(battery_absent) = true;
+            id(battery_charging) = false;
+            id(on_usb) = true;
+            id(battery_pct) = NAN;
+            id(batt_i) = NAN; id(batt_v) = NAN;
+            id(vcount) = 0;
+            id(render)->execute();
+          }
 
 sensor:
   - platform: ina219
@@ -212,7 +234,8 @@ sensor:
             } else id(battery_pct) = NAN;
             id(batt_last_ms) = now;
 
-            bool changed = (charging != id(battery_charging)) || (usb != id(on_usb)) || first;
+            bool changed = (charging != id(battery_charging)) || (usb != id(on_usb)) || first || id(monitor_lost);
+            id(monitor_lost) = false;
             id(battery_charging) = charging;
             id(on_usb) = usb;
             if (changed) { id(power_off_tried) = false; id(render)->execute(); }
