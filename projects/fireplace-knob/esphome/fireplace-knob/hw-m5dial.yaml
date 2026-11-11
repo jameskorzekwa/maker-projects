@@ -418,7 +418,15 @@ button:
     on_press:
       - script.execute: gauge_reseed
 
+debug:
+  update_interval: 60s
+
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: Reset Reason
+      entity_category: diagnostic
+
   - platform: template
     name: Last Sleep
     entity_category: diagnostic
