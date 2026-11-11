@@ -168,11 +168,9 @@ sensor:
       // idle) leave the fast detector's verdict alone.
       // A 100 mA charger cannot exceed ~10 %/h on this cell: larger magnitudes
       // are the gauge's model still settling after a power-up, so ignore them.
-      if (fabsf(rate) >= 40.0f) return NAN;   // the gauge's model is still settling: report unknown
-      if (!id(battery_absent)) {
-        if (rate > 1.0f && !id(battery_charging)) { id(battery_charging) = true; id(render)->execute(); }
-        if (rate < -1.0f && id(battery_charging)) { id(battery_charging) = false; id(render)->execute(); }
-      }
+      // Diagnostic only: the MAX17048 has no current sensor, so this is the
+      // slope of its own SOC estimate and must not drive the charging flag.
+      if (fabsf(rate) >= 40.0f) return NAN;   // model still settling: unknown
       return rate;
 
   - platform: rotary_encoder
