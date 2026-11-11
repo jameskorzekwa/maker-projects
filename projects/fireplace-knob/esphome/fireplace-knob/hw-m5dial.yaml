@@ -50,6 +50,15 @@ script:
       - delay: 500ms
       - switch.turn_on: power_hold
 
+  - id: gauge_quickstart
+    then:
+      - lambda: |-
+          uint8_t cmd[2] = {0x40, 0x00};
+          if (id(gauge).write_bytes(0x06, cmd, 2)) ESP_LOGI("gauge", "MAX17048 quick start");
+          else ESP_LOGW("gauge", "MAX17048 quick start failed");
+      - delay: 1500ms
+      - component.update: gauge
+
 output:
   - platform: ledc
     pin: GPIO9
@@ -111,10 +120,24 @@ sensor:
       filters:
         - clamp: {min_value: 0, max_value: 100}
       on_value:
-        - lambda: 'id(battery_pct) = x;'
+        - lambda: |-
+            id(battery_pct) = x;
+            // Rough LiPo OCV -> % (3.5 V ~ 10 %, 3.7 V ~ 40 %, 3.9 V ~ 70 %, 4.1 V ~ 95 %).
+            const float v = id(gauge_voltage).state;
+            if (!std::isnan(v) && !id(battery_absent)) {
+              float est = (v - 3.45f) / (4.15f - 3.45f) * 100.0f;
+              est = std::min(100.0f, std::max(0.0f, est));
+              static uint32_t last_qs = 0;
+              if (fabsf(x - est) > 35.0f && (millis() - last_qs) > 600000u) {   // >35 % off, max once per 10 min
+                last_qs = millis();
+                ESP_LOGW("gauge", "SOC %.0f%% vs ~%.0f%% from %.2f V: quick start", x, est, v);
+                id(gauge_quickstart)->execute();
+              }
+            }
         - script.execute: render
     battery_voltage:
       name: Battery Voltage
+      id: gauge_voltage
       entity_category: diagnostic
       accuracy_decimals: 2
 
@@ -245,6 +268,17 @@ interval:
             }
           }
           if (changed) { id(power_off_tried) = false; id(render)->execute(); }
+
+button:
+  # MAX17048 quick start (MODE register 0x06 = 0x4000): re-seed the state of
+  # charge from the cell's open-circuit voltage. Needed after the gauge loses
+  # power (battery unplugged), when it restarts at a bogus 100 %.
+  - platform: template
+    name: Recalibrate Battery Gauge
+    icon: mdi:battery-sync
+    entity_category: config
+    on_press:
+      - lambda: 'id(gauge_quickstart)->execute();'
 
 binary_sensor:
   - platform: template
