@@ -37,6 +37,10 @@ esp32:
   flash_size: 8MB
   framework:
     type: esp-idf
+    # (The S3 brown-out trip level defaults to its lowest setting, 2.44 V.)
+
+wifi:
+  output_power: 11dB        # lower TX peaks on battery; plenty indoors
 
 safe_mode:
 
