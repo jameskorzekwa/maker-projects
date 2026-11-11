@@ -128,7 +128,7 @@ sensor:
               float est = (v - 3.45f) / (4.15f - 3.45f) * 100.0f;
               est = std::min(100.0f, std::max(0.0f, est));
               static uint32_t last_qs = 0;
-              if (fabsf(x - est) > 25.0f && (millis() - last_qs) > 600000u) {   // >25 % off, max once per 10 min
+              if (fabsf(x - est) > 20.0f && (millis() - last_qs) > 600000u) {   // >20 % off, max once per 10 min
                 last_qs = millis();
                 ESP_LOGW("gauge", "SOC %.0f%% vs ~%.0f%% from %.2f V: quick start", x, est, v);
                 id(gauge_quickstart)->execute();
@@ -168,7 +168,8 @@ sensor:
       // idle) leave the fast detector's verdict alone.
       // A 100 mA charger cannot exceed ~10 %/h on this cell: larger magnitudes
       // are the gauge's model still settling after a power-up, so ignore them.
-      if (!id(battery_absent) && fabsf(rate) < 40.0f) {
+      if (fabsf(rate) >= 40.0f) return NAN;   // the gauge's model is still settling: report unknown
+      if (!id(battery_absent)) {
         if (rate > 1.0f && !id(battery_charging)) { id(battery_charging) = true; id(render)->execute(); }
         if (rate < -1.0f && id(battery_charging)) { id(battery_charging) = false; id(render)->execute(); }
       }
