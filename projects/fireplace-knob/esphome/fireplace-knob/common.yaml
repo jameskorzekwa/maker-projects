@@ -24,17 +24,18 @@
 #              point are sent ~1 s after the knob stops; Power and Mode are
 #              sent when you tap (a timeout discards them). Brightness has
 #              two steps: Awake, then Sleep.
-#   Anywhere   hold 0.7-3 s then release = fireplace on/off (on = the
-#              selected mode). A press held longer than 3 s is treated as a
-#              stuck button and ignored. 10 s without input -> Sleep.
-#   Battery    30 s without input -> the board asks its hardware package to
-#              power off (hw-m5dial: release the power latch). On battery the
-#              Dial switches off (~6 uA) and a tap powers it back on (cold
-#              boot, cached temperature shown until HA reconnects). On USB the
-#              latch has no effect, so the board stays on and falls back to:
+#   Anywhere   hold: "Turning ON in 3... 2... 1" while held, fireplace on/off
+#              (on = the selected mode) when it reaches 0; release earlier =
+#              abort (not a tap). 10 s without input -> Sleep.
+#   Battery    30 s without input -> board_idle_sleep (hw-m5dial: light sleep
+#              in 4 s slices, instant wake on tap/turn/USB, HA refresh every
+#              60 s, power latch released after 10 min). Wakes show Main with
+#              the retained values. On USB the Sleep screen stays on.
 #   Display Off  Sleep + fireplace off for 30 s -> backlight fully off and
-#              Wi-Fi modem power save (only on boards that cannot detect
-#              external power; on the Dial on USB the Sleep screen stays on).
+#              Wi-Fi modem power save (boards without their own sleep and
+#              without external-power detection: display_off_enabled).
+#
+# The state machines are documented in ../../behavior.md. Read it first.
 #
 # Only a long press (or Power in Settings) ever lights the fireplace.
 #

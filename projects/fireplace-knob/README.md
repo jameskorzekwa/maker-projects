@@ -13,13 +13,18 @@ SLEEP --tap--> MAIN --tap--> SETTINGS (icon arc) --tap on icon--> EDIT (Power/Mo
   v             |  |            +-- "Back" + tap --> MAIN
 SET POINT <--turn+  |
   +-----------------+
-Any screen: 10 s with no input --> SLEEP.  Hold ~0.9 s anywhere: fireplace on/off.
-SLEEP + fireplace off for 30 s --> DISPLAY OFF (backlight off, Wi-Fi modem sleep; tap/turn/hold as on Sleep).
+Any screen: 10 s with no input --> SLEEP.
+Hold anywhere: "Turning ON in 3... 2... 1" while held, fireplace on/off at 0; release earlier = abort.
+CrowPanel: SLEEP + fireplace off for 30 s --> DISPLAY OFF (backlight off, Wi-Fi modem sleep).
+Dial on battery: 30 s idle --> light sleep (dark, instant wake on tap/turn/USB) --> 10 min --> power off.
 ```
+
+The full state machines (screens, button, HA data, sleep/power, battery) and
+the rules that keep them working are in [`behavior.md`](behavior.md).
 
 | Screen | Shows | Turn | Tap |
 | --- | --- | --- | --- |
-| **Sleep** | Room temperature at the Sleep brightness; a small orange flame when the fireplace is on. After 30 s with the fireplace off the backlight turns fully off (Display Off) until touched or the fireplace turns on | Opens Set Point; the first click already changes the value | Main |
+| **Sleep** | Room temperature at the Sleep brightness, a big flame / crossed flame for on / off, a bolt while charging (Dial). CrowPanel: after 30 s with the fireplace off the backlight turns fully off (Display Off) until touched or the fireplace turns on | Opens Set Point; the first click already changes the value | Main |
 | **Main** | Room temperature, set point (or flame height in Manual), mode, fan and light state | Set Point | Settings |
 | **Set Point** | Set temperature (Manual: flame height, stored while off). No status row; Main shows the state | ±1 °F (or ±1 flame) | Main (10 s idle goes to Sleep) |
 | **Settings** | An arc of icons across the top (Back, Power, Mode, Fan, Light, Flame, Brightness) with a live preview of the highlighted setting underneath. Back is highlighted on entry. Flame appears only in Manual while burning | Move the highlight along the arc | Edit that setting (the arc dims); Back → Main |
@@ -148,6 +153,7 @@ over USB.
 | Date | Change |
 | --- | --- |
 | 2026-11-07 | Initial firmware for the living-room fireplace, flashed over USB and adopted in HA ("Allow actions" enabled). |
+| 2026-11-10 | Light-sleep fix: the wake pins were left level-triggered after each slice, so a button held > 300 ms after a wake stormed ESPHome's GPIO ISR and tripped the interrupt watchdog (found from the on-device crash record). Hold is now a 3 s countdown ("Turning ON in 3…") that toggles at 0; releasing earlier aborts and is not a tap. Display Off disabled on the Dial. State machines documented in `behavior.md`. |
 | 2026-11-10 | Battery mode on the M5Stack Dial: HOLD (GPIO46) asserted at boot and released after 30 s idle; on battery that powers the Dial off (tap powers it on), on USB it is a no-op. Cached temperature/fireplace state shown on boot. CrowPanel battery plan retired (`components.md`, `power.md`). |
 | 2026-11-10 | Settings redesigned as an icon arc with live preview (pages 2–9 all draw on `page_value`; `page_settings` removed). Compact wording and split value line on 240×240. Fireplace dongle moved IP → HA entry fixed and DHCP reservations added. |
 | 2026-11-10 | Split into common/hw/ui packages. Added the M5Stack Dial v1.1 (`hw-m5dial.yaml`, `ui-240.yaml`): 240×240 layout with bigger relative type, no hint lines, three settings rows. Flashed over USB from the laptop via esptool, adopted in HA, "allow actions" enabled. Hold now toggles on **release** after 0.7–3 s; a press longer than 3 s is ignored as stuck (both boards). |
