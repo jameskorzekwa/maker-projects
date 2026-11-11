@@ -200,7 +200,11 @@ sensor:
             // Only with no current flowing: a plug/unplug step also moves the
             // voltage ~40 mV, but it always comes with a current change.
             bool absent = id(battery_absent);
-            if (id(vcount) >= 6) {
+            // No battery: the INA219's VIN+ floats and the shunt reading pins at
+            // the range limit (seen: +819 mA with the cell unplugged). Nothing
+            // real exceeds ~300 mA here, so beyond 500 mA = disconnected.
+            if (fabsf(i_ma) > 500.0f) absent = true;
+            else if (id(vcount) >= 6) {
               float lo = h[0], hi = h[0];
               for (int k = 1; k < 6; k++) { lo = std::min(lo, h[k]); hi = std::max(hi, h[k]); }
               const bool jumpy = (hi - lo) > 0.050f;
@@ -208,6 +212,7 @@ sensor:
               else if (!jumpy) absent = false;
             }
             id(battery_absent) = absent;
+            if (absent) id(soc_mah) = NAN;   // re-seed from voltage when a cell is connected again
 
             // Charging = current into the cell. External power = the cell is
             // not supplying the Dial (it always draws >= ~60 mA while awake).
