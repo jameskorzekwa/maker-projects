@@ -862,6 +862,10 @@ script:
             }
           }
 
+          // ---- Sleep: charging bolt only while charging ----
+          if (id(battery_charging) && !id(battery_absent) && !std::isnan(id(battery_pct))) lv_obj_remove_flag(id(sleep_charging), LV_OBJ_FLAG_HIDDEN);
+          else lv_obj_add_flag(id(sleep_charging), LV_OBJ_FLAG_HIDDEN);
+
           // ---- Sleep: big flame (on) or crossed flame (off), readable from afar ----
           lv_label_set_text(id(sleep_flame), fp_on ? "\U000F0238" : "\U000F1722");
           lv_obj_set_style_text_color(id(sleep_flame), lv_color_hex(fp_on ? ORANGE : GREY), 0);

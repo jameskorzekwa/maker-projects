@@ -178,6 +178,18 @@ globals:
   - id: battery_spread
     type: float
     initial_value: "0"
+  - id: vtrend           # one sample per 10 s, last 5 minutes (ring of 30)
+    type: float[30]
+    initial_value: "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}"
+  - id: vtrend_idx
+    type: int
+    initial_value: "0"
+  - id: vtrend_count
+    type: int
+    initial_value: "0"
+  - id: vtick
+    type: int
+    initial_value: "0"
 
 interval:
   # Fast charger-state detection from the cell voltage: unplugging USB drops
@@ -216,6 +228,21 @@ interval:
             const float d = (newer - older) / 3.0f;
             if (d <= -0.012f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
             if (d >= +0.012f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
+          }
+          // Steady-state detector (no plug event seen, e.g. USB already in at
+          // boot): the cell voltage drifts up while charging and down on
+          // battery. One sample per 10 s, compare with 5 minutes ago.
+          if (!absent && ++id(vtick) >= 10) {
+            id(vtick) = 0;
+            float *t = id(vtrend);
+            const float old5 = t[id(vtrend_idx)];
+            t[id(vtrend_idx)] = v; id(vtrend_idx) = (id(vtrend_idx) + 1) % 30;
+            if (id(vtrend_count) < 30) id(vtrend_count)++;
+            else {
+              const float dv = v - old5;
+              if (dv >= +0.008f && !id(battery_charging)) { id(battery_charging) = true; changed = true; }
+              if (dv <= -0.008f && id(battery_charging)) { id(battery_charging) = false; changed = true; }
+            }
           }
           if (changed) { id(power_off_tried) = false; id(render)->execute(); }
 
