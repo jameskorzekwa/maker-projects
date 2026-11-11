@@ -70,25 +70,35 @@ script:
           id(wifi_id).disable();
           id(display_backlight).turn_off().perform();
           delay(300);   // let Wi-Fi shut down
-          gpio_wakeup_enable(GPIO_NUM_42, GPIO_INTR_LOW_LEVEL);   // button
-          gpio_wakeup_enable(GPIO_NUM_40, GPIO_INTR_LOW_LEVEL);   // encoder B
-          gpio_wakeup_enable(GPIO_NUM_41, GPIO_INTR_LOW_LEVEL);   // encoder A
           esp_sleep_enable_gpio_wakeup();
           const uint32_t limit_ms = ${light_sleep_minutes}u * 60u * 1000u;
-          uint32_t slept_ms = 0;
+          uint32_t slept_ms = 0; int loops = 0, rejects = 0;
           bool wake_input = false, usb = false;
+          esp_err_t rc = ESP_OK;
+          const gpio_num_t pins[] = {GPIO_NUM_42, GPIO_NUM_40, GPIO_NUM_41};
           while (slept_ms < limit_ms) {
+            // Arm each wake pin on the opposite of its current level: the
+            // encoder rests with either line high or low, and a wake condition
+            // that is already true makes esp_light_sleep_start() refuse.
+            for (auto p : pins)
+              gpio_wakeup_enable(p, gpio_get_level(p) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
             esp_sleep_enable_timer_wakeup(4000000ULL);            // 4 s slices (task WDT is 5 s)
-            esp_light_sleep_start();
+            rc = esp_light_sleep_start();
             App.feed_wdt();
+            loops++;
+            if (rc != ESP_OK) { rejects++; if (rejects > 5) break; delay(200); continue; }
             const auto cause = esp_sleep_get_wakeup_cause();
             if (cause == ESP_SLEEP_WAKEUP_GPIO) { wake_input = true; break; }
             slept_ms += 4000;
             id(ina).update();                                      // refreshes on_usb via on_value
             if (id(on_usb)) { usb = true; break; }
           }
-          gpio_wakeup_disable(GPIO_NUM_42); gpio_wakeup_disable(GPIO_NUM_40); gpio_wakeup_disable(GPIO_NUM_41);
-          if (wake_input || usb) {
+          for (auto p : pins) gpio_wakeup_disable(p);
+          char d[96];
+          snprintf(d, sizeof(d), "loops=%d rejects=%d rc=%d slept=%us input=%d usb=%d",
+                   loops, rejects, (int) rc, slept_ms / 1000, wake_input, usb);
+          id(last_sleep_info) = d;
+          if (wake_input || usb || rejects > 5) {
             // Back to life without a reboot. The press that woke us must not
             // count as a tap; its release clears boot_guard.
             id(boot_guard) = wake_input;
@@ -194,6 +204,9 @@ globals:
   - id: monitor_lost        # INA219 stopped answering (it is powered from the battery)
     type: bool
     initial_value: "false"
+  - id: last_sleep_info     # diagnostics from the last light-sleep episode
+    type: std::string
+    initial_value: '""'
 
 interval:
   # The INA219 is powered from the battery tap: unplug the battery and it
@@ -341,6 +354,13 @@ button:
     entity_category: config
     on_press:
       - script.execute: gauge_reseed
+
+text_sensor:
+  - platform: template
+    name: Last Sleep
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: 'return id(last_sleep_info);'
 
 binary_sensor:
   - platform: template
