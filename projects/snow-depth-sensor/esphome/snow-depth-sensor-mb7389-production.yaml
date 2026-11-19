@@ -19,8 +19,9 @@ esphome:
       # Initialize the charge-complete latch from the instantaneous DONE state.
       - lambda: id(charge_complete_latch).publish_state(id(done_raw).state);
 
-# Save maintenance-mode changes immediately; the normal 1-minute deferred
-# preference write would outlive a short wake. Only switch changes write.
+# Flush maintenance changes promptly, including while held awake for OTA.
+# Clean shutdown also flushes preferences; other components (such as safe-mode
+# bookkeeping) can write preferences too.
 preferences:
   flash_write_interval: 0s
 
@@ -236,7 +237,8 @@ sensor:
       then:
         - lambda: snow::policy().battery_published(millis(), std::isfinite(x));
 
-  # The old curve measured a degraded ~400mAh cell, not the replacement pair
+  # The old curve came from the retired cell (~400mAh inferred, not independently
+  # capacity-tested), not the replacement pair
   # of 3100mAh cold-tolerant cells. Preserve the entity but report unknown
   # until a new pack/load/temperature calibration exists. Voltage remains real.
   - platform: copy
