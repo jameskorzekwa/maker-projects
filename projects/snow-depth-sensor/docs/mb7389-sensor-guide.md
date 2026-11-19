@@ -97,11 +97,11 @@ Nominal 11° beam: at 40 in the beam radius is ~3.8 in — keep the sensor cente
 
 ## ESPHome configuration
 
-The **candidate, not yet deployed** configuration is
+The configuration deployed with owner approval on 2026-11-19 is
 [`../esphome/snow-depth-sensor-mb7389-production.yaml`](../esphome/snow-depth-sensor-mb7389-production.yaml)
 (dummy secrets are for local compilation only).
-The live configuration inspected 2026-11-19 still uses 60-second wakes;
-the candidate switches to bounded measurement-driven sleep. See the
+The previous live configuration used 60-second wakes;
+this version uses bounded measurement-driven sleep. See the
 [November investigation](low-power-2026-11.md) for verification boundaries.
 
 **The snippets below are historical illustrations, not a complete or current
@@ -212,8 +212,8 @@ Keep the OTA `on_begin` safeguard and the persistent "Snow Sensor OTA Mode" swit
 
 ## Deep sleep and update behavior
 
-- Live July firmware: 60-second wakes, 15-minute sleeps.
-- Candidate: allow 3 seconds for settling, collect a five-reading valid batch,
+- Previous July firmware: 60-second wakes, 15-minute sleeps.
+- November firmware: allow 3 seconds for settling, collect a five-reading valid batch,
   switch sensor power off, and enter sleep after telemetry has had a bounded
   transmission opportunity. Invalid targets/network failure must not hold it
   awake indefinitely. Actual timing and delivery still need hardware testing.

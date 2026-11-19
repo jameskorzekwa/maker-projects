@@ -8,9 +8,12 @@ up with consumption, and confirmed replacing the original cell with **two
 3,100 mAh cold-tolerant batteries**. Exact model, topology, charge-temperature
 limits, and usable capacity remain unverified.
 
-**Pending firmware, not deployed:** this branch prepares measurement-driven
-sleep while retaining the 15-minute sleep interval. The live YAML inspected
-2026-11-19 still uses 60-second wakes. See
+**Deployed with owner approval, 2026-11-19 21:48 UTC:** measurement-driven
+sleep retaining the 15-minute sleep interval. OTA and the running build identity
+were verified; the original live configuration used 60-second wakes. Fresh
+battery voltage reaches HA, but the real distance entity is still unknown
+(also observed before deployment). Do not interpret a held template distance
+as a fresh measurement. See
 [low-power investigation and validation](docs/low-power-2026-11.md).
 
 ## Documentation
@@ -30,7 +33,7 @@ sleep while retaining the 15-minute sleep interval. The live YAML inspected
 | Battery telemetry | Board VBAT header → 100k/100k divider → GPIO33 ADC. Live percentage uses the retired cell's curve and is unreliable; candidate firmware preserves the percentage entity but reports unknown pending pack-specific calibration. |
 | Charge telemetry | CHRG → GPIO19 (charging binary sensor); DONE → GPIO22 feeding a per-wake **latch** ("Charge Complete" = DONE asserted at any point in the wake window — defeats the load-sag sampling problem) |
 | Solar panel | NEWCONNY YXC-001, two 5 V/8 W panels; wired directly to the solar terminals (MPPT DIP at the 5 V setting) |
-| Firmware | Live configuration inspected 2026-11-19: 60 s awake / 15 min asleep. Candidate in this branch: bounded, measurement-driven wake; not flashed or hardware-verified. |
+| Firmware | Measurement-driven wake deployed 2026-11-19 21:48 UTC from PR #50 head `ddd25d9`; running build identity and fresh voltage verified. Automatic cycle verification recorded in the investigation. No measured battery-life gain yet. |
 | Calibration | Bare-ground baseline pending final outdoor mount |
 
 ## System Overview
@@ -85,10 +88,11 @@ GPIO19/22/33 are reclaimed ATOM Echo audio pins — safe in this build because t
 
 ## ESPHome Configuration
 
-The candidate configuration is
+The deployed configuration is
 [`esphome/snow-depth-sensor-mb7389-production.yaml`](esphome/snow-depth-sensor-mb7389-production.yaml).
-It is **not yet deployed**. See the [validation plan](docs/low-power-2026-11.md)
-before replacing the live configuration. `secrets.example.yaml` contains
+It requires the accompanying `wake_policy.h`. See the
+[validation and deployment record](docs/low-power-2026-11.md).
+`secrets.example.yaml` contains
 placeholders for isolated builds, not credentials or a deployable artifact.
 OTA requires the "Snow Sensor OTA Mode" switch during a wake window; preserve
 a recovery route before attempting shorter-window firmware.

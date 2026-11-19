@@ -2,10 +2,10 @@
 
 ## Scope and authorization
 
-James requested investigation, then approved preparing and testing firmware
-while retaining the 15-minute reporting/sleep interval. **No deployment or
-merge is authorized.** Repository publication and code review are not evidence
-of live-device validation.
+James initially approved preparation/testing only, then explicitly authorized
+deployment ("well deploy it"). **Merge remains unauthorized.** The reviewed
+firmware from PR #50 head `ddd25d9` was deployed on 2026-11-19. Repository
+publication and code review are distinct from the live evidence below.
 
 ## Evidence
 
@@ -102,9 +102,40 @@ After deployment approval, live acceptance remains separate:
 - The compile caught and resolved ESPHome's custom-header/global-declaration
   ordering: the policy instance is now a header-local accessor used from
   generated lambda bodies.
-- Independent review and PR CI are reported in the PR, separately from these
-  local test results. No flashing, current measurement, or field validation
-  has been performed.
+- Independent review found no blocking defects; final-head PR CI passed.
+  These local/CI test results are separate from the live evidence below.
+
+## Authorized deployment evidence
+
+- Updated only `/config/esphome/snow-depth-sensor.yaml` and added its required
+  `wake_policy.h`, preserving the existing device credentials. Production
+  compilation in Device Builder 2026.11.0 succeeded.
+- At **21:48 UTC**, maintenance mode was enabled during a wake, encrypted OTA
+  to `192.168.0.22` succeeded, and the device rebooted. Native API DeviceInfo
+  at 21:48:23.850 UTC reported compilation time
+  **2026-11-19 14:34:24 -0700**, matching the new production build
+  (configuration hash `0x94f85196`).
+- Maintenance mode was turned **off**, confirmed by HA at 21:48:28 UTC.
+- Fresh battery voltage **3.928 V** arrived in HA at 21:48:23.747 UTC.
+  The real percentage entity reports unknown as intended; a separate
+  template still holds its old percentage, which must not be trusted.
+- The real distance entity `sensor.snow_depth_sensor_a02yyuw_distance` is
+  **unknown**, as it already was before deployment. The legacy front-yard
+  distance template still holds **37.0079 inches from 18:25 UTC**, and
+  `sensor.snow_depth` holds zero. These are not fresh distance/snow readings.
+- The next automatic wake was observed at **22:03:31.767 UTC**, again
+  identifying the new build. HA received fresh **3.948 V** at 22:03:31.631 UTC.
+  The native API cleanly disconnected at **22:03:59.908 UTC**, after
+  **28.17 seconds connected**, consistent with the 30-second missing-range
+  deadline plus boot/connection timing. The observer did not subscribe to
+  states, so it did not satisfy the firmware's HA-subscriber readiness gate.
+  Maintenance remained off; the real distance remained unknown.
+- This establishes an automatic wake/report/clean-sleep cycle, **not** a
+  successful 5–10-second ranging cycle. The configured fallback wake budget
+  is half the old 60 seconds, but a 50% whole-battery-life improvement is
+  not established. Distance acquisition needs a separate diagnosis.
+- No direct current/capacity test or multi-day battery-life comparison has
+  been performed. Missing-range operation may use the 30-second fallback.
 
 ## Hardware boundary
 
