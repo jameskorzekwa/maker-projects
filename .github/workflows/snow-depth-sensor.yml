@@ -1,0 +1,40 @@
+name: Snow depth sensor
+
+on:
+  pull_request:
+    paths:
+      - "projects/snow-depth-sensor/esphome/**"
+      - ".github/workflows/snow-depth-sensor.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/snow-depth-sensor/esphome/**"
+      - ".github/workflows/snow-depth-sensor.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native wake-policy regression tests
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -fsanitize=address,undefined -g \
+            projects/snow-depth-sensor/esphome/tests/wake_policy_test.cpp \
+            -o "$RUNNER_TEMP/wake-policy-test"
+          "$RUNNER_TEMP/wake-policy-test"
+      - name: Prepare isolated dummy-secret build
+        run: |
+          mkdir -p "$RUNNER_TEMP/snow-build"
+          cp projects/snow-depth-sensor/esphome/snow-depth-sensor-mb7389-production.yaml "$RUNNER_TEMP/snow-build/"
+          cp projects/snow-depth-sensor/esphome/wake_policy.h "$RUNNER_TEMP/snow-build/"
+          cp projects/snow-depth-sensor/esphome/secrets.example.yaml "$RUNNER_TEMP/snow-build/secrets.yaml"
+      - name: Compile ESPHome 2026.11.0 (never deploy)
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/snow-build:/config" \
+            ghcr.io/esphome/esphome:2026.11.0 \
+            compile /config/snow-depth-sensor-mb7389-production.yaml

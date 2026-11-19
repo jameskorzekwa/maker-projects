@@ -97,9 +97,19 @@ Nominal 11° beam: at 40 in the beam radius is ~3.8 in — keep the sensor cente
 
 ## ESPHome configuration
 
-The deployed configuration is
+The configuration deployed with owner approval on 2026-11-19 is
 [`../esphome/snow-depth-sensor-mb7389-production.yaml`](../esphome/snow-depth-sensor-mb7389-production.yaml)
-(copy `secrets.example.yaml` values into the private ESPHome `secrets.yaml`).
+(dummy secrets are for local compilation only).
+The previous live configuration used 60-second wakes;
+this version uses bounded measurement-driven sleep. See the
+[November investigation](low-power-2026-11.md) for verification boundaries.
+
+**The snippets below are historical illustrations, not a complete or current
+deployment recipe.** Use the candidate YAML and its accompanying files
+together. In particular the candidate rejects the 300 mm minimum clamp,
+reports inches, waits for fresh filtered measurements, and guards every
+explicit sleep against maintenance/upload activity.
+
 Implementation note: the frame parser lives in the UART debug hook, which
 fires regardless of logger level, so it works with production WARN logging.
 The key blocks:
@@ -202,9 +212,16 @@ Keep the OTA `on_begin` safeguard and the persistent "Snow Sensor OTA Mode" swit
 
 ## Deep sleep and update behavior
 
-- Each wake: GPIO26 enables 5 V, the MB7389 free-runs, the parser collects frames. Wait ≥3 s before depending on a measurement; the five-sample median publishes well inside the 60 s window.
-- On sleep, GPIO26 goes inactive and the Pololu ON pin falls through the pulldown — sensor fully off.
-- For OTA of this deep-sleep device: enable the OTA Mode switch during a wake window first.
+- Previous July firmware: 60-second wakes, 15-minute sleeps.
+- November firmware: allow 3 seconds for settling, collect a five-reading valid batch,
+  switch sensor power off, and enter sleep after telemetry has had a bounded
+  transmission opportunity. Invalid targets/network failure must not hold it
+  awake indefinitely. Actual timing and delivery still need hardware testing.
+- Sensor power must be explicitly turned off before sleep; the GPIO26
+  pulldown also keeps the Pololu off during deep sleep.
+- For OTA, enable the OTA Mode switch during a connected wake window first.
+  Shorter wakes make this opportunity smaller; verify maintenance/recovery
+  before relying on unattended updates.
 
 ## Calibration and commissioning
 
@@ -213,7 +230,8 @@ Keep the OTA `on_begin` safeguard and the persistent "Snow Sensor OTA Mode" swit
 3. Record the median bare-deck distance in millimeters (the stable sensor reading, not the physical tape measurement).
 4. Update the Home Assistant snow-depth calculation baseline: `snow depth (in) = max(0, (bare_deck_mm − current_mm) / 25.4)`.
 5. Test with flat targets at known heights; confirm the baseline returns when removed.
-6. Restore production deep sleep and verify near-zero sleep current.
+6. Restore production deep sleep and measure battery-side sleep current;
+   near-zero whole-system current has not been established.
 
 ## Acceptance checklist
 

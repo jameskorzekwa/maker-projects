@@ -7,6 +7,29 @@ replaced the Waveshare Solar Power Manager (D) on 2026-07-23 — and is, in a
 full-circle twist, the board the project's original July 2026 plan was
 designed around.
 
+## 2026-11-19 evidence correction
+
+The wiring diagram and procedures below describe the **July single-cell
+assembly**, not a newly verified current battery connection. James now reports
+two 3,100 mAh cold-tolerant batteries; model, topology, and charging limits
+remain unverified. The MAX17043 and INA219 were removed in July; references
+to them in the historical rewire procedure are not current wiring instructions.
+
+The old "4–6 mA" and two-week-runtime statements below are **unverified
+estimates**, not a measured sleep-current baseline. Voltage slope alone cannot
+establish current without an independently known capacity/discharge model.
+The July 350–450 mAh capacity estimate likewise depended on assumed average
+current; it was not a controlled capacity-test result.
+
+The Pololu disconnects the **sensor downstream of the 5 V converter**. It does
+not prove that the converter, 3.3 V supply, or ATOM circuitry stop consuming
+power during ESP32 deep sleep. Do not disconnect the always-on MCU supply
+without an independent timed wake mechanism. Measure battery-side sleep and
+active current before assigning savings to individual components.
+
+See [the November investigation](low-power-2026-11.md) for the pending
+firmware and hardware verification boundaries.
+
 ## Complete power wiring
 
 ```text
@@ -58,8 +81,9 @@ MPPT DONE ── 10 kΩ ──> ATOM G22   (charge complete, active low)
 
 - [ ] 24 hours of unattended wake/sleep cycles on battery only — outputs must survive near-zero-load sleep windows (the failure that killed the Waveshare on 2026-07-21).
 - [ ] Plug and unplug the USB-C charger during a sleep window — output must survive charge events (the failure of 2026-07-23).
-- [ ] Standby drain ~4–6 mA total, confirmed by overnight voltage slope (at ~5 mA the single 2,000 mAh cell gives about two weeks without sun).
-- [ ] MAX17043 stays continuously powered on the always-on 3.3 V rail — battery percentage should finally hold calibration.
+- [ ] Measure battery-side sleep and active current directly. The historical
+      4–6 mA estimate and 2,000 mAh/two-week runtime claim are not verified.
+- [ ] Validate the VBAT ADC against a meter; the MAX17043 is no longer installed.
 
 ### Notes
 
@@ -68,4 +92,4 @@ The Waveshare is fully retired (usable as a spare USB-C charger board). The CHRG
 ## Related documents
 
 - Sensor-side wiring, ESPHome configuration, mounting, and calibration: [MB7389 sensor guide](mb7389-sensor-guide.md)
-- The retired Waveshare configuration this replaces: [Waveshare-era wiring guide](waveshare-wiring-guide.md)
+- Historical Waveshare wiring is available in Git history; that guide is retired.

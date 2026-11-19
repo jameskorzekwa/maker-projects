@@ -1,7 +1,9 @@
-# Deployed 2026-07-26: measured discharge curve from the 30h drain calibration.
+# Prepared short-wake firmware; deployment requires separate owner approval.
 esphome:
   name: snow-depth-sensor
   friendly_name: snow-depth-sensor
+  includes:
+    - wake_policy.h
   on_boot:
     priority: -100
     then:
@@ -10,16 +12,33 @@ esphome:
             switch.is_on: ota_mode_switch
           then:
             - deep_sleep.prevent: deep_sleep_control
-      # Power the MB7389 through the Pololu #2810 and let it settle; it
-      # free-runs (~6 Hz) for the rest of the wake window.
+      - lambda: snow::policy().start(millis());
+      # Power the MB7389 through the Pololu #2810. The parser rejects the
+      # first 3 seconds, then collects five valid frames (~6 Hz).
       - output.turn_on: maxbotix_power_enable
       # Initialize the charge-complete latch from the instantaneous DONE state.
       - lambda: id(charge_complete_latch).publish_state(id(done_raw).state);
-      - delay: 3s
-      - wait_until:
+
+# Flush maintenance changes promptly, including while held awake for OTA.
+# Clean shutdown also flushes preferences; other components (such as safe-mode
+# bookkeeping) can write preferences too.
+preferences:
+  flash_write_interval: 0s
+
+interval:
+  - interval: 100ms
+    then:
+      - lambda: |-
+          snow::policy().observe_connection(
+              millis(), id(api_server).is_connected_with_state_subscription());
+      - if:
           condition:
-            api.connected:
-          timeout: 15s
+            lambda: return snow::policy().should_sleep(millis(), id(ota_mode_switch).state);
+          then:
+            # Explicit entry bypasses deep_sleep.prevent, so EVERY entry
+            # must pass the maintenance/upload policy above.
+            - output.turn_off: maxbotix_power_enable
+            - deep_sleep.enter: deep_sleep_control
 
 esp32:
   board: esp32dev
@@ -34,6 +53,7 @@ logger:
 
 # Enable Home Assistant API
 api:
+  id: api_server
   encryption:
     key: !secret snow_depth_sensor_api_encryption_key
 
@@ -42,7 +62,14 @@ ota:
     password: !secret snow_depth_sensor_ota_password
     on_begin:
       then:
+        - lambda: snow::policy().ota_begin();
         - deep_sleep.prevent: deep_sleep_control
+    on_end:
+      then:
+        - lambda: snow::policy().ota_finished(millis());
+    on_error:
+      then:
+        - lambda: snow::policy().ota_finished(millis());
 
 wifi:
   ssid: !secret wifi_ssid
@@ -83,7 +110,7 @@ uart:
                          + (bytes[i + 2] - '0') * 100
                          + (bytes[i + 3] - '0') * 10
                          + (bytes[i + 4] - '0');
-            if (mm < 300 || mm >= 5000) {
+            if (!snow::policy().accept_distance(millis(), mm)) {
               // 300 = min-range clamp boundary, 5000 = no target detected.
               i += 5;
               continue;
@@ -132,17 +159,17 @@ binary_sensor:
             state: ON
 
   # Latched per wake window: ON if DONE asserted at any point since boot.
-  # A full battery's charge-termination dance guarantees at least one DONE
-  # blip per window; a genuinely charging battery produces none. The latch
-  # state is held by HA through deep sleep = per-wake full-charge verdict.
+  # A short wake can miss a DONE blip: OFF is not proof of incomplete charge.
+  # HA holds the last observation through deep sleep.
   - platform: template
     id: charge_complete_latch
     name: "Snow Sensor Charge Complete"
     icon: "mdi:battery-check"
 
 switch:
-  # Persistent device-owned maintenance mode. Turn this on during any 60-second
-  # wake window; it prevents sleep immediately and remains on across reboots.
+  # Persistent device-owned maintenance mode. Fast connections offer at least
+  # 5 seconds to enable it (30s deadline still applies to late connections).
+  # It remains on across reboots.
   - platform: template
     name: "Snow Sensor OTA Mode"
     id: ota_mode_switch
@@ -156,7 +183,7 @@ switch:
 
 deep_sleep:
   id: deep_sleep_control
-  run_duration: 60s
+  # No automatic run timer: all entries use the guarded policy above.
   sleep_duration: 15min
 
 sensor:
@@ -179,6 +206,10 @@ sensor:
           window_size: 5
           send_every: 5
           send_first_at: 5
+    on_value:
+      then:
+        - lambda: snow::policy().distance_published(millis());
+        - output.turn_off: maxbotix_power_enable
 
   # Battery voltage via the WatangTech VBAT port through a 100k/100k divider
   # into GPIO33 (ADC1_CH5, reclaimed audio pin). The MAX17043 fuel gauge was
@@ -190,19 +221,26 @@ sensor:
     name: "Snow Sensor Battery Voltage"
     attenuation: 12db
     samples: 16
-    update_interval: 5s
+    update_interval: 250ms
     accuracy_decimals: 2
     filters:
+      # Stop processing after the first fresh, filtered batch this boot.
+      - lambda: |-
+          if (snow::policy().battery_ready()) return {};
+          return x;
       - multiply: 2.0
       - median:
           window_size: 5
           send_every: 5
           send_first_at: 5
+    on_value:
+      then:
+        - lambda: snow::policy().battery_published(millis(), std::isfinite(x));
 
-  # Percentage from the discharge curve MEASURED on this exact cell
-  # (30-hour drain run, 2026-07-24/26, under production wake-window load).
-  # NOTE: curve is cell-specific — re-run the drain calibration if the
-  # battery is ever replaced. Cell delivered ~400 mAh (labeled 4,000).
+  # The old curve came from the retired cell (~400mAh inferred, not independently
+  # capacity-tested), not the replacement pair
+  # of 3100mAh cold-tolerant cells. Preserve the entity but report unknown
+  # until a new pack/load/temperature calibration exists. Voltage remains real.
   - platform: copy
     source_id: vbat_adc
     name: "Snow Sensor Battery"
@@ -210,27 +248,4 @@ sensor:
     device_class: battery
     accuracy_decimals: 0
     filters:
-      - calibrate_linear:
-          method: exact
-          datapoints:
-            - 2.90 -> 0.0
-            - 3.10 -> 0.9
-            - 3.20 -> 1.8
-            - 3.30 -> 3.5
-            - 3.35 -> 4.3
-            - 3.40 -> 5.2
-            - 3.45 -> 7.0
-            - 3.50 -> 8.7
-            - 3.55 -> 14.8
-            - 3.60 -> 22.6
-            - 3.65 -> 30.4
-            - 3.70 -> 42.6
-            - 3.75 -> 53.0
-            - 3.80 -> 67.8
-            - 3.85 -> 85.1
-            - 3.90 -> 95.8
-            - 3.95 -> 99.3
-            - 4.20 -> 100.0
-      - clamp:
-          min_value: 0.0
-          max_value: 100.0
+      - lambda: return NAN;
