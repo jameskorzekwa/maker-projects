@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1000" width="1240" height="1000" font-family="Helvetica, Arial, sans-serif">
+  <title>CrowPanel 1.46" (V1.2): LiPo + INA219 battery monitor wiring</title>
+  <rect width="1240" height="1000" fill="#ffffff"/>
+
+  <text x="30" y="40" font-size="24" font-weight="bold">CrowPanel 1.46" (board V1.2) — LiPo + INA219 wiring</text>
+  <text x="30" y="66" font-size="14" fill="#444">Board drawn from the back (cover off), in the same orientation as the photo: I2C/UART sockets on the left, USB socket at the bottom, BAT (J8) pads lower right.</text>
+
+  <!-- ================= Board ================= -->
+  <g id="board">
+    <circle cx="900" cy="420" r="270" fill="#1d1f22" stroke="#9aa0a6" stroke-width="3"/>
+    <text x="900" y="200" font-size="15" fill="#cfd3d6" text-anchor="middle">BOOT   RESET</text>
+    <rect x="860" y="380" width="80" height="80" fill="#2c2f33" stroke="#777"/>
+    <text x="900" y="425" font-size="13" fill="#cfd3d6" text-anchor="middle">ESP32-S3</text>
+    <text x="920" y="345" font-size="14" fill="#cfd3d6" text-anchor="middle">ESP32 Display 1.46  V1.2</text>
+    <rect x="780" y="365" width="50" height="110" fill="#e9e6df" stroke="#999"/>
+    <text x="805" y="490" font-size="11" fill="#cfd3d6" text-anchor="middle">FPC</text>
+
+    <!-- I2C socket (J36): pins top->bottom GND, 5V, SDA, SCL -->
+    <rect x="660" y="255" width="60" height="120" rx="4" fill="#f2efe8" stroke="#999"/>
+    <text x="690" y="391" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">I2C</text>
+    <g font-size="13" fill="#ffffff">
+      <text x="728" y="275">GND</text><text x="728" y="305">5V</text>
+      <text x="728" y="335">SDA</text><text x="728" y="365">SCL</text>
+    </g>
+    <g fill="#c9a227"><circle cx="670" cy="270" r="5"/><circle cx="670" cy="300" r="5"/><circle cx="670" cy="330" r="5"/><circle cx="670" cy="360" r="5"/></g>
+
+    <!-- UART socket (not used) -->
+    <rect x="660" y="400" width="60" height="120" rx="4" fill="#f2efe8" stroke="#999"/>
+    <text x="690" y="455" font-size="12" fill="#333" text-anchor="middle">UART</text><text x="690" y="471" font-size="11" fill="#333" text-anchor="middle">(not used)</text>
+
+    <!-- USB socket (J37) -->
+    <rect x="860" y="600" width="90" height="40" rx="4" fill="#f2efe8" stroke="#999"/>
+    <text x="905" y="592" font-size="12" fill="#cfd3d6" text-anchor="middle">GND D+ D- 5V</text>
+    <text x="905" y="660" font-size="13" fill="#cfd3d6" text-anchor="middle">USB (charging)</text>
+
+    <!-- brass standoff + U3 -->
+    <circle cx="1000" cy="560" r="14" fill="#c9a227" stroke="#7a611a"/>
+    <text x="965" y="600" font-size="12" fill="#cfd3d6">U3 (charger)</text>
+
+    <!-- J8 BAT footprint (empty) -->
+    <rect x="1035" y="470" width="60" height="110" fill="none" stroke="#ffffff" stroke-dasharray="4 3"/>
+    <text x="1065" y="445" font-size="15" font-weight="bold" fill="#ffffff" text-anchor="middle">BAT</text>
+    <text x="1065" y="462" font-size="11" fill="#cfd3d6" text-anchor="middle">(J8, empty)</text>
+    <text x="1020" y="497" font-size="20" font-weight="bold" fill="#ffffff">−</text>
+    <text x="1018" y="565" font-size="20" font-weight="bold" fill="#ffffff">+</text>
+    <rect x="1050" y="485" width="30" height="20" fill="#c0c4c8"/>
+    <rect x="1050" y="545" width="30" height="20" fill="#c0c4c8"/>
+  </g>
+
+  <!-- ================= Battery ================= -->
+  <g id="battery">
+    <rect x="40" y="560" width="200" height="110" rx="10" fill="#dfe8f5" stroke="#3b5b8c" stroke-width="2"/>
+    <text x="140" y="600" font-size="16" font-weight="bold" text-anchor="middle">3.7 V LiPo</text>
+    <text x="140" y="620" font-size="12" text-anchor="middle">1S, with protection board</text>
+    <text x="140" y="638" font-size="12" text-anchor="middle">(same type as the Dial's)</text>
+    <circle cx="240" cy="585" r="6" fill="#d32f2f"/><text x="250" y="580" font-size="13" fill="#d32f2f">+ red</text>
+    <circle cx="240" cy="645" r="6" fill="#111"/><text x="150" y="690" font-size="13">− black (bottom right)</text>
+  </g>
+
+  <!-- ================= INA219 ================= -->
+  <g id="ina219">
+    <rect x="330" y="230" width="230" height="260" rx="8" fill="#6a3d9a" stroke="#3b1f5c" stroke-width="2"/>
+    <text x="445" y="262" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">INA219</text>
+    <text x="400" y="400" font-size="12" fill="#e8dcf5" text-anchor="middle">R100 shunt</text><text x="400" y="416" font-size="12" fill="#e8dcf5" text-anchor="middle">addr 0x40 (A0/A1 open)</text>
+    <rect x="390" y="320" width="20" height="40" fill="#cfcfcf"/>
+    <!-- header: VCC GND SCL SDA on the right edge -->
+    <g font-size="13" fill="#ffffff" text-anchor="end">
+      <text x="545" y="275">VCC</text><text x="545" y="305">GND</text>
+      <text x="545" y="335">SCL</text><text x="545" y="365">SDA</text>
+    </g>
+    <g fill="#c9a227"><circle cx="560" cy="270" r="5"/><circle cx="560" cy="300" r="5"/><circle cx="560" cy="330" r="5"/><circle cx="560" cy="360" r="5"/></g>
+    <!-- screw terminal at the bottom -->
+    <rect x="370" y="440" width="150" height="50" fill="#2e7d32" stroke="#1b4d1e"/>
+    <text x="405" y="470" font-size="13" fill="#ffffff" text-anchor="middle">VIN+</text>
+    <text x="485" y="470" font-size="13" fill="#ffffff" text-anchor="middle">VIN−</text>
+    <circle cx="405" cy="490" r="6" fill="#c9a227"/><circle cx="485" cy="490" r="6" fill="#c9a227"/>
+  </g>
+
+  <!-- ================= Wires ================= -->
+  <g fill="none" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <!-- I2C cable: socket -> INA219 header -->
+    <polyline points="670,270 620,270 600,300 560,300" stroke="#111"/>      <!-- GND -->
+    <polyline points="670,300 620,300 600,270 560,270" stroke="#d32f2f"/>   <!-- 5V -> VCC -->
+    <polyline points="670,330 620,330 600,360 560,360" stroke="#1e88e5"/>   <!-- SDA -->
+    <polyline points="670,360 620,360 600,330 560,330" stroke="#f9a825"/>   <!-- SCL -->
+
+    <!-- 1 battery + -> VIN+ -->
+    <polyline points="240,585 300,585 300,530 405,530 405,490" stroke="#d32f2f"/>
+    <!-- 2 VIN- -> J8 + -->
+    <polyline points="485,490 485,740 1065,740 1065,565" stroke="#ef6c00"/>
+    <!-- 3 battery - -> J8 - -->
+    <polyline points="240,645 280,645 280,800 1200,800 1200,495 1080,495" stroke="#111"/>
+  </g>
+
+  <!-- wire number badges -->
+  <g font-size="14" font-weight="bold" text-anchor="middle" fill="#ffffff">
+    <circle cx="350" cy="530" r="13" fill="#d32f2f"/><text x="350" y="535">1</text>
+    <circle cx="700" cy="740" r="13" fill="#ef6c00"/><text x="700" y="745">2</text>
+    <circle cx="700" cy="800" r="13" fill="#111"/><text x="700" y="805">3</text>
+    <circle cx="610" cy="395" r="13" fill="#555"/><text x="610" y="400">4</text>
+  </g>
+
+  <!-- ================= Legend / notes ================= -->
+  <g font-size="13" fill="#222">
+    <text x="30" y="110" font-size="15" font-weight="bold">Before you connect anything</text>
+    <text x="30" y="132">1. No battery yet, USB plugged in. Black probe on the I2C or USB GND pin.</text>
+    <text x="30" y="150">2. Red probe on each BAT pad: the one reading about +4.2 V is BAT +.</text>
+    <text x="30" y="168">    0 V on both = charger not fitted: stop.</text>
+    <text x="30" y="186">3. Unplug USB before soldering; plug the battery in last.</text>
+
+    <text x="30" y="850" font-size="15" font-weight="bold">Wires</text>
+    <text x="30" y="870"><tspan font-weight="bold" fill="#d32f2f">1</tspan>  Battery + (red) → INA219 VIN+ (screw terminal).</text>
+    <text x="30" y="888"><tspan font-weight="bold" fill="#ef6c00">2</tspan>  INA219 VIN− → BAT + pad (the pad that read +4.2 V).</text>
+    <text x="30" y="906"><tspan font-weight="bold">3</tspan>  Battery − (black) → BAT − pad (any board GND works).</text>
+    <text x="30" y="924"><tspan font-weight="bold" fill="#555">4</tspan>  I2C socket → INA219 header with the MX1.25 4-pin → Dupont cable from the box:</text>
+    <text x="30" y="942">     GND→GND, 5V→VCC, SDA→SDA, SCL→SCL. Go by the pin labels, not the cable colours.</text>
+
+    <text x="640" y="850" font-size="15" font-weight="bold">Notes</text>
+    <text x="640" y="870">• The INA219 is in the battery + lead: + = charging, − = discharging.</text>
+    <text x="640" y="888">• Battery − and board GND are one net; the I2C GND joins the INA219 to it.</text>
+    <text x="640" y="906">• The I2C socket is level-shifted (BSN20) to GPIO38 SDA / GPIO39 SCL.</text>
+    <text x="640" y="924">• Socket 5V is switched by GPIO2 (firmware drives it high). On battery</text>
+    <text x="640" y="942">  it carries the battery voltage (≥ 3 V), which the INA219 accepts.</text>
+    <text x="30" y="975" font-size="12" fill="#666">Sources: Elecrow schematic ESP32 Display-1.46-V1.0.sch (J8, U3 TP4059 ≈500 mA, Q12, J36, Q5/Q6) and a photo of the V1.2 board. Pad positions are from the photo; confirm BAT + with the meter test.</text>
+  </g>
+</svg>
