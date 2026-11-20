@@ -35,8 +35,8 @@ page: 0 Sleep, 1 Main, 2 Set Point, 3 Settings (arc), 4 Power, 5 Mode,
 
 | From | Turn | Tap | Timer |
 | --- | --- | --- | --- |
-| Sleep (0) | Set Point (2); the first click already changes the value | Main (1) (`press_from_sleep`: the tap only wakes) | - |
-| Main (1) | Set Point (2) | Settings (3), highlight on Back | 10 s -> Sleep |
+| Sleep (0) | Set Point (2); the opening burst of clicks changes nothing (see below) | Main (1) (`press_from_sleep`: the tap only wakes) | - |
+| Main (1) | Set Point (2), opening burst changes nothing | Settings (3), highlight on Back | 10 s -> Sleep |
 | Set Point (2) | +/- set temperature, or flame height in Manual | Main | 10 s (`setpoint_timeout_s`) -> Main; 10 s -> Sleep |
 | Settings (3) | Move the highlight (no wrap) | Open the highlighted edit page; Back -> Main | 10 s -> Sleep |
 | Power (4) / Mode (5) | Choose | Apply if changed, back to Settings | 10 s -> Sleep **discards** the edit |
@@ -50,6 +50,11 @@ Rules:
   loads the LVGL screen. Pages 2..9 share one LVGL screen (`page_value`).
 - Every input calls `wake` first, which resets `last_activity_ms`. The idle
   timers in the 250 ms interval are all measured from `last_activity_ms`.
+- Opening Set Point by a turn (from Sleep or Main) sets `turn_opening`: that
+  click and every further click less than `turn_settle_ms` (500 ms) after the
+  previous one are swallowed, so a fast spin only opens the page. The first
+  click after a 0.5 s pause changes the value. `go()` clears the flag on any
+  page other than 2. A turn that wakes the Dial from light sleep behaves the same.
 - A hold in progress never times out (`if (knob_button.state) return;`).
 - The Settings arc lists Flame only in Manual while burning. `settings_rows()`
   in `knob_helpers.h` is the single source of the row list; `settings_sel` is

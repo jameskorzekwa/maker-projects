@@ -10,7 +10,8 @@
 # Controls one fireplace through Home Assistant.
 #
 #   Sleep      room temperature at the Sleep brightness. Tap -> Main.
-#              Turn -> Set Point (first click already counts). Hold -> on/off.
+#              Turn -> Set Point (the opening burst of clicks only opens it,
+#              the value changes once the knob has paused 0.5 s). Hold -> on/off.
 #   Main       room temperature, set point, mode, on/off. Tap -> Settings.
 #              Turn -> Set Point.
 #   Set Point  turn = set temperature (Manual: flame height; while off it is
@@ -74,6 +75,7 @@ substitutions:
   rotation_sign: "1"        # set to "-1" if the knob turns the wrong way
   hold_hint_ms: 200ms       # held this long: "Turning ON in 3" appears
   hold_count: "3"           # ...then counts down one per second; at 0 = on/off
+  turn_settle_ms: "500"     # Sleep/Main -> Set Point: clicks in this burst only open it
   setpoint_timeout_s: "10"  # Set Point -> Main
   sleep_after_s: "10"       # any screen -> Sleep
   display_off_after_s: "30" # Sleep + fireplace off -> backlight off (USB)
@@ -220,6 +222,12 @@ globals:
     initial_value: "false"
   - id: hold_count          # countdown while held; the fireplace toggles when it hits 0
     type: int
+    initial_value: "0"
+  - id: turn_opening        # Set Point was just opened by a turn: swallow that burst of clicks
+    type: bool
+    initial_value: "false"
+  - id: turn_last_ms        # time of the last swallowed click
+    type: uint32_t
     initial_value: "0"
   - id: press_from_sleep    # the current press started on the Sleep screen
     type: bool
@@ -467,6 +475,7 @@ script:
       - lambda: |-
           const bool fp_on = id(ha_fireplace).state == "on";
           id(page) = to;
+          if (to != 2) id(turn_opening) = false;
           if (to == 0) id(sleep_since_ms) = millis();
           switch (to) {
             case 3: break;
@@ -609,7 +618,18 @@ script:
           if (id(loading_shown)) return;
           const bool fp_on = id(ha_fireplace).state == "on";
           int p = id(page);
-          if (p == 0 || p == 1) { id(go)->execute(2); p = 2; }   // first click counts
+          // A turn on Sleep/Main only opens Set Point so the current value is
+          // seen first: that click and any following within turn_settle_ms of
+          // each other (a fast spin) change nothing.
+          if (p == 0 || p == 1) {
+            id(go)->execute(2);
+            id(turn_opening) = true; id(turn_last_ms) = millis();
+            return;
+          }
+          if (p == 2 && id(turn_opening)) {
+            if (millis() - id(turn_last_ms) < ${turn_settle_ms}u) { id(turn_last_ms) = millis(); return; }
+            id(turn_opening) = false;
+          }
           switch (p) {
             case 2: {
               if (id(mode_sel) == 0) {                 // Manual: flame height

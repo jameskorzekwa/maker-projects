@@ -246,7 +246,7 @@ interval:
             }
             if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
               // A waking *press* is not a tap (its release clears the guard);
-              // a waking *turn* goes on to act as the first click.
+              // a waking *turn* goes on to open Set Point (it does not change the value).
               if (gpio_get_level(GPIO_NUM_42) == 0) { id(boot_guard) = true; id(guard_ms) = millis(); }
               id(board_resume)->execute("input");
               return;
