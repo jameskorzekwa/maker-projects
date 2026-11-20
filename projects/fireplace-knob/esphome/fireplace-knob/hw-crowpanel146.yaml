@@ -1,0 +1,177 @@
+substitutions:
+  display_off_enabled: "false"  # behave like the Dial on USB: dim Sleep screen stays on
+
+# Hardware package: Elecrow CrowPanel 1.46" ESP32-S3 rotary display, model
+# DHR55146D (ESP32-S3, 16 MB flash, 8 MB octal PSRAM, 360x360 ST77961/JD9855
+# SPI panel, CST816 touch (unused), encoder with push button, 8-LED ring).
+# USB powered, no battery. Pair with ui-360.yaml.
+# Pins and panel init: Elecrow's ESPHome tutorial and RotaryScreen_1_46.h
+# (github.com/Elecrow-RD/CrowPanel-1.46inch-HMI-ESP32-Rotary-Display).
+#
+#   GPIO1  LCD power (must be high or the panel stays dark)
+#   GPIO2  5 V rail for the UART/I2C headers (left off)
+#   GPIO17 LED-ring power (held off), GPIO48 LED-ring data
+#   GPIO40 red power LED, active low (held off)
+#   GPIO46 backlight PWM
+#   SPI: SCLK 10, MOSI 11, CS 9, DC 3, RST 14
+#   Encoder A 45, B 42, push button 41 (active low)
+#   Touch I2C SDA 6, SCL 7, INT 13, RST 5 (not used)
+
+esphome:
+  platformio_options:
+    board_build.flash_mode: dio
+  on_boot:
+    # Power the panel before any component (the display driver sets up at 800)
+    # and switch the red LED and the LED ring off. One blocking lambda: `delay:`
+    # actions in on_boot do not hold up the rest of setup.
+    - priority: 2000
+      then:
+        - lambda: |-
+            gpio_set_direction(GPIO_NUM_40, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_40, 1);        // red LED off
+            gpio_set_direction(GPIO_NUM_17, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_17, 0);        // LED ring unpowered
+            gpio_set_direction(GPIO_NUM_1, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_1, 1);         // LCD power on
+            delay(150);
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
+      CONFIG_ESP32S3_DATA_CACHE_64KB: y
+
+safe_mode:
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+output:
+  - platform: ledc
+    pin: GPIO46
+    id: bl_pwm
+    frequency: 19531Hz
+
+light:
+  - platform: monochromatic
+    id: display_backlight
+    internal: true
+    output: bl_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 250ms
+
+spi:
+  clk_pin: GPIO10
+  mosi_pin: GPIO11
+
+display:
+  - platform: mipi_spi
+    id: panel
+    model: CUSTOM
+    cs_pin: GPIO9
+    dc_pin: GPIO3
+    reset_pin: GPIO14
+    data_rate: 40MHz
+    color_order: RGB
+    invert_colors: false
+    dimensions:
+      width: 360
+      height: 360
+    update_interval: never
+    auto_clear_enabled: false
+    init_sequence:
+      - [0xDE, 0x00]
+      - [0xDF, 0x98, 0x55]
+      - [0xB2, 0x1F]
+      - [0xB7, 0x00, 0x1D, 0x00, 0x45]
+      - [0xBB, 0x1B, 0x64, 0xC4, 0x1E, 0x3E, 0xF5]
+      - [0xBC, 0x03, 0x20, 0xF3, 0xC0]
+      - [0xC0, 0x22, 0xA1]
+      - [0xC3, 0x00, 0x02, 0x2A, 0x0B, 0x08, 0x48, 0x08, 0x04, 0x62, 0x30, 0x30]
+      - [0xC4, 0x40, 0x00, 0xAD, 0x68, 0x43, 0x07, 0x04, 0x16, 0x43, 0x07, 0x04]
+      - [0xD3, 0x28, 0x13]
+      - [0xD9, 0x00, 0x00, 0xFF, 0x00, 0xF0, 0x00]
+      - [0xDE, 0x01]
+      - [0xB7, 0x13, 0xE7, 0x64, 0x39, 0x06, 0x36, 0x19, 0x1C]
+      - [0xBE, 0x00]
+      - [0xC1, 0x00, 0x4A, 0x80]
+      - [0xC2, 0x00, 0x16, 0xDA, 0xE7]
+      - [0xC7, 0x00, 0x00, 0x00, 0x38, 0x08, 0x08, 0x00, 0x01]
+      - [0xC8, 0x00, 0x00, 0x00, 0x00, 0x15, 0x3B]
+      - [0xC9, 0x00, 0x16, 0x06, 0x04, 0x0A]
+      - [0xCA, 0x08, 0x35, 0x16, 0x1F, 0x1F]
+      - [0xCB, 0x01, 0x16, 0x07, 0x05, 0x0B]
+      - [0xCC, 0x09, 0x35, 0x16, 0x1F, 0x1F]
+      - [0xCD, 0x01, 0x16, 0x09, 0x0B, 0x05]
+      - [0xCE, 0x07, 0x15, 0x1F, 0x16, 0x1F]
+      - [0xCF, 0x00, 0x16, 0x08, 0x0A, 0x04]
+      - [0xD0, 0x06, 0x15, 0x1F, 0x16, 0x1F]
+      - [0xD1, 0x02, 0x30]
+      - [0xD2, 0x02, 0x03, 0x52, 0xDF, 0xDD]
+      - [0xD3, 0x3B, 0x04, 0x48]
+      - [0xD5, 0x10, 0x10, 0x07, 0x07, 0x0F, 0x94, 0x26]
+      - [0xD6, 0x00, 0x00, 0x40]
+      - [0xD7, 0x00, 0x00, 0x20]
+      - [0xDE, 0x02]
+      - [0xB6, 0x1C]
+      - [0xDE, 0x00]
+      - [0x4D, 0x00]
+      - [0x4E, 0x00]
+      - [0x4F, 0x00]
+      - [0x4C, 0x01]
+      - [0x4C, 0x00]
+      - [0x35]
+
+script:
+  # No battery or power latch on this board: nothing to do.
+  - id: board_power_off
+    then: []
+  - id: board_idle_sleep
+    then: []
+  - id: board_resume
+    parameters: {reason: string}
+    then: []
+
+sensor:
+  - platform: rotary_encoder
+    id: knob
+    internal: true
+    pin_a:
+      number: GPIO45
+      ignore_strapping_warning: true
+      mode: {input: true, pullup: true}
+    pin_b:
+      number: GPIO42
+      mode: {input: true, pullup: true}
+    on_clockwise:
+      - script.execute: {id: knob_turn, dir: !lambda 'return ${rotation_sign};'}
+    on_anticlockwise:
+      - script.execute: {id: knob_turn, dir: !lambda 'return -(${rotation_sign});'}
+
+binary_sensor:
+  - platform: gpio
+    id: knob_button
+    internal: true
+    pin:
+      number: GPIO41
+      mode: {input: true, pullup: true}
+      inverted: true
+    filters:
+      - delayed_on_off: 15ms
+    on_press:
+      - script.execute: button_down
+    on_release:
+      - script.execute: button_up
+
+debug:
+  update_interval: 60s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      name: Reset Reason
+      entity_category: diagnostic

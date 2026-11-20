@@ -1,0 +1,430 @@
+# UI package for 360x360 round displays (Elecrow CrowPanel 1.46"). Generated
+# from ui-240.yaml (the M5Stack Dial layout) with every position, size and
+# font size multiplied by 1.5, so it looks exactly like the Dial. Keep the two
+# in step: change ui-240.yaml, then regenerate this file the same way
+# (scale y, x, width, height, size, radius, arc_width, pad_column,
+# border_width by 1.5; arc_radius 97 -> 146).
+substitutions:
+  txt_no_ha: "No HA"
+  txt_fp_offline_short: "Offline"
+  txt_fp_offline: "Fireplace offline"
+  txt_connecting: "Connecting to HA..."
+  txt_wait_data: "Loading data..."
+  txt_wait_data_failed: "No fireplace data"
+  txt_conn_failed: "HA not reachable"
+  arc_radius: "146"
+
+font:
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_value
+    size: 120
+    bpp: 4
+    glyphs: "0123456789.-\u00B0OFN"
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_mode
+    size: 45
+    bpp: 4
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  - file: {type: gfonts, family: Roboto, weight: 500}
+    id: font_menu
+    size: 36
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 500}
+    id: font_title
+    size: 27
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 400}
+    id: font_sub
+    size: 24
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 400}
+    id: font_hint
+    size: 18
+    bpp: 4
+  - file: {type: gfonts, family: Roboto, weight: 700}
+    id: font_toast
+    size: 33
+    bpp: 4
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_icons_sleep
+    size: 60
+    bpp: 4
+    glyphs:
+      - "\U000F0238"  # fire
+      - "\U000F1722"  # fire-off
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_icons_small
+    size: 33
+    bpp: 4
+    glyphs:
+      - "\U000F0238"  # fire
+      - "\U000F1722"  # fire-off
+      - "\U000F050F"  # thermometer
+      - "\U000F1542"  # tune-variant
+      - "\U000F0210"  # fan
+      - "\U000F0335"  # lightbulb
+      - "\U000F0336"  # lightbulb-outline
+      - "\U000F0E50"  # lightbulb-off-outline
+      - "\U000F081D"  # fan-off
+      - "\U000F0079"  # battery
+      - "\U000F0081"  # battery-80
+      - "\U000F007E"  # battery-50
+      - "\U000F007B"  # battery-20
+      - "\U000F10CD"  # battery-alert-variant-outline
+      - "\U000F0084"  # battery-charging
+      - "\U000F0425"  # power
+      - "\U000F00E0"  # brightness-7
+      - "\U000F004D"  # arrow-left (Back)
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf"
+    id: font_icons
+    size: 39
+    bpp: 4
+    glyphs:
+      - "\U000F050F"  # thermometer
+      - "\U000F0238"  # fire
+      - "\U000F1542"  # tune-variant
+      - "\U000F0210"  # fan
+      - "\U000F0335"  # lightbulb
+      - "\U000F0336"  # lightbulb-outline
+      - "\U000F0E50"  # lightbulb-off-outline
+      - "\U000F081D"  # fan-off
+      - "\U000F0079"  # battery
+      - "\U000F0081"  # battery-80
+      - "\U000F007E"  # battery-50
+      - "\U000F007B"  # battery-20
+      - "\U000F10CD"  # battery-alert-variant-outline
+      - "\U000F0084"  # battery-charging
+      - "\U000F0425"  # power
+      - "\U000F00E0"  # brightness-7
+      - "\U000F004D"  # arrow-left (Back)
+
+.status_row: &status_row
+  align: CENTER
+  y: -123
+  width: SIZE_CONTENT
+  height: SIZE_CONTENT
+  bg_opa: TRANSP
+  border_width: 0
+  pad_all: 0
+  scrollable: false
+  layout:
+    type: flex
+    flex_flow: ROW
+    flex_align_main: CENTER
+    flex_align_cross: CENTER
+    flex_align_track: CENTER
+    pad_column: 8
+
+lvgl:
+  displays: [panel]
+  buffer_size: 25%
+  bg_color: 0x000000
+  default_font: font_sub
+  scrollable: false
+  scrollbar_mode: "OFF"
+  top_layer:
+    widgets:
+      - obj:
+          id: toast
+          align: CENTER
+          width: 300
+          height: 126
+          radius: 63
+          bg_color: 0x111111
+          bg_opa: 92%
+          border_color: 0xFF7A1A
+          border_width: 3
+          hidden: true
+          widgets:
+            - label:
+                id: toast_label
+                align: CENTER
+                text_align: CENTER
+                text: ""
+                text_font: font_toast
+                text_color: 0xFFFFFF
+  pages:
+    # ================= Loading (boot / reconnect) =================
+    - id: page_loading
+      bg_color: 0x000000
+      widgets:
+        - spinner:
+            id: load_spinner
+            align: CENTER
+            y: -26
+            width: 105
+            height: 105
+            spin_time: 1s
+            arc_length: 80deg
+            arc_color: 0x2A2A2A
+            arc_width: 8
+            indicator:
+              arc_color: 0xFF7A1A
+              arc_width: 8
+        - label:
+            id: load_text
+            align: CENTER
+            y: 68
+            width: 300
+            text_align: CENTER
+            long_mode: WRAP
+            text: ""
+            text_font: font_sub
+            text_color: 0x9A9A9A
+    # ================= Sleep =================
+    - id: page_sleep
+      bg_color: 0x000000
+      widgets:
+        - label:
+            id: sleep_flame
+            align: CENTER
+            y: -105
+            text: "\U000F1722"
+            text_font: font_icons_sleep
+            text_color: 0x5A5A5A
+        - label:
+            id: sleep_charging
+            align: CENTER
+            y: 138
+            text: "\U000F0084"
+            text_font: font_icons_small
+            text_color: 0x38BDF8
+            hidden: true
+        - label:
+            id: sleep_set        # same place and text as main_set
+            align: CENTER
+            y: 87
+            width: 300
+            text_align: CENTER
+            long_mode: CLIP
+            text: ""
+            text_font: font_title
+            text_color: 0x9A9A9A
+        - label:
+            id: sleep_temp
+            align: CENTER
+            y: 6
+            width: 330
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+
+    # ================= Main =================
+    - id: page_main
+      bg_color: 0x000000
+      widgets:
+        - obj:
+            id: main_batt
+            align: CENTER
+            y: -162
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            hidden: true
+            layout:
+              type: flex
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+              pad_column: 4
+            widgets:
+              - label: {id: batt_icon, text: "\U000F0079", text_font: font_icons_small, text_color: 0x4ADE80}
+              - label: {id: batt_text, text: "", text_font: font_hint, text_color: 0x9A9A9A}
+        - obj:
+            id: status_row_m
+            align: CENTER
+            y: -117
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout:
+              type: flex
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+              pad_column: 8
+            widgets:
+              - spinner:
+                  id: conn_spinner
+                  width: 30
+                  height: 30
+                  spin_time: 1s
+                  arc_length: 90deg
+                  arc_color: 0x333333
+                  arc_width: 4
+                  hidden: true
+                  indicator:
+                    arc_color: 0xFF7A1A
+                    arc_width: 4
+              - label: {id: status_icon_m, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: status_text_m, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
+        - label:
+            align: CENTER
+            y: -78
+            text: "ROOM"
+            text_font: font_hint
+            text_color: 0x6A6A6A
+        - label:
+            id: main_temp
+            align: CENTER
+            y: 6
+            width: 330
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+        - label:
+            id: main_set
+            align: CENTER
+            y: 87
+            width: 300
+            text_align: CENTER
+            long_mode: CLIP
+            text: ""
+            text_font: font_title
+            text_color: 0xFF7A1A
+        - label:
+            id: main_info
+            align: CENTER
+            y: 123
+            width: 255
+            text_align: CENTER
+            long_mode: CLIP
+            text: ""
+            text_font: font_hint
+            text_color: 0x9A9A9A
+        - obj:
+            id: main_stats
+            align: CENTER
+            y: 138
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout:
+              type: flex
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+              pad_column: 9
+            widgets:
+              - label: {id: stat_fan_icon, text: "\U000F081D", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: stat_fan_value, text: "0", text_font: font_sub, text_color: 0x9A9A9A}
+              - label: {text: " \u00B7 ", text_font: font_sub, text_color: 0x6A6A6A}
+              - label: {id: stat_light_icon, text: "\U000F0E50", text_font: font_icons_small, text_color: 0x5A5A5A}
+        - label:
+            id: main_hint
+            align: CENTER
+            y: 150
+            width: 180
+            text_align: CENTER
+            text: ""
+            text_font: font_hint
+            text_color: 0x4A4A4A
+            hidden: true
+
+    # ================= Set Point + edit screens =================
+    - id: page_value
+      bg_color: 0x000000
+      widgets:
+        - arc:
+            id: ring
+            align: CENTER
+            width: 348
+            height: 348
+            start_angle: 135
+            end_angle: 45
+            min_value: 0
+            max_value: 100
+            value: 0
+            adjustable: false
+            clickable: false
+            arc_color: 0x1C1C1C
+            arc_width: 18
+            arc_rounded: true
+            indicator:
+              arc_color: 0xFF7A1A
+              arc_width: 18
+              arc_rounded: true
+            knob:
+              bg_opa: TRANSP
+              pad_all: 0
+        - obj:
+            <<: *status_row
+            id: status_row_v
+            widgets:
+              - label: {id: status_icon_v, text: "\U000F1722", text_font: font_icons_small, text_color: 0x5A5A5A}
+              - label: {id: status_text_v, text: "OFF", text_font: font_sub, text_color: 0x9A9A9A}
+        - label:
+            id: title_icon
+            align: CENTER
+            y: -120
+            text: "\U000F050F"
+            text_font: font_icons
+            text_color: 0xFF7A1A
+        - label:
+            id: title_label
+            align: CENTER
+            y: -75
+            width: 285
+            text_align: CENTER
+            long_mode: CLIP
+            text: "SET TEMP"
+            text_font: font_title
+            text_color: 0xCFCFCF
+        - label:
+            id: value_label
+            align: CENTER
+            y: 12
+            width: 300
+            text_align: CENTER
+            text: "--"
+            text_font: font_value
+            text_color: 0xFFFFFF
+        - label:
+            id: mode_label
+            align: CENTER
+            y: 9
+            width: 315
+            text_align: CENTER
+            long_mode: CLIP
+            text: "MANUAL"
+            text_font: font_mode
+            text_color: 0xFFFFFF
+            hidden: true
+        - label:
+            id: sub_label
+            align: CENTER
+            y: 87
+            width: 264
+            text_align: CENTER
+            long_mode: DOT
+            text: ""
+            text_font: font_sub
+            text_color: 0x9A9A9A
+        - label: {id: arc_big_0, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_0, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_1, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_1, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_2, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_2, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_3, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_3, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_4, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_4, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_5, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_5, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
+        - label: {id: arc_big_6, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons, text_color: 0x9A9A9A, hidden: true}
+        - label: {id: arc_small_6, align: CENTER, x: 0, y: -146, text: "", text_font: font_icons_small, text_color: 0x6A6A6A, hidden: true}
