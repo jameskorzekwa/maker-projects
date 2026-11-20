@@ -920,7 +920,9 @@ script:
           if (manual_flame) snprintf(buf, sizeof(buf), "Flame %d", flame_shown);
           else snprintf(buf, sizeof(buf), "Set ${temp_format}\u00B0", id(setpoint));
           lv_label_set_text(id(main_set), buf);
+          lv_label_set_text(id(sleep_set), buf);   // Sleep shows the same set point / flame line
           lv_obj_set_style_text_color(id(main_set), lv_color_hex(!fresh_ui ? GREY : fp_on ? ORANGE : SUB), 0);
+          lv_obj_set_style_text_color(id(sleep_set), lv_color_hex(!fresh_ui ? GREY : fp_on ? ORANGE : SUB), 0);
           // Fan + light as icons: "<fan> 4   <bulb>" (bulb lit = light on).
           // main_info carries the connection / fireplace-offline messages instead.
           const bool show_msg = conn_issue || !fp_known;
