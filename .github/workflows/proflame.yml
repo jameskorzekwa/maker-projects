@@ -1,0 +1,40 @@
+name: Proflame fireplace
+on:
+  pull_request:
+    paths:
+      - "projects/proflame-esp32/esphome/**"
+      - "projects/proflame-esp32/tests/**"
+      - ".github/workflows/proflame.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/proflame-esp32/esphome/**"
+      - "projects/proflame-esp32/tests/**"
+      - ".github/workflows/proflame.yml"
+permissions:
+  contents: read
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native parser and temperature policy tests
+        run: |
+          for source in projects/proflame-esp32/tests/test_*.cpp; do
+            g++ -std=c++17 -Wall -Wextra -Werror \
+              -fsanitize=address,undefined "$source" -o "$RUNNER_TEMP/proflame-test"
+            "$RUNNER_TEMP/proflame-test"
+          done
+      - name: Prepare isolated dummy build
+        run: |
+          mkdir -p "$RUNNER_TEMP/proflame-build"
+          cp projects/proflame-esp32/esphome/proflame-bench.yaml "$RUNNER_TEMP/proflame-build/"
+          cp projects/proflame-esp32/esphome/*.h "$RUNNER_TEMP/proflame-build/"
+          cp projects/proflame-esp32/esphome/secrets.example.yaml "$RUNNER_TEMP/proflame-build/secrets.yaml"
+      - name: ESPHome wiring regression checks
+        run: python3 -m unittest discover -s projects/proflame-esp32/tests -p 'test_*.py'
+      - name: Compile (never upload)
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/proflame-build:/config" \
+            ghcr.io/esphome/esphome:2026.11.0 compile /config/proflame-bench.yaml

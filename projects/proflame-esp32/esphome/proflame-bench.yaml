@@ -5,8 +5,8 @@
 # Feature parity with the proflame_connect_wifi integration where the UART
 # protocol supports it: power, mode (Off/Manual/Thermostat/Smart), flame,
 # fan, light (wired to AUX on this fireplace), pilot; plus split flow and
-# the unused IFC lamp output level. Room temperature and thermostat
-# setpoint have no documented UART register and are NOT implemented.
+# the unused IFC lamp output level. Thermostat/Smart run locally using the
+# basement presence sensor temperature delivered by Home Assistant.
 #
 # Safety rules enforced below:
 # - Nothing is ever written at boot or reconnect. Periodic traffic is GET only.
@@ -24,6 +24,7 @@ esphome:
   min_version: 2026.10.2
   includes:
     - ifc_query.h
+    - room_temperature.h
 
 esp32:
   variant: esp32c5
@@ -39,6 +40,9 @@ wifi:
 api:
   reboot_timeout: 0s
   on_client_disconnected:
+    - lambda: |-
+        if (!api::global_api_server->is_connected_with_state_subscription())
+          id(basement_temp_seen) = false;
     - delay: 1s
     - script.execute: update_room_temp
     - script.execute: tstat_eval
@@ -286,7 +290,9 @@ globals:
   - {id: cl_preset, type: std::string, restore_value: false, initial_value: '"Off"'}
   # ESP32 thermostat. tstat_mode: 0 = inactive, 1 = Thermostat, 2 = Smart.
   # Mode and target persist across reboots so regulation resumes.
-  - {id: tstat_mode, type: int, restore_value: true, initial_value: '0'}
+  # Explicitly re-arm thermostat after a reboot; new temperature data alone
+  # must never resume an old heating request after OTA or power loss.
+  - {id: tstat_mode, type: int, restore_value: false, initial_value: '0'}
   - {id: tstat_target_f, type: float, restore_value: true, initial_value: '70.0'}
   - {id: tstat_heating, type: bool, restore_value: false, initial_value: 'false'}
   - {id: tstat_switch_ms, type: uint32_t, restore_value: false, initial_value: '0'}
@@ -305,17 +311,27 @@ globals:
   - {id: tstat_fresh_start, type: bool, restore_value: false, initial_value: 'false'}
   - {id: light_cmd_ms, type: uint32_t, restore_value: false, initial_value: '0'}
   - {id: ctl_req_ms, type: uint32_t, restore_value: false, initial_value: '0'}
-  # Remote's room temperature (register 0x1F), used only as a fallback.
+  # Remote temperature is diagnostic only; the basement IFC lacks 0x1F.
   - {id: remote_temp_f, type: float, restore_value: false, initial_value: 'NAN'}
   - {id: remote_temp_ms, type: uint32_t, restore_value: false, initial_value: '0'}
   - {id: remote_temp_seen, type: bool, restore_value: false, initial_value: 'false'}
   - {id: effective_temp_f, type: float, restore_value: false, initial_value: 'NAN'}
   - {id: remote_change_ms, type: uint32_t, restore_value: false, initial_value: '0'}
+  - {id: basement_temp_seen, type: bool, restore_value: false, initial_value: 'false'}
+  - {id: basement_temp_ms, type: uint32_t, restore_value: false, initial_value: '0'}
   # What the thermostat last commanded (-1 none, 0 off, 1 on) and when.
   - {id: tstat_expect, type: int, restore_value: false, initial_value: '-1'}
   - {id: tstat_cmd_ms, type: uint32_t, restore_value: false, initial_value: '0'}
 
 text_sensor:
+  - platform: homeassistant
+    id: basement_temp_unit
+    entity_id: sensor.basement_basement_presence_sensor_temperature
+    attribute: unit_of_measurement
+    internal: true
+    on_value:
+      - script.execute: update_room_temp
+      - script.execute: tstat_eval
   - platform: template
     id: fireplace_status
     name: Fireplace Status
@@ -353,6 +369,16 @@ text_sensor:
     entity_category: diagnostic
 
 sensor:
+  - platform: homeassistant
+    id: basement_temperature
+    entity_id: sensor.basement_basement_presence_sensor_temperature
+    internal: true
+    on_value:
+      - lambda: |-
+          id(basement_temp_ms) = millis();
+          id(basement_temp_seen) = true;
+      - script.execute: update_room_temp
+      - script.execute: tstat_eval
   - platform: template
     id: room_temperature
     name: Room Temperature
@@ -620,26 +646,24 @@ script:
       - lambda: 'id(ifc_uart).write_array(proflame_query::GET_ROOM_TEMP, 6);'
       - delay: 200ms
 
-  # Effective room temperature: main floor thermostat (via Home Assistant), or
-  # the remote's last report to the IFC when that is unavailable.
+  # Basement presence sensor only. Never fall back to another room or the remote.
   - id: update_room_temp
     mode: queued
     max_runs: 3
     then:
       - lambda: |-
-          // Basement fireplace: the ONLY source is the handheld remote's room
-          // temperature report to the IFC (register 0x1F). The basement IFC
-          // (older board) does not provide 0x1F, so this is unavailable there
-          // and the thermostat stays off. The value is trusted only while the
-          // IFC keeps delivering it and it changed within the last 2 hours.
           const uint32_t now = millis();
-          const bool remote_ok = id(remote_temp_seen) && (now - id(remote_temp_ms)) < 60000u &&
-                                 (now - id(remote_change_ms)) < 2u * 3600u * 1000u &&
-                                 !std::isnan(id(remote_temp_f));
-          float f = NAN;
-          const char *src = id(remote_temp_seen) ? "Unavailable (remote reading stale)" :
-                            "Unavailable (this controller does not report the remote temperature)";
-          if (remote_ok) { f = id(remote_temp_f); src = "Fireplace remote"; }
+          const bool connected = api::global_api_server->is_connected_with_state_subscription();
+          if (!connected) id(basement_temp_seen) = false;
+          const float f = proflame_temperature::usable(
+              id(basement_temperature).state, id(basement_temp_unit).state,
+              connected, id(basement_temp_seen), now, id(basement_temp_ms));
+          const char *src = !connected ? "Unavailable (Home Assistant disconnected)" :
+              !id(basement_temp_seen) ? "Unavailable (waiting for basement sensor)" :
+              uint32_t(now - id(basement_temp_ms)) >= proflame_temperature::MAX_AGE_MS ?
+                  "Unavailable (basement sensor stale)" :
+              std::isnan(f) ? "Unavailable (invalid basement temperature or unit)" :
+                  "Basement presence sensor";
           id(effective_temp_f) = f;
           if (id(room_temp_source).state != src) id(room_temp_source).publish_state(src);
           id(room_temperature).publish_state(std::isnan(f) ? NAN : (f - 32.0f) * 5.0f / 9.0f);
@@ -663,8 +687,7 @@ script:
             id(tstat_status) = "Waiting for control (turn the fireplace off with the remote if it is on)";
             return;
           }
-          // Main floor thermostat, falling back to the remote's reading. Only a
-          // Home Assistant state subscription counts as connected (B4).
+          // Only validated basement temperature with a live HA subscription.
           const float room = id(effective_temp_f);
           const bool have_temp = !std::isnan(room);
           const float target = id(tstat_target_f);
