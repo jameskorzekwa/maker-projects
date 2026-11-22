@@ -916,20 +916,25 @@ script:
             if (std::isnan(b) || id(battery_absent)) lv_obj_add_flag(id(main_batt), LV_OBJ_FLAG_HIDDEN);
             else {
               lv_obj_remove_flag(id(main_batt), LV_OBJ_FLAG_HIDDEN);
+              // Charging = bolt; external power with a full cell (no charge
+              // current) = plug; on battery = level icon.
               const char *ic = id(battery_charging) ? "\U000F0084"
+                               : id(on_usb) ? "\U000F06A5"
                                : b <= 15 ? "\U000F10CD" : b <= 35 ? "\U000F007B" : b <= 65 ? "\U000F007E" : b <= 90 ? "\U000F0081" : "\U000F0079";
               lv_label_set_text(id(batt_icon), ic);
               snprintf(buf, sizeof(buf), "%.0f%%", b);
               lv_label_set_text(id(batt_text), buf);
-              uint32_t col = id(battery_charging) ? CYAN : b <= 15 ? RED : b <= 35 ? YELLOW : GREEN;
+              uint32_t col = (id(battery_charging) || id(on_usb)) ? CYAN : b <= 15 ? RED : b <= 35 ? YELLOW : GREEN;
               lv_obj_set_style_text_color(id(batt_icon), lv_color_hex(col), 0);
               lv_obj_set_style_text_color(id(batt_text), lv_color_hex(b <= 15 ? RED : SUB), 0);
             }
           }
 
-          // ---- Sleep: charging bolt only while charging ----
-          if (id(battery_charging) && !id(battery_absent) && !std::isnan(id(battery_pct))) lv_obj_remove_flag(id(sleep_charging), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_add_flag(id(sleep_charging), LV_OBJ_FLAG_HIDDEN);
+          // ---- Sleep: bolt while charging, plug on external power with a full cell ----
+          if ((id(battery_charging) || id(on_usb)) && !id(battery_absent) && !std::isnan(id(battery_pct))) {
+            lv_label_set_text(id(sleep_charging), id(battery_charging) ? "\U000F0084" : "\U000F06A5");
+            lv_obj_remove_flag(id(sleep_charging), LV_OBJ_FLAG_HIDDEN);
+          } else lv_obj_add_flag(id(sleep_charging), LV_OBJ_FLAG_HIDDEN);
 
           // ---- Sleep: big flame (on) or crossed flame (off), readable from afar ----
           lv_label_set_text(id(sleep_flame), fp_on ? "\U000F0238" : "\U000F1722");

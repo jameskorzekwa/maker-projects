@@ -217,8 +217,15 @@ Sign convention in firmware: `batt_i` > 0 = into the cell (charging).
 Percentage: coulomb counter (`soc_mah`, `battery_mah` = 2000) persisted per
 whole percent, anchored to full at >= 4.18 V with the charge current tapering
 below 15 mA, and to empty at <= 3.30 V discharging. "Reset Battery Gauge"
-re-seeds it from the resting voltage. Main shows icon + % (hidden when absent);
-Sleep shows a bolt only while charging.
+re-seeds it from the resting voltage. Main shows icon + % (hidden when absent).
+Icon: bolt while charging; plug (`mdi:power-plug`, cyan) on external power with
+no charge current (full cell); otherwise the level icon. Sleep shows the same
+bolt or plug, and nothing on battery.
+
+CrowPanel 1.46 (basement): the INA219 is the one on the Waveshare UPS HAT (C),
+0x43, 0.01 ohm shunt (`hw-crowpanel146.yaml`, `ina_sign`). That board also
+switches the LCD power off for 300 ms at every boot: after a software reboot the
+panel otherwise stays black.
 
 ## 6. Rules that keep this working
 
