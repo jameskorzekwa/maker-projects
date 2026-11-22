@@ -6,6 +6,9 @@ int main() {
   using namespace proflame_temperature;
   assert(std::abs(fahrenheit(62.258f, "°F") - 62.258f) < 0.001f);
   assert(std::abs(fahrenheit(20.0f, "°C") - 68.0f) < 0.001f);
+  assert(fahrenheit(25.0f, "°C") == 77.0f);
+  assert(usable(25, "°C", true, true, MAX_AGE_MS - 1, 0) == 77.0f);
+  assert(std::isnan(usable(25, "°C", true, true, MAX_AGE_MS, 0)));
   for (auto unit : {"", "K", "unknown", "unavailable"})
     assert(std::isnan(fahrenheit(62.0f, unit)));
   for (float value : {NAN, INFINITY, -INFINITY, 20.0f, 120.0f, -40.0f})
