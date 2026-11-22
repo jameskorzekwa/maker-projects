@@ -1,15 +1,32 @@
 substitutions:
-  display_off_enabled: "false"  # behave like the Dial on USB: dim Sleep screen stays on
+  battery_mah: "2000"       # pack capacity for the charge counter (EEMB LP103454)
+  ina_sign: "1.0f"          # UPS HAT (C): IN+ on the charger side, + = charging; use "-1.0f" if reversed
+  display_off_enabled: "false"  # light-sleeps on battery instead; Sleep screen stays on USB
 
 # Hardware package: Elecrow CrowPanel 1.46" ESP32-S3 rotary display, model
 # DHR55146D (ESP32-S3, 16 MB flash, 8 MB octal PSRAM, 360x360 ST77961/JD9855
 # SPI panel, CST816 touch (unused), encoder with push button, 8-LED ring).
-# USB powered, no battery. Pair with ui-360.yaml.
+# Pair with ui-360.yaml.
+#
+# Battery (2026-11-20): the V1.2 board's J8 BAT pads are a bare footprint (the
+# + pad connects to nothing), so the cell sits on a Waveshare UPS HAT (C):
+# ETA6003 power-path charger + TPS61088 5 V boost (no light-load shutoff) +
+# INA219 (0x43, 0.01 ohm shunt R9 between charger BAT and the cell). HAT 5V/GND
+# -> knob USB-C. The INA219's Vs (HAT header "3.3V" pin, 3.0-5.5 V) and I2C come
+# from the knob's I2C socket (5V pin switched by GPIO2, SDA GPIO38 / SCL
+# GPIO39). Same battery logic as the Dial (hw-m5dial.yaml).
+#
+# Idle sleep differs from the Dial: there is no power latch and the knob pins
+# are not RTC pins (no deep-sleep wake), so the board never switches off.
+# Stage 1 (first light_sleep_minutes): light sleep with an HA refresh every
+# refresh_every_s, as on the Dial. Stage 2: light sleep continues, without
+# the HA refreshes (values refresh on wake). A tap, a turn or USB charging
+# current always wakes it instantly.
 # Pins and panel init: Elecrow's ESPHome tutorial and RotaryScreen_1_46.h
 # (github.com/Elecrow-RD/CrowPanel-1.46inch-HMI-ESP32-Rotary-Display).
 #
 #   GPIO1  LCD power (must be high or the panel stays dark)
-#   GPIO2  5 V rail for the UART/I2C headers (left off)
+#   GPIO2  5 V for the UART/I2C sockets (on: powers the INA219)
 #   GPIO17 LED-ring power (held off), GPIO48 LED-ring data
 #   GPIO40 red power LED, active low (held off)
 #   GPIO46 backlight PWM
@@ -31,8 +48,18 @@ esphome:
             gpio_set_level(GPIO_NUM_40, 1);        // red LED off
             gpio_set_direction(GPIO_NUM_17, GPIO_MODE_OUTPUT);
             gpio_set_level(GPIO_NUM_17, 0);        // LED ring unpowered
+            // LCD power: off for 300 ms first. After a software reboot (OTA,
+            // Restart button) the panel stays powered and does not take the new
+            // init (black screen, backlight on); a real power-on always works.
+            gpio_hold_dis(GPIO_NUM_1);
             gpio_set_direction(GPIO_NUM_1, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_1, 0);
+            gpio_set_direction(GPIO_NUM_14, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_14, 0);        // panel RST held low while unpowered
+            delay(300);
             gpio_set_level(GPIO_NUM_1, 1);         // LCD power on
+            gpio_set_direction(GPIO_NUM_2, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_2, 1);         // I2C socket power (INA219)
             delay(150);
 
 esp32:
@@ -43,6 +70,9 @@ esp32:
     sdkconfig_options:
       CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
       CONFIG_ESP32S3_DATA_CACHE_64KB: y
+
+wifi:
+  output_power: 11dB        # lower TX peaks on battery; plenty indoors
 
 safe_mode:
 
@@ -126,17 +156,309 @@ display:
       - [0x4C, 0x00]
       - [0x35]
 
+i2c:
+  id: bus_ext
+  sda: GPIO38
+  scl: GPIO39
+  frequency: 100kHz
+  scan: false
+  timeout: 10ms
+
 script:
-  # No battery or power latch on this board: nothing to do.
+  # No power latch: the board cannot switch itself off (see the header).
   - id: board_power_off
     then: []
+
+  # Idle sleep on battery (driven by the 200 ms interval below, so the
+  # ESPHome loop keeps running between sleep slices). Light sleep in 4 s
+  # slices: RAM kept, Wi-Fi off, screen dark. Wakes instantly on the button or
+  # the encoder; every slice reads the INA219 and current INTO the cell
+  # (charger) = USB plugged in -> wake. During the first light_sleep_minutes it
+  # turns Wi-Fi on every refresh_every_s, lets HA push fresh values (screen
+  # stays dark), then sleeps again.
   - id: board_idle_sleep
-    then: []
+    then:
+      - lambda: |-
+          id(stale_ok) = id(got_fp) && id(got_light) && id(got_preset) && id(got_setpoint) &&
+                         id(got_room) && id(got_flame) && id(got_fan);
+          id(idle_sleeping) = true;
+          id(sleep_state) = 1;
+          id(slept_ms) = 0; id(since_refresh_ms) = 0; id(sleep_loops) = 0; id(sleep_rejects) = 0;
+          id(wifi_id).disable();
+          id(display_backlight).turn_off().perform();
+
+  # Back to normal operation (from any sleep state).
   - id: board_resume
     parameters: {reason: string}
-    then: []
+    then:
+      - lambda: |-
+          id(sleep_state) = 0;
+          id(idle_sleeping) = false;
+          char d[96];
+          snprintf(d, sizeof(d), "%s after %us (loops=%d rejects=%d)", reason.c_str(), id(slept_ms) / 1000, id(sleep_loops), id(sleep_rejects));
+          id(last_sleep_info) = d;
+          id(last_activity_ms) = millis();
+          id(power_off_tried) = false;
+          id(wifi_id).enable();
+          id(disconnected_since_ms) = millis(); id(conn_timed_out) = false;
+          if (id(stale_ok)) id(got_fp) = id(got_light) = id(got_preset) = id(got_setpoint) = id(got_room) = id(got_flame) = id(got_fan) = true;
+          id(go)->execute(1);   // switches the screen to Main (and renders)
+
+  # Re-seed the charge counter from the resting voltage (rough LiPo OCV table).
+  - id: gauge_reseed
+    then:
+      - lambda: |-
+          const float v = id(batt_v);
+          if (std::isnan(v)) return;
+          float pct = (v - 3.45f) / (4.15f - 3.45f) * 100.0f;
+          pct = std::min(100.0f, std::max(0.0f, pct));
+          id(soc_mah) = pct / 100.0f * ${battery_mah};
+          id(soc_pct_saved) = (int) lroundf(pct);
+          ESP_LOGI("batt", "charge counter re-seeded at %.0f%% from %.3f V", pct, v);
+
+globals:
+  - id: batt_v              # cell voltage (V), NaN until read
+    type: float
+    initial_value: "NAN"
+  - id: batt_i              # battery current, mA, + = into the battery (charging)
+    type: float
+    initial_value: "NAN"
+  - id: soc_mah             # charge counter (mAh), NaN until seeded
+    type: float
+    initial_value: "NAN"
+  - id: soc_pct_saved       # persisted whole-percent copy of the counter
+    type: int
+    restore_value: true
+    initial_value: "-1"
+  - id: vhist               # last 6 one-second voltage samples (no-cell detection)
+    type: float[6]
+    initial_value: "{0, 0, 0, 0, 0, 0}"
+  - id: vidx
+    type: int
+    initial_value: "0"
+  - id: vcount
+    type: int
+    initial_value: "0"
+  - id: batt_last_ms
+    type: uint32_t
+    initial_value: "0"
+  - id: monitor_lost        # INA219 stopped answering
+    type: bool
+    initial_value: "false"
+  - id: last_sleep_info     # diagnostics from the last light-sleep episode
+    type: std::string
+    initial_value: '""'
+  - id: sleep_state         # 0 awake, 1 light-sleep slices, 2 awake-dark refresh window
+    type: int
+    initial_value: "0"
+  - id: slept_ms
+    type: uint32_t
+    initial_value: "0"
+  - id: since_refresh_ms
+    type: uint32_t
+    initial_value: "0"
+  - id: refresh_t0
+    type: uint32_t
+    initial_value: "0"
+  - id: sleep_loops
+    type: int
+    initial_value: "0"
+  - id: sleep_rejects
+    type: int
+    initial_value: "0"
+
+interval:
+  - interval: 200ms
+    then:
+      - lambda: |-
+          if (id(sleep_state) == 0) return;
+          const uint32_t refresh_until_ms = ${light_sleep_minutes}u * 60u * 1000u;
+          if (id(sleep_state) == 1) {
+            // One 4 s light-sleep slice. Arm each wake pin on the opposite of
+            // its current level (an already-true wake condition is refused).
+            // GPIO41 = button, GPIO45/42 = encoder A/B.
+            const gpio_num_t pins[] = {GPIO_NUM_41, GPIO_NUM_45, GPIO_NUM_42};
+            for (auto p : pins) gpio_wakeup_enable(p, gpio_get_level(p) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
+            // ESP-IDF isolates every GPIO during light sleep (input, no pull) by
+            // default. That drops LCD power (GPIO1) and the panel's RST/CS/DC/SPI
+            // lines, so the panel loses its init and stays black after wake
+            // (backlight on), and cuts the INA219's 5 V (GPIO2). Keep these
+            // pins at their awake levels through the sleep.
+            const gpio_num_t keep[] = {GPIO_NUM_1, GPIO_NUM_2, GPIO_NUM_3, GPIO_NUM_9, GPIO_NUM_10,
+                                       GPIO_NUM_11, GPIO_NUM_14, GPIO_NUM_17, GPIO_NUM_40, GPIO_NUM_46};
+            for (auto p : keep) gpio_sleep_sel_dis(p);
+            esp_sleep_enable_gpio_wakeup();
+            esp_sleep_enable_timer_wakeup(4000000ULL);
+            esp_err_t rc = esp_light_sleep_start();
+            App.feed_wdt();
+            // gpio_wakeup_enable() switched the pins to LEVEL triggering and
+            // gpio_wakeup_disable() does not switch them back. The button and
+            // encoder ISRs (ESPHome, level-3) would then re-fire for as long as
+            // a pin sits at that level: a held button = interrupt-watchdog reset.
+            for (auto p : pins) { gpio_wakeup_disable(p); gpio_set_intr_type(p, GPIO_INTR_ANYEDGE); }
+            id(sleep_loops)++;
+            if (rc != ESP_OK) {
+              if (++id(sleep_rejects) > 5) { id(board_resume)->execute("sleep refused"); }
+              return;
+            }
+            if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
+              // A waking *press* is not a tap (its release clears the guard);
+              // a waking *turn* goes on to open Set Point (it does not change the value).
+              if (gpio_get_level(GPIO_NUM_41) == 0) { id(boot_guard) = true; id(guard_ms) = millis(); }
+              id(board_resume)->execute("input");
+              return;
+            }
+            id(slept_ms) += 4000; id(since_refresh_ms) += 4000;
+            id(ina).update();
+            if (id(battery_charging)) { id(board_resume)->execute("usb"); return; }
+            // Stage 2 (after light_sleep_minutes): keep sleeping, no refreshes.
+            if (id(slept_ms) < refresh_until_ms && id(since_refresh_ms) >= ${refresh_every_s}u * 1000u) {
+              id(sleep_state) = 2; id(refresh_t0) = millis();
+              id(wifi_id).enable();             // awake but dark: let HA reconnect and push values
+            }
+            return;
+          }
+          // state 2: refresh window
+          const bool have_all = id(got_fp) && id(got_light) && id(got_preset) && id(got_setpoint) &&
+                                id(got_room) && id(got_flame) && id(got_fan);
+          const bool done = api::global_api_server->is_connected() && have_all;
+          if (done || (millis() - id(refresh_t0)) > 15000u) {
+            if (have_all) id(stale_ok) = true;
+            id(wifi_id).disable();
+            id(since_refresh_ms) = 0;
+            id(sleep_state) = 1;
+          }
+
+  # INA219 silent for 3 s (failed or unplugged from the I2C socket): battery
+  # state unknown. Treat as external power so the knob never sleeps blind.
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (id(monitor_lost)) return;
+          if (id(batt_last_ms) != 0 && (millis() - id(batt_last_ms)) > 3000u) {
+            id(monitor_lost) = true;
+            id(battery_absent) = true;
+            id(battery_charging) = false;
+            id(on_usb) = true;
+            id(battery_pct) = NAN;
+            id(batt_i) = NAN; id(batt_v) = NAN;
+            id(vcount) = 0;
+            id(render)->execute();
+          }
 
 sensor:
+  - platform: ina219
+    id: ina
+    i2c_id: bus_ext
+    address: 0x43             # Waveshare UPS HAT (C) on-board INA219 (A0 = A1 = Vs)
+    shunt_resistance: 0.01 ohm  # R9, 1 mA resolution
+    max_current: 3.2A         # same calibration as Waveshare's demo (40 mV range)
+    max_voltage: 16V
+    update_interval: 1s
+    bus_voltage:
+      id: ina_bus_v
+      internal: true
+    shunt_voltage:
+      name: Battery Shunt Voltage   # raw INA219 reading, + = VIN+ above VIN- (discharge)
+      entity_category: diagnostic
+      unit_of_measurement: mV
+      accuracy_decimals: 2
+      filters:
+        - multiply: 1000
+        - throttle: 5s
+    current:
+      id: ina_current
+      internal: true
+      on_value:
+        - lambda: |-
+            // Sign: ESPHome's INA219 current is + for IN+ -> IN-. ina_sign makes
+            // + mean charging (into the cell); check on first power-up.
+            const float i_ma = ${ina_sign} * x * 1000.0f;
+            const float v = id(ina_bus_v).state;
+            const uint32_t now = millis();
+            const bool first = std::isnan(id(batt_i));
+            id(batt_i) = i_ma; id(batt_v) = v;
+
+            // No cell: the charger's output cannot hold a steady voltage
+            // without a battery (sawtooth), so the 6 s spread is large.
+            float *h = id(vhist);
+            h[id(vidx)] = v; id(vidx) = (id(vidx) + 1) % 6;
+            if (id(vcount) < 6) id(vcount)++;
+            bool absent = id(battery_absent);
+            // Beyond anything the ETA6003 charger or the knob can draw = a bad
+            // reading (range limit), treated as no cell.
+            if (fabsf(i_ma) > 3000.0f) absent = true;
+            else if (fabsf(i_ma) > 5.0f) absent = false;   // current flowing = a cell is there
+            else if (id(vcount) >= 6) {
+              float lo = h[0], hi = h[0];
+              for (int k = 1; k < 6; k++) { lo = std::min(lo, h[k]); hi = std::max(hi, h[k]); }
+              const bool jumpy = (hi - lo) > 0.050f;
+              if (jumpy && fabsf(i_ma) < 5.0f) absent = true;
+              else if (!jumpy) absent = false;
+            }
+            id(battery_absent) = absent;
+            if (absent) id(soc_mah) = NAN;   // re-seed from voltage when a cell is connected again
+
+            // Charging = current into the cell. External power = the cell is
+            // not supplying the board (it draws well over 20 mA while awake).
+            const bool charging = !absent && i_ma > 10.0f;
+            const bool usb = absent || i_ma > -20.0f;
+
+            // Charge counter (mAh) with anchors at full and empty.
+            if (!absent) {
+              if (std::isnan(id(soc_mah))) {
+                if (id(soc_pct_saved) >= 0) id(soc_mah) = id(soc_pct_saved) / 100.0f * ${battery_mah};
+                else id(gauge_reseed)->execute();
+              }
+              if (!first && !std::isnan(id(soc_mah))) {
+                const float dt_h = (now - id(batt_last_ms)) / 3600000.0f;
+                id(soc_mah) += i_ma * dt_h;
+                if (v >= 4.18f && charging && i_ma < 15.0f) id(soc_mah) = ${battery_mah};   // charge terminated: full
+                if (v >= 4.19f && !charging) id(soc_mah) = std::max(id(soc_mah), 0.97f * ${battery_mah});
+                if (v <= 3.30f && i_ma < 0) id(soc_mah) = 0;                                 // empty
+                id(soc_mah) = std::min((float) ${battery_mah}, std::max(0.0f, id(soc_mah)));
+                int pct = (int) lroundf(id(soc_mah) / ${battery_mah} * 100.0f);
+                if (pct != id(soc_pct_saved)) id(soc_pct_saved) = pct;   // persisted per whole %
+                id(battery_pct) = id(soc_mah) / ${battery_mah} * 100.0f;
+              }
+            } else id(battery_pct) = NAN;
+            id(batt_last_ms) = now;
+
+            bool changed = (charging != id(battery_charging)) || (usb != id(on_usb)) || first || id(monitor_lost);
+            id(monitor_lost) = false;
+            id(battery_charging) = charging;
+            // Unplugging USB counts as activity: the idle clock starts from the
+            // unplug, not from the last touch hours ago.
+            if (id(on_usb) && !usb && id(sleep_state) == 0) { id(last_activity_ms) = millis(); id(power_off_tried) = false; }
+            id(on_usb) = usb;
+            if (changed) { id(power_off_tried) = false; id(render)->execute(); }
+
+  # HA-facing copies (throttled)
+  - platform: template
+    name: Battery
+    device_class: battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: 'return id(battery_pct);'
+  - platform: template
+    name: Battery Voltage
+    device_class: voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 3
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: 'return id(batt_v);'
+  - platform: template
+    name: Battery Current
+    device_class: current
+    unit_of_measurement: "mA"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: 'return id(batt_i);'   # + = charging, - = discharging
+
   - platform: rotary_encoder
     id: knob
     internal: true
@@ -152,7 +474,33 @@ sensor:
     on_anticlockwise:
       - script.execute: {id: knob_turn, dir: !lambda 'return -(${rotation_sign});'}
 
+button:
+  - platform: template
+    name: Reset Battery Gauge
+    icon: mdi:battery-sync
+    entity_category: config
+    on_press:
+      - script.execute: gauge_reseed
+
 binary_sensor:
+  - platform: template
+    name: Battery Present
+    device_class: plug
+    entity_category: diagnostic
+    lambda: 'return !id(battery_absent) && !std::isnan(id(batt_v));'
+
+  - platform: template
+    name: Battery Charging
+    device_class: battery_charging
+    entity_category: diagnostic
+    lambda: 'return id(battery_charging);'
+
+  - platform: template
+    name: External Power
+    device_class: power
+    entity_category: diagnostic
+    lambda: 'return id(on_usb);'
+
   - platform: gpio
     id: knob_button
     internal: true
@@ -175,3 +523,9 @@ text_sensor:
     reset_reason:
       name: Reset Reason
       entity_category: diagnostic
+
+  - platform: template
+    name: Last Sleep
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: 'return id(last_sleep_info);'
