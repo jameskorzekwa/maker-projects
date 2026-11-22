@@ -1,87 +1,122 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640" font-family="Helvetica, Arial, sans-serif" font-size="14">
-  <rect width="1000" height="640" fill="#ffffff"/>
-  <text x="500" y="34" text-anchor="middle" font-size="22" font-weight="bold">Basement fireplace knob: CrowPanel 1.46 + Waveshare UPS HAT (C)</text>
-  <text x="500" y="58" text-anchor="middle" fill="#555">Charging, 5 V power and battery monitoring all on the HAT. Firmware: hw-crowpanel146.yaml (INA219 0x43, 0.01 ohm)</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="860" viewBox="0 0 1100 860" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <rect width="1100" height="860" fill="#ffffff"/>
+  <text x="550" y="34" text-anchor="middle" font-size="22" font-weight="bold">Basement fireplace knob: CrowPanel 1.46 + Waveshare UPS HAT (C)</text>
+  <text x="550" y="58" text-anchor="middle" fill="#555">Pin-to-pin wiring. Firmware: hw-crowpanel146.yaml (INA219 at 0x43, 0.01 ohm shunt)</text>
 
-  <!-- Battery -->
-  <rect x="40" y="110" width="180" height="110" rx="8" fill="#fff4d6" stroke="#b58900" stroke-width="2"/>
-  <text x="130" y="140" text-anchor="middle" font-weight="bold">LiPo battery</text>
-  <text x="130" y="162" text-anchor="middle">EEMB LP103454</text>
-  <text x="130" y="182" text-anchor="middle">3.7 V 2000 mAh</text>
-  <text x="130" y="205" text-anchor="middle" fill="#555" font-size="12">red = +, black = −</text>
-
-  <!-- USB supply -->
-  <rect x="40" y="420" width="180" height="80" rx="8" fill="#eef" stroke="#336" stroke-width="2"/>
-  <text x="130" y="452" text-anchor="middle" font-weight="bold">USB power supply</text>
-  <text x="130" y="474" text-anchor="middle">5 V, ≥ 2 A</text>
-
-  <!-- UPS HAT -->
-  <rect x="340" y="90" width="300" height="440" rx="10" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
-  <text x="490" y="118" text-anchor="middle" font-weight="bold" font-size="17">Waveshare UPS HAT (C)</text>
-  <text x="490" y="138" text-anchor="middle" fill="#555" font-size="12">ETA6003 charger · TPS61088 5 V boost · INA219 @ 0x43</text>
-  <!-- HAT battery connector -->
-  <rect x="350" y="150" width="130" height="60" fill="#fff" stroke="#2e7d32"/>
-  <text x="415" y="170" text-anchor="middle" font-size="12" font-weight="bold">Battery (PH2.0)</text>
-  <text x="415" y="188" text-anchor="middle" font-size="12">+ (sch. P1 pin 2)</text>
-  <text x="415" y="204" text-anchor="middle" font-size="12">− (sch. P1 pin 1)</text>
-  <!-- HAT USB in -->
-  <rect x="350" y="430" width="130" height="50" fill="#fff" stroke="#2e7d32"/>
-  <text x="415" y="452" text-anchor="middle" font-size="12" font-weight="bold">USB in (charge)</text>
-  <text x="415" y="470" text-anchor="middle" font-size="12">micro-USB / USB-C</text>
+  <!-- ===== HAT, component side up ===== -->
+  <text x="40" y="96" font-weight="bold" font-size="16">UPS HAT (C), battery/component side up (switch on the LEFT, micro-USB on the RIGHT)</text>
+  <rect x="40" y="110" width="620" height="290" rx="14" fill="#1e5aa8" stroke="#0d3570" stroke-width="2"/>
+  <!-- mounting holes -->
+  <circle cx="75" cy="145" r="14" fill="#fff"/><circle cx="625" cy="145" r="14" fill="#fff"/>
+  <circle cx="75" cy="365" r="14" fill="#fff"/><circle cx="625" cy="365" r="14" fill="#fff"/>
   <!-- switch -->
-  <rect x="350" y="300" width="130" height="50" fill="#fff" stroke="#2e7d32"/>
-  <text x="415" y="321" text-anchor="middle" font-size="12" font-weight="bold">Slide switch</text>
-  <text x="415" y="339" text-anchor="middle" font-size="12" fill="#c62828">must be ON (boost)</text>
-  <!-- HAT 2x3 header -->
-  <rect x="510" y="200" width="120" height="200" fill="#fff" stroke="#2e7d32"/>
-  <text x="570" y="220" text-anchor="middle" font-size="12" font-weight="bold">2×3 header</text>
-  <text x="520" y="250" font-size="13">3.3V (INA Vs)</text>
-  <text x="520" y="280" font-size="13">SDA</text>
-  <text x="520" y="310" font-size="13">SCL</text>
-  <text x="520" y="340" font-size="13" font-weight="bold">5V out</text>
-  <text x="520" y="370" font-size="13" font-weight="bold">GND</text>
-  <text x="520" y="392" font-size="11" fill="#555">(2nd 5V pin unused)</text>
+  <rect x="10" y="200" width="70" height="110" fill="#bbb" stroke="#555"/>
+  <rect x="0" y="242" width="16" height="26" fill="#222"/>
+  <text x="45" y="190" text-anchor="middle" fill="#fff" font-size="12">ON</text>
+  <text x="45" y="330" text-anchor="middle" fill="#fff" font-size="12">OFF</text>
+  <text x="100" y="258" fill="#fff" font-size="12">power switch → ON</text>
+  <!-- battery socket -->
+  <rect x="520" y="125" width="60" height="42" fill="#f5f5f5" stroke="#999"/>
+  <text x="550" y="151" text-anchor="middle" font-size="11">BAT</text>
+  <text x="590" y="140" fill="#fff" font-size="13" font-weight="bold">+</text>
+  <text x="508" y="140" fill="#fff" font-size="13" font-weight="bold">−</text>
+  <text x="550" y="186" text-anchor="middle" fill="#fff" font-size="11">PH2.0, check +/− silkscreen</text>
+  <!-- shunt -->
+  <rect x="420" y="128" width="30" height="55" fill="#222"/>
+  <text x="435" y="200" text-anchor="middle" fill="#fff" font-size="11">R010</text>
+  <!-- usb -->
+  <rect x="620" y="215" width="55" height="40" fill="#ccc" stroke="#555"/>
+  <text x="647" y="275" text-anchor="middle" fill="#fff" font-size="11">USB in</text>
 
-  <!-- Knob -->
-  <rect x="770" y="140" width="200" height="340" rx="100" fill="#f3e5f5" stroke="#6a1b9a" stroke-width="2"/>
-  <text x="870" y="190" text-anchor="middle" font-weight="bold">CrowPanel 1.46</text>
-  <text x="870" y="208" text-anchor="middle" font-size="12">DHR55146D V1.2</text>
-  <rect x="790" y="225" width="160" height="125" fill="#fff" stroke="#6a1b9a"/>
-  <text x="870" y="243" text-anchor="middle" font-size="12" font-weight="bold">I2C socket (MX1.25)</text>
-  <text x="800" y="265" font-size="13">5V (GPIO2 switched)</text>
-  <text x="800" y="288" font-size="13">SDA (GPIO38)</text>
-  <text x="800" y="311" font-size="13">SCL (GPIO39)</text>
-  <text x="800" y="334" font-size="13">GND</text>
-  <rect x="800" y="390" width="140" height="40" fill="#fff" stroke="#6a1b9a"/>
-  <text x="870" y="415" text-anchor="middle" font-size="12" font-weight="bold">USB-C (power in)</text>
-  <text x="870" y="460" text-anchor="middle" font-size="11" fill="#555">J8 BAT pads: leave empty</text>
+  <!-- pogo block: edge row at the bottom edge -->
+  <text x="420" y="248" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">6 pogo pins</text>
+  <!-- inner row -->
+  <circle cx="370" cy="300" r="15" fill="#e8b923" stroke="#7a5a00" stroke-width="2"/>
+  <circle cx="420" cy="300" r="15" fill="#e8b923" stroke="#7a5a00" stroke-width="2"/>
+  <circle cx="470" cy="300" r="15" fill="#e8b923" stroke="#7a5a00" stroke-width="2"/>
+  <!-- edge row -->
+  <circle cx="370" cy="350" r="15" fill="#e8b923" stroke="#7a5a00" stroke-width="2"/>
+  <circle cx="420" cy="350" r="15" fill="#e8b923" stroke="#7a5a00" stroke-width="2"/>
+  <circle cx="470" cy="350" r="15" fill="#e8b923" stroke="#7a5a00" stroke-width="2"/>
+  <text x="370" y="305" text-anchor="middle" font-size="13" font-weight="bold">A</text>
+  <text x="420" y="305" text-anchor="middle" font-size="13" font-weight="bold">B</text>
+  <text x="470" y="305" text-anchor="middle" font-size="13" font-weight="bold">C</text>
+  <text x="370" y="355" text-anchor="middle" font-size="13" font-weight="bold">D</text>
+  <text x="420" y="355" text-anchor="middle" font-size="13" font-weight="bold">E</text>
+  <text x="470" y="355" text-anchor="middle" font-size="13" font-weight="bold">F</text>
+  <text x="500" y="305" fill="#fff" font-size="11">inner row</text>
+  <text x="500" y="355" fill="#fff" font-size="11">row along board edge</text>
+  <text x="350" y="395" fill="#fff" font-size="11">← toward switch          toward USB →</text>
 
-  <!-- Wires -->
-  <!-- battery -->
-  <polyline points="220,160 300,160 300,182 350,182" fill="none" stroke="#d32f2f" stroke-width="3"/>
-  <polyline points="220,195 290,195 290,199 350,199" fill="none" stroke="#000" stroke-width="3"/>
-  <!-- USB supply -->
-  <line x1="220" y1="455" x2="350" y2="455" stroke="#336" stroke-width="3"/>
-  <text x="285" y="447" text-anchor="middle" font-size="12">USB cable</text>
-  <!-- 5V knob socket -> HAT 3.3V pin -->
-  <polyline points="790,261 700,261 700,246 630,246" fill="none" stroke="#f57c00" stroke-width="3"/>
-  <text x="705" y="238" font-size="11" fill="#f57c00">INA219 supply</text>
-  <!-- SDA -->
-  <polyline points="790,284 710,284 710,276 630,276" fill="none" stroke="#1976d2" stroke-width="3"/>
-  <!-- SCL -->
-  <polyline points="790,307 720,307 720,306 630,306" fill="none" stroke="#7b1fa2" stroke-width="3"/>
-  <!-- GND socket -->
-  <polyline points="790,330 740,330 740,366 630,366" fill="none" stroke="#000" stroke-width="3"/>
-  <!-- 5V out -> USB-C pigtail -->
-  <polyline points="630,336 680,336 680,405 800,405" fill="none" stroke="#d32f2f" stroke-width="4"/>
-  <polyline points="630,370 660,370 660,420 800,420" fill="none" stroke="#000" stroke-width="4"/>
-  <text x="735" y="398" text-anchor="middle" font-size="12" fill="#d32f2f">USB-C pigtail 5V</text>
-  <text x="735" y="438" text-anchor="middle" font-size="12">pigtail GND</text>
+  <!-- ===== Pin table ===== -->
+  <text x="700" y="96" font-weight="bold" font-size="16">Pogo pin functions</text>
+  <g font-size="13">
+    <rect x="700" y="108" width="370" height="28" fill="#eee"/>
+    <text x="710" y="127" font-weight="bold">Pin</text><text x="760" y="127" font-weight="bold">HAT signal</text><text x="880" y="127" font-weight="bold">(Pi header pin)</text>
+    <text x="710" y="157">A</text><text x="760" y="157" fill="#7b1fa2" font-weight="bold">SCL</text><text x="880" y="157">pin 5</text>
+    <text x="710" y="183">B</text><text x="760" y="183" fill="#1976d2" font-weight="bold">SDA</text><text x="880" y="183">pin 3</text>
+    <text x="710" y="209">C</text><text x="760" y="209" fill="#f57c00" font-weight="bold">3.3V (INA219 Vs only)</text><text x="1000" y="209">pin 1</text>
+    <text x="710" y="235">D</text><text x="760" y="235" font-weight="bold">GND</text><text x="880" y="235">pin 6</text>
+    <text x="710" y="261">E</text><text x="760" y="261" fill="#d32f2f" font-weight="bold">5V OUT</text><text x="880" y="261">pin 4</text>
+    <text x="710" y="287">F</text><text x="760" y="287" fill="#d32f2f" font-weight="bold">5V OUT</text><text x="880" y="287">pin 2</text>
+  </g>
+  <text x="700" y="318" font-size="12" fill="#555">Positions follow the Pi Zero header the pins mate with.</text>
+  <text x="700" y="336" font-size="12" fill="#c62828" font-weight="bold">Confirm with a meter before wiring (check box below).</text>
 
-  <!-- Notes -->
-  <text x="40" y="560" font-weight="bold">Notes</text>
-  <text x="40" y="580" font-size="12">1. Check battery polarity with a meter before plugging in: the pack's red wire must land on the HAT connector's + pin.</text>
-  <text x="40" y="598" font-size="12">2. The knob's I2C-socket 5V goes ONLY to the HAT pin labelled 3.3V (feeds just the INA219, 3.0–5.5 V OK). Never to the HAT's 5V output pins.</text>
-  <text x="40" y="616" font-size="12">3. Identify the header pins with a meter (switch ON, battery in): the 5V output pins read ~5.1 V to GND; the 3.3V pin reads ~0 V until wired.</text>
-  <text x="40" y="634" font-size="12">4. Test: unplug USB → Battery Current must go negative; if positive, set ina_sign: "-1.0f" in hw-crowpanel146.yaml.</text>
+  <!-- ===== Connection table ===== -->
+  <text x="40" y="450" font-weight="bold" font-size="18">Wire list</text>
+  <g font-size="14">
+    <rect x="40" y="462" width="1030" height="30" fill="#eee"/>
+    <text x="50" y="482" font-weight="bold">HAT</text>
+    <text x="300" y="482" font-weight="bold">→ CrowPanel</text>
+    <text x="640" y="482" font-weight="bold">What it does</text>
+
+    <rect x="40" y="496" width="12" height="22" fill="#d32f2f"/>
+    <text x="60" y="512">Pogo E or F  (5V OUT)</text>
+    <text x="300" y="512">USB-C pigtail <tspan font-weight="bold">red</tspan> (VBUS) → knob USB-C</text>
+    <text x="640" y="512">powers the knob</text>
+
+    <rect x="40" y="526" width="12" height="22" fill="#000"/>
+    <text x="60" y="542">Pogo D  (GND)</text>
+    <text x="300" y="542">USB-C pigtail <tspan font-weight="bold">black</tspan> (GND) → knob USB-C</text>
+    <text x="640" y="542">power return</text>
+
+    <rect x="40" y="556" width="12" height="22" fill="#f57c00"/>
+    <text x="60" y="572">Pogo C  (3.3V)</text>
+    <text x="300" y="572">I2C socket <tspan font-weight="bold">5V</tspan> pin</text>
+    <text x="640" y="572">powers the HAT's INA219 (3.0–5.5 V OK)</text>
+
+    <rect x="40" y="586" width="12" height="22" fill="#1976d2"/>
+    <text x="60" y="602">Pogo B  (SDA)</text>
+    <text x="300" y="602">I2C socket <tspan font-weight="bold">SDA</tspan> pin (GPIO38)</text>
+    <text x="640" y="602">I2C data</text>
+
+    <rect x="40" y="616" width="12" height="22" fill="#7b1fa2"/>
+    <text x="60" y="632">Pogo A  (SCL)</text>
+    <text x="300" y="632">I2C socket <tspan font-weight="bold">SCL</tspan> pin (GPIO39)</text>
+    <text x="640" y="632">I2C clock</text>
+
+    <rect x="40" y="646" width="12" height="22" fill="#000"/>
+    <text x="60" y="662">Pogo D  (GND)</text>
+    <text x="300" y="662">I2C socket <tspan font-weight="bold">GND</tspan> pin</text>
+    <text x="640" y="662">I2C ground (2nd wire on D)</text>
+
+    <rect x="40" y="676" width="12" height="22" fill="#b58900"/>
+    <text x="60" y="692">BAT socket</text>
+    <text x="300" y="692">EEMB LP103454: red → +, black → −</text>
+    <text x="640" y="692">battery (switch OFF while plugging in)</text>
+
+    <rect x="40" y="706" width="12" height="22" fill="#336"/>
+    <text x="60" y="722">USB in</text>
+    <text x="300" y="722">your 5 V USB charger</text>
+    <text x="640" y="722">charging + pass-through; knob USB-C gets nothing else</text>
+  </g>
+
+  <!-- ===== Checks ===== -->
+  <rect x="40" y="745" width="1030" height="105" fill="#fff3e0" stroke="#f57c00"/>
+  <text x="55" y="768" font-weight="bold">Meter check before soldering (battery in, switch ON, nothing else connected)</text>
+  <text x="55" y="790" font-size="13">1. Black probe on the micro-USB shell. E and F read ~5.1 V. D beeps to the shell (GND). A, B, C read ~0 V.</text>
+  <text x="55" y="810" font-size="13">2. If the ~5 V pair and GND are on the inner row, or GND is at the USB end, the drawing is mirrored: tell Claude before wiring.</text>
+  <text x="55" y="830" font-size="13">3. Never connect the knob's I2C-socket 5V to E/F. Solder to the pogo-pin pads on the back of the board, not the spring tips.</text>
+  <text x="55" y="846" font-size="13">4. First test: unplug USB → HA "Battery Current" must go negative; if positive, set ina_sign: "-1.0f".</text>
 </svg>
