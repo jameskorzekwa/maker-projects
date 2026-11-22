@@ -1,5 +1,37 @@
 # Verification record
 
+## Basement presence temperature (2026-11-22 UTC)
+
+Owner authorized configuration and deployment, not merge. Source PR #51.
+
+- Added sole HA temperature input
+  `sensor.basement_basement_presence_sensor_temperature`, with unit validation,
+  finite/range checks, state-subscription requirement, and 30-minute delivery
+  timeout. No remote/living-room fallback. Thermostat mode no longer restores
+  across reboot.
+- Native parser/temperature tests passed with ASan/UBSan; four source-wiring
+  regression checks passed. Local ESPHome 2026.10.2 compile passed using
+  synthetic credentials, never uploaded. Independent review found no blockers;
+  added Celsius-through-policy cases on review. Firmware CI also passed.
+- Production Device Builder compile `f236f9756260`: ESPHome 2026.11.0,
+  config hash `0x1f441437`, build `2026-11-21 19:48:41 -0700`.
+  OTA job `10a49232d93a` succeeded at 02:56 UTC. Native API DeviceInfo
+  subsequently confirmed the exact version/build and MAC `D0:CF:13:EC:B0:AC`.
+  Existing production credentials stayed on HA.
+- Live source = **Basement presence sensor**, room **16.81°C / 62.258°F**
+  (HA climate rounds to **62.5°F**), remote temperature unavailable as expected.
+- At 02:58 UTC, selected **Thermostat**, then **Smart**, at a test target of
+  **50°F**. Both reported `heat`/`idle` with the correct preset and the fireplace
+  power switch remained off. Restored **Off / 70°F** by 02:58:43 UTC.
+- Initial automated test sent Smart before the existing single-run start
+  script completed; it remained in Thermostat. Repeated with 12 seconds between
+  transitions (start script waits up to 10 seconds for verified IFC control);
+  both modes passed. Rapid mode-change handling was not changed.
+- **Not tested live:** ignition, Smart flame modulation, physical temperature
+  accuracy, injected HA/sensor failure, or 30-minute expiry. Policy tests cover
+  invalid/expired values but are not physical failure tests. Unchanged readings
+  may conservatively expire; reconnect delivery may contain cached values.
+
 ## Moved to the basement (2026-11-07)
 
 - OEM dongle back on the living room controller (6.24 V X0A); the basement

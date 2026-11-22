@@ -15,7 +15,7 @@ the basement fireplace, whose older controller cannot power the dongle.
 | Fireplace | Montigo P52DF-F (natural gas), basement |
 | Controller | Proflame 2 IFC, **older board**: X0A supply 3.24 V (regulated, unchanged with fresh batteries); answers registers 0x00–0x18 only |
 | Board | NiceMCU ESP32-C5 (chip rev 1.0, 4 MB flash, native USB), USB-powered |
-| Firmware | [esphome/proflame-bench.yaml](esphome/proflame-bench.yaml) + [esphome/ifc_query.h](esphome/ifc_query.h), ESPHome 2026.10.2 |
+| Firmware | [esphome/proflame-bench.yaml](esphome/proflame-bench.yaml), [esphome/ifc_query.h](esphome/ifc_query.h), and [esphome/room_temperature.h](esphome/room_temperature.h); minimum ESPHome 2026.10.2 |
 | HA device | **Basement Fireplace** (`proflame-bench`), Basement area, entities `*.basement_fireplace_*`; encrypted API, Wi-Fi logs, password OTA |
 | Wi-Fi | **−90 to −92 dBm** at the basement fireplace: unreliable; move the board or add an access point |
 
@@ -67,13 +67,32 @@ Smart run on the ESP32 (Manual mode cycled on/off; idle = Manual with flame 0 so
 fan and light keep running; Smart lowers the flame near target; 5-minute minimum
 for automatic cycling; user changes apply immediately; no temperature → off).
 
-**Room temperature source: the basement remote only** (James's decision; the
-main floor sensor measured the living room). The remote's reading reaches the
-ESP32 only through IFC register 0x1F, and **the basement's older controller
-doesn't have that register**. So in the basement, Thermostat/Smart stay off and
-Room Temperature Source shows "Unavailable (this controller does not report the
-remote temperature)". The remote's own thermostat still works normally. An HA
-or ESP32-attached basement temperature sensor would be needed to use it.
+**Room temperature source: Basement Presence Sensor** (James, 2026-11-22),
+`sensor.basement_basement_presence_sensor_temperature`, delivered through the
+encrypted Home Assistant API. Both Thermostat and Smart use this same input.
+The reported unit must be °F or °C; the controller converts to °F internally
+and exposes its climate room temperature in °C for HA's normal unit conversion.
+Only finite readings strictly between 20 and 120°F are accepted.
+
+There is **no fallback** to the living room or remote. The older basement IFC
+does not expose remote-temperature register 0x1F; its remote readings remain
+diagnostics, not control inputs. The physical remote's thermostat is separate.
+
+Missing/invalid temperature, unknown units, no HA state subscriber, or **30
+minutes without a delivered temperature state** makes the ESP32 temperature
+unavailable and invokes the existing thermostat fail-safe off path. Evaluation
+runs on incoming state/unit changes, API disconnect, and every 30 seconds.
+Cached data is invalidated when the HA subscription is lost. A logger-only
+connection does not count as HA. Manual operation is unaffected.
+The thermostat selection is no longer restored after an ESP32 reboot:
+select Thermostat/Smart again explicitly after OTA or power loss.
+
+The timeout measures delivery, **not physical measurement age**. An unchanged
+sensor may stop sending HA state changes and conservatively time out; a new
+state delivery restores the input. Conversely HA can deliver a cached numeric
+state on reconnect, so this is not independent proof of a fresh measurement.
+No heartbeat is fabricated to keep stale values valid. Observe the new sensor's
+reporting cadence before changing this safeguard.
 
 Starting Thermostat/Smart (or any other control) requests control from the IFC
 automatically when the remote last had it.
@@ -122,6 +141,8 @@ Service). No credentials are in this repository.
 # Parser/encoder tests (ASan/UBSan)
 g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
   tests/test_ifc_query.cpp -o /tmp/proflame-test && /tmp/proflame-test
+g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  tests/test_room_temperature.cpp -o /tmp/temperature-test && /tmp/temperature-test
 # Build and install over Wi-Fi (needs secrets.yaml next to the YAML)
 esphome compile esphome/proflame-bench.yaml
 esphome upload esphome/proflame-bench.yaml --device proflame-bench.local
