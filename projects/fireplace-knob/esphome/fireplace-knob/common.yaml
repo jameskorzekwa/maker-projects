@@ -351,6 +351,21 @@ number:
     optimistic: true
     set_action:
       - lambda: 'id(apply_backlight)->execute();'
+  # Idle time on battery before the board's idle sleep. 0 = never sleep on
+  # battery (the screen stays on at the Sleep brightness and drains the cell).
+  - platform: template
+    id: battery_sleep_after
+    name: Battery Sleep After
+    icon: mdi:timer-sand
+    entity_category: config
+    unit_of_measurement: s
+    mode: box
+    min_value: 0
+    max_value: 3600
+    step: 5
+    initial_value: ${power_off_after_s}
+    restore_value: true
+    optimistic: true
 
 select:
   - platform: template
@@ -1171,7 +1186,10 @@ interval:
           const uint32_t idle = (now - id(last_activity_ms)) / 1000;
           // Battery: hand over to the board's idle-sleep (Dial: light sleep,
           // then power-off). One attempt per idle period; on USB nothing.
-          if (!id(power_off_tried) && !id(on_usb) && idle >= ${power_off_after_s}) {
+          // "Battery Sleep After" in HA; 0 = never.
+          const float bsa = id(battery_sleep_after).state;
+          const uint32_t sleep_s = std::isnan(bsa) ? ${power_off_after_s}u : (uint32_t) bsa;
+          if (sleep_s > 0 && !id(power_off_tried) && !id(on_usb) && idle >= sleep_s) {
             id(power_off_tried) = true;
             id(cache_fp_on) = fp_on;
             id(board_idle_sleep)->execute();

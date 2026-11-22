@@ -415,6 +415,10 @@ sensor:
                 id(soc_mah) += i_ma * dt_h;
                 if (v >= 4.18f && charging && i_ma < 15.0f) id(soc_mah) = ${battery_mah};   // charge terminated: full
                 if (v >= 4.19f && !charging) id(soc_mah) = std::max(id(soc_mah), 0.97f * ${battery_mah});
+                // Charger finished (it does not restart above ~4.1 V): on external
+                // power, no charge current, >= 4.10 V = full. Awake only: in light
+                // sleep the board draws a few mA, which looks like external power.
+                if (usb && !charging && v >= 4.10f && id(sleep_state) == 0) id(soc_mah) = ${battery_mah};
                 if (v <= 3.30f && i_ma < 0) id(soc_mah) = 0;                                 // empty
                 id(soc_mah) = std::min((float) ${battery_mah}, std::max(0.0f, id(soc_mah)));
                 int pct = (int) lroundf(id(soc_mah) / ${battery_mah} * 100.0f);

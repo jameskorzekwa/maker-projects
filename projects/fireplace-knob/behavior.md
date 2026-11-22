@@ -145,7 +145,8 @@ boot --> LOADING (spinner, "Connecting..." / "Loading fireplace data...")
                       input (tap/turn), USB current, HA refresh
    +------------------------------------------------------------------+
    |                                                                  |
-   v        30 s idle on battery (power_off_after_s)                  |
+   v   idle on battery >= "Battery Sleep After" (HA, default 30 s,     |
+   |   0 = never; power_off_after_s is the default)                    |
  AWAKE -------------------------------------------> LIGHT SLEEP (sleep_state 1)
  sleep_state 0                                       4 s slices, Wi-Fi off, screen dark
    ^                                                  |        ^
@@ -216,7 +217,9 @@ Sign convention in firmware: `batt_i` > 0 = into the cell (charging).
 
 Percentage: coulomb counter (`soc_mah`, `battery_mah` = 2000) persisted per
 whole percent, anchored to full at >= 4.18 V with the charge current tapering
-below 15 mA, and to empty at <= 3.30 V discharging. "Reset Battery Gauge"
+below 15 mA, also to full while awake on external power with no charge current
+at >= 4.10 V (the charger has finished and does not restart above ~4.1 V), and
+to empty at <= 3.30 V discharging. "Reset Battery Gauge"
 re-seeds it from the resting voltage. Main shows icon + % (hidden when absent).
 Icon: bolt while charging; plug (`mdi:power-plug`, cyan) on external power with
 no charge current (full cell); otherwise the level icon. Sleep shows the same
